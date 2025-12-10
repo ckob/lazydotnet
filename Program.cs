@@ -6,6 +6,7 @@ using lazydotnet.UI;
 
 var solutionService = new SolutionService();
 var commandService = new CommandService();
+var nugetService = new NuGetService();
 
 
 var solution = await solutionService.FindAndParseSolutionAsync(Directory.GetCurrentDirectory());
@@ -18,11 +19,13 @@ if (solution == null)
 
 
 var explorer = new SolutionExplorer(solution);
+var detailsPane = new ProjectDetailsPane(nugetService, solutionService);
 var layout = new AppLayout();
 bool isRunning = true;
 CancellationTokenSource? buildCts = null;
+string? lastSelectedProjectPath = null;
 
-// Graceful exit on Ctrl+C
+
 Console.CancelKeyPress += (sender, e) => 
 {
     e.Cancel = true;
@@ -32,10 +35,12 @@ Console.CancelKeyPress += (sender, e) =>
 
 int initialH = Math.Max(5, Console.WindowHeight - 15);
 int initialW = Console.WindowWidth / 3;
+int detailsW = Console.WindowWidth * 6 / 10;
 layout.UpdateLeft(explorer.GetContent(initialH, initialW));
-layout.UpdateRight(new Text("Select a project to see details..."));
+layout.UpdateRight(detailsPane.GetContent(initialH, detailsW));
 layout.UpdateBottom();
 
+detailsPane.LogAction = msg => layout.AddLog(msg);
 
 AnsiConsole.AlternateScreen(() =>
 {
@@ -56,16 +61,48 @@ AnsiConsole.AlternateScreen(() =>
             {
                 try
                 {
+                    int h = Math.Max(5, lastHeight - 15);
+                    int w = lastWidth / 3;
+                    int dw = lastWidth * 6 / 10;
 
                     if (Console.WindowWidth != lastWidth || Console.WindowHeight != lastHeight)
                     {
                         lastWidth = Console.WindowWidth;
                         lastHeight = Console.WindowHeight;
                         
-                        int h = Math.Max(5, lastHeight - 15);
-                        int w = lastWidth / 3;
+                        h = Math.Max(5, lastHeight - 15);
+                        w = lastWidth / 3;
+                        dw = lastWidth * 6 / 10;
                         layout.UpdateLeft(explorer.GetContent(h, w));
+                        layout.UpdateRight(detailsPane.GetContent(h, dw));
                         ctx.Refresh();
+                    }
+
+                    var currentProject = explorer.GetSelectedProject();
+                    var currentPath = currentProject?.Path;
+                    
+                    if (currentPath != lastSelectedProjectPath)
+                    {
+                        lastSelectedProjectPath = currentPath;
+                        
+                        if (currentPath != null)
+                        {
+                            detailsPane.ClearData();
+                            layout.UpdateRight(detailsPane.GetContent(h, dw));
+                            ctx.Refresh();
+                            
+                            _ = Task.Run(async () =>
+                            {
+                                await detailsPane.LoadProjectDataAsync(currentPath, currentProject!.Name);
+                                layout.UpdateRight(detailsPane.GetContent(h, dw));
+                            });
+                        }
+                        else
+                        {
+                            detailsPane.ClearForNonProject();
+                            layout.UpdateRight(detailsPane.GetContent(h, dw));
+                            ctx.Refresh();
+                        }
                     }
 
 
@@ -75,40 +112,118 @@ AnsiConsole.AlternateScreen(() =>
                         var key = Console.ReadKey(true);
                         dirty = true;
                         
-                        int h = Math.Max(5, lastHeight - 15);
-                        int w = lastWidth / 3;
+                        h = Math.Max(5, lastHeight - 15);
+                        w = lastWidth / 3;
+                        dw = lastWidth * 6 / 10;
+
+                        if (layout.ActivePanel == 1)
+                        {
+                            if (await detailsPane.HandleKey(key))
+                            {
+                                layout.UpdateRight(detailsPane.GetContent(h, dw));
+                                continue;
+                            }
+                        }
+
+
+                        if (key.KeyChar == '[' && layout.ActivePanel == 1)
+                        {
+                            detailsPane.PreviousTab();
+                            layout.SetDetailsActiveTab(detailsPane.ActiveTab);
+                            layout.UpdateRight(detailsPane.GetContent(h, dw));
+                            continue;
+                        }
+                        if (key.KeyChar == ']' && layout.ActivePanel == 1)
+                        {
+                            detailsPane.NextTab();
+                            layout.SetDetailsActiveTab(detailsPane.ActiveTab);
+                            layout.UpdateRight(detailsPane.GetContent(h, dw));
+                            continue;
+                        }
 
                         switch (key.Key)
                         {
                             case ConsoleKey.Q:
                                 isRunning = false;
                                 break;
-                            case ConsoleKey.RightArrow:
-                                explorer.Expand();
-
+                            case ConsoleKey.D1:
+                                layout.SetActivePanel(0);
                                 layout.UpdateLeft(explorer.GetContent(h, w));
+                                layout.UpdateRight(detailsPane.GetContent(h, dw));
+                                break;
+                            case ConsoleKey.D2:
+                                layout.SetActivePanel(1);
+                                layout.UpdateLeft(explorer.GetContent(h, w));
+                                layout.UpdateRight(detailsPane.GetContent(h, dw));
+                                break;
+                            case ConsoleKey.D3:
+                                layout.SetActivePanel(2);
+                                layout.UpdateLeft(explorer.GetContent(h, w));
+                                layout.UpdateRight(detailsPane.GetContent(h, dw));
+                                break;
+                            case ConsoleKey.RightArrow:
+                                if (layout.ActivePanel == 0)
+                                {
+                                    explorer.Expand();
+                                    layout.UpdateLeft(explorer.GetContent(h, w));
+                                }
                                 break;
                             case ConsoleKey.Enter:
                             case ConsoleKey.Spacebar:
-                                explorer.ToggleExpand();
-                                layout.UpdateLeft(explorer.GetContent(h, w));
+                                if (layout.ActivePanel == 0)
+                                {
+                                    explorer.ToggleExpand();
+                                    layout.UpdateLeft(explorer.GetContent(h, w));
+                                }
                                 break;
                             case ConsoleKey.LeftArrow:
-                                explorer.Collapse();
-                                layout.UpdateLeft(explorer.GetContent(h, w));
+                                if (layout.ActivePanel == 0)
+                                {
+                                    explorer.Collapse();
+                                    layout.UpdateLeft(explorer.GetContent(h, w));
+                                }
                                 break;
                             case ConsoleKey.UpArrow:
                             case ConsoleKey.K:
-                                explorer.MoveUp();
-                                layout.UpdateLeft(explorer.GetContent(h, w));
+                                if (layout.ActivePanel == 0)
+                                {
+                                    explorer.MoveUp();
+                                    layout.UpdateLeft(explorer.GetContent(h, w));
+                                }
+                                else if (layout.ActivePanel == 1)
+                                {
+                                    detailsPane.MoveUp();
+                                    layout.UpdateRight(detailsPane.GetContent(h, dw));
+                                }
+                                else if (layout.ActivePanel == 2)
+                                {
+                                    layout.LogViewer.MoveUp();
+                                }
+                                break;
+                            case ConsoleKey.PageUp:
+                                if (layout.ActivePanel == 2) layout.LogViewer.PageUp(10);
                                 break;
                             case ConsoleKey.DownArrow:
                             case ConsoleKey.J:
-                                explorer.MoveDown();
-                                layout.UpdateLeft(explorer.GetContent(h, w));
+                                if (layout.ActivePanel == 0)
+                                {
+                                    explorer.MoveDown();
+                                    layout.UpdateLeft(explorer.GetContent(h, w));
+                                }
+                                else if (layout.ActivePanel == 1)
+                                {
+                                    detailsPane.MoveDown();
+                                    layout.UpdateRight(detailsPane.GetContent(h, dw));
+                                }
+                                else if (layout.ActivePanel == 2)
+                                {
+                                    layout.LogViewer.MoveDown();
+                                }
+                                break;
+                            case ConsoleKey.PageDown:
+                                if (layout.ActivePanel == 2) layout.LogViewer.PageDown(10);
                                 break;
                             case ConsoleKey.B:
-
                                 var project = explorer.GetSelectedProject();
                                 if (project == null) 
                                 {
@@ -120,14 +235,13 @@ AnsiConsole.AlternateScreen(() =>
                                 layout.AddLog($"[blue]Starting build for {project.Name}...[/]");
                                 layout.UpdateBottom();
                                 ctx.Refresh();
-                                
 
                                 _ = Task.Run(async () => 
                                 {
                                     try 
                                     {
-                                         var cts = new CancellationTokenSource();
-                                         buildCts = cts;
+                                        var cts = new CancellationTokenSource();
+                                        buildCts = cts;
                                          
                                         var result = await commandService.BuildProjectAsync(project.Path, msg => 
                                         {
@@ -155,6 +269,7 @@ AnsiConsole.AlternateScreen(() =>
 
 
                     await Task.Delay(20);
+                    layout.UpdateRight(detailsPane.GetContent(h, dw));
                     layout.UpdateBottom();
                     ctx.Refresh();
                 }

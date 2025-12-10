@@ -1,14 +1,15 @@
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
+using lazydotnet.UI.Components;
+
 namespace lazydotnet.UI;
 
 public class AppLayout
 {
     private readonly Layout _rootLayout;
-    private readonly Queue<string> _logs = new();
-    private readonly object _logLock = new();
-    private const int MaxLogLines = 100;
+    public LogViewer LogViewer { get; } = new();
+    private int _activePanel = 0;
 
     public AppLayout()
     {
@@ -24,12 +25,30 @@ public class AppLayout
 
     public Layout GetRoot() => _rootLayout;
 
+    public int ActivePanel => _activePanel;
+    
+    private int _detailsActiveTab = 0;
+
+    public void SetActivePanel(int panel)
+    {
+        _activePanel = Math.Clamp(panel, 0, 2);
+    }
+
+    public void SetDetailsActiveTab(int tab)
+    {
+        _detailsActiveTab = Math.Clamp(tab, 0, 1);
+    }
+
     public void UpdateLeft(IRenderable renderable)
     {
-
+        var isActive = _activePanel == 0;
+        var header = isActive 
+            ? "[green][[1]][/]-[green]Explorer[/]" 
+            : "[dim][[1]][/]-[green]Explorer[/]";
         var panel = new Panel(renderable)
-            .Header("[bold blue]Explorer[/]")
+            .Header(header)
             .Border(BoxBorder.Rounded)
+            .BorderColor(isActive ? Color.Green : Color.Grey)
             .Expand();
             
         _rootLayout["Left"].Update(panel);
@@ -37,9 +56,17 @@ public class AppLayout
 
     public void UpdateRight(IRenderable renderable)
     {
+        var isActive = _activePanel == 1;
+        string nugetTab = _detailsActiveTab == 0 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
+        string refsTab = _detailsActiveTab == 1 ? "[green]Project References[/]" : "[dim]Project References[/]";
+        
+        var header = isActive
+            ? $"[green][[2]][/]-{nugetTab} - {refsTab}"
+            : $"[dim][[2]][/]-{nugetTab} - {refsTab}";
         var panel = new Panel(renderable)
-            .Header("[bold]Details[/]")
+            .Header(header)
             .Border(BoxBorder.Rounded)
+            .BorderColor(isActive ? Color.Green : Color.Grey)
             .Expand();
             
         _rootLayout["Right"].Update(panel);
@@ -49,52 +76,12 @@ public class AppLayout
 
     public void AddLog(string message)
     {
-        lock(_logLock)
-        {
-            _logs.Enqueue(message);
-            while (_logs.Count > MaxLogLines) _logs.Dequeue();
-        }
+        LogViewer.AddLog(message);
         OnLog?.Invoke();
     }
     
     public void UpdateBottom()
     {
-        string logContent;
-        lock(_logLock)
-        {
-            var panelWidth = Console.WindowWidth - 4;
-            var visibleLogs = new List<string>();
-            int currentHeight = 0;
-            int maxContentHeight = 10;
-
-            for (int i = _logs.Count - 1; i >= 0; i--)
-            {
-                var msg = _logs.ElementAt(i);
-                var rawText = Markup.Remove(msg);
-                
-                int linesNeeded = (int)Math.Max(1, Math.Ceiling((double)rawText.Length / Math.Max(1, panelWidth)));
-
-                if (currentHeight + linesNeeded > maxContentHeight)
-                {
-                    if (visibleLogs.Count == 0) 
-                    {
-                         visibleLogs.Add(msg);
-                    }
-                    break;
-                }
-
-                currentHeight += linesNeeded;
-                visibleLogs.Insert(0, msg);
-            }
-            
-            logContent = string.Join("\n", visibleLogs);
-        }
-        
-        var panel = new Panel(new Markup(logContent))
-            .Header("[bold]Log[/]")
-            .Border(BoxBorder.Rounded)
-            .Expand();
-            
-        _rootLayout["Bottom"].Update(panel);
+        _rootLayout["Bottom"].Update(LogViewer.GetContent(12, _activePanel == 2));
     }
 }

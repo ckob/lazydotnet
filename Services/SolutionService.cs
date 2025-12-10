@@ -54,4 +54,32 @@ public class SolutionService
 
         return Task.FromResult<SolutionInfo?>(new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects));
     }
+
+    public Task<List<string>> GetProjectReferencesAsync(string projectPath)
+    {
+        var references = new List<string>();
+        
+        try
+        {
+            if (!File.Exists(projectPath))
+                return Task.FromResult(references);
+
+            var doc = System.Xml.Linq.XDocument.Load(projectPath);
+            var projectRefs = doc.Descendants()
+                .Where(e => e.Name.LocalName == "ProjectReference")
+                .Select(e => e.Attribute("Include")?.Value)
+                .Where(v => v != null);
+
+            foreach (var refPath in projectRefs)
+            {
+                var projectName = Path.GetFileNameWithoutExtension(refPath);
+                references.Add(projectName!);
+            }
+        }
+        catch
+        {
+        }
+        
+        return Task.FromResult(references);
+    }
 }

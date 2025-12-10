@@ -9,6 +9,7 @@ public class CommandService
     public async Task<CommandResult> BuildProjectAsync(string projectPath, Action<string> onOutput, CancellationToken ct)
     {
 
+        onOutput($"[blue]Running: dotnet build \"{Markup.Escape(projectPath)}\" /v:n /nologo[/]");
         var result = await Cli.Wrap("dotnet")
             .WithArguments($"build \"{projectPath}\" /v:n /nologo")
             .WithValidation(CommandResultValidation.None)
