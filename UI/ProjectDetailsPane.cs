@@ -10,9 +10,11 @@ public class ProjectDetailsPane
     private readonly TabbedPane _tabs;
     private readonly NuGetDetailsTab _nugetTab;
     private readonly ProjectReferencesTab _refsTab;
+    private readonly TestDetailsTab _testsTab;
     private readonly List<IProjectTab> _tabInstances = new();
 
     private string? _currentProjectPath;
+    private string? _currentProjectName;
 
     public Action<string>? LogAction 
     { 
@@ -20,28 +22,40 @@ public class ProjectDetailsPane
         set => _nugetTab.LogAction = value; 
     }
 
-    public ProjectDetailsPane(NuGetService nugetService, SolutionService solutionService)
+    public Action? RequestRefresh { get; set; }
+
+    public ProjectDetailsPane(NuGetService nugetService, SolutionService solutionService, TestService testService)
     {
         _nugetTab = new NuGetDetailsTab(nugetService);
         _refsTab = new ProjectReferencesTab(solutionService);
+        _testsTab = new TestDetailsTab(testService);
         
-        _tabInstances.Add(_nugetTab);
         _tabInstances.Add(_refsTab);
+        _tabInstances.Add(_nugetTab);
+        _tabInstances.Add(_testsTab);
         
-        _tabs = new TabbedPane(_nugetTab.Title, _refsTab.Title);
+        _tabs = new TabbedPane(_refsTab.Title, _nugetTab.Title, _testsTab.Title);
     }
 
     public int ActiveTab => _tabs.ActiveTab;
 
-    public void NextTab() => _tabs.NextTab();
+    public void NextTab()
+    {
+        _tabs.NextTab();
+        TriggerLoad();
+    }
 
-    public void PreviousTab() => _tabs.PreviousTab();
+    public void PreviousTab()
+    {
+        _tabs.PreviousTab();
+        TriggerLoad();
+    }
 
     public void MoveUp() => _tabInstances[_tabs.ActiveTab].MoveUp();
 
     public void MoveDown() => _tabInstances[_tabs.ActiveTab].MoveDown();
 
-    public string? GetCounter() => _tabInstances[_tabs.ActiveTab].GetScrollIndicator();
+    public string? GetScrollIndicator() => _tabInstances[_tabs.ActiveTab].GetScrollIndicator();
 
     public void ClearData()
     {
@@ -52,20 +66,30 @@ public class ProjectDetailsPane
     {
         ClearData();
         _currentProjectPath = null;
+        _currentProjectName = null;
     }
 
     public Task LoadProjectDataAsync(string projectPath, string projectName)
     {
         _currentProjectPath = projectPath;
+        _currentProjectName = projectName;
         
-        // Load both tabs independently and do NOT await them together. 
-        // We want them to update their state as they finish.
-        // The main loop will call GetContent repeatedly to show progress.
-        
-        _ = _nugetTab.LoadAsync(projectPath, projectName);
-        _ = _refsTab.LoadAsync(projectPath, projectName);
+        TriggerLoad();
         
         return Task.CompletedTask;
+    }
+
+    private void TriggerLoad()
+    {
+        if (_currentProjectPath != null && _currentProjectName != null)
+        {
+             var task = _tabInstances[_tabs.ActiveTab].LoadAsync(_currentProjectPath, _currentProjectName);
+             _ = Task.Run(async () => 
+             {
+                 try { await task; } catch { }
+                 RequestRefresh?.Invoke();
+             });
+        }
     }
 
     public async Task<bool> HandleKey(ConsoleKeyInfo key)

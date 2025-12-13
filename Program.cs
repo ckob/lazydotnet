@@ -7,6 +7,7 @@ using lazydotnet.UI;
 var solutionService = new SolutionService();
 var commandService = new CommandService();
 var nugetService = new NuGetService();
+var testService = new TestService();
 
 
 var solution = await solutionService.FindAndParseSolutionAsync(Directory.GetCurrentDirectory());
@@ -19,14 +20,18 @@ if (solution == null)
 
 
 var explorer = new SolutionExplorer(solution);
-var detailsPane = new ProjectDetailsPane(nugetService, solutionService);
+var detailsPane = new ProjectDetailsPane(nugetService, solutionService, testService);
 var layout = new AppLayout();
 bool isRunning = true;
 CancellationTokenSource? buildCts = null;
+CancellationTokenSource? debounceCts = null;
 string? lastSelectedProjectPath = null;
 
 
-Console.CancelKeyPress += (sender, e) => 
+    // Lock for UI synchronization
+    object uiLock = new();
+
+    Console.CancelKeyPress += (sender, e) =>  
 {
     e.Cancel = true;
     isRunning = false;
@@ -41,6 +46,7 @@ layout.UpdateRight(detailsPane.GetContent(initialH, detailsW));
 layout.UpdateBottom();
 
 detailsPane.LogAction = msg => layout.AddLog(msg);
+AppCli.OnLog += msg => layout.AddLog(msg);
 
 AnsiConsole.AlternateScreen(() =>
 {
@@ -50,12 +56,27 @@ AnsiConsole.AlternateScreen(() =>
         {
              layout.OnLog += () => 
              {
-                 layout.UpdateBottom();
-                 ctx.Refresh();
+                 lock (uiLock)
+                 {
+                     layout.UpdateBottom();
+                     // We can refresh here, safely
+                     ctx.Refresh();
+                 }
              };
 
             int lastWidth = Console.WindowWidth;
             int lastHeight = Console.WindowHeight;
+
+            detailsPane.RequestRefresh = () => 
+            {
+                lock (uiLock)
+                {
+                    int h = Math.Max(5, lastHeight - 15);
+                    int dw = lastWidth * 6 / 10;
+                    layout.UpdateRight(detailsPane.GetContent(h, dw));
+                    ctx.Refresh();
+                }
+            };
 
             while (isRunning)
             {
@@ -67,15 +88,18 @@ AnsiConsole.AlternateScreen(() =>
 
                     if (Console.WindowWidth != lastWidth || Console.WindowHeight != lastHeight)
                     {
-                        lastWidth = Console.WindowWidth;
-                        lastHeight = Console.WindowHeight;
-                        
-                        h = Math.Max(5, lastHeight - 15);
-                        w = lastWidth / 3;
-                        dw = lastWidth * 6 / 10;
-                        layout.UpdateLeft(explorer.GetContent(h, w));
-                        layout.UpdateRight(detailsPane.GetContent(h, dw));
-                        ctx.Refresh();
+                        lock (uiLock)
+                        {
+                            lastWidth = Console.WindowWidth;
+                            lastHeight = Console.WindowHeight;
+                            
+                            h = Math.Max(5, lastHeight - 15);
+                            w = lastWidth / 3;
+                            dw = lastWidth * 6 / 10;
+                            layout.UpdateLeft(explorer.GetContent(h, w));
+                            layout.UpdateRight(detailsPane.GetContent(h, dw));
+                            ctx.Refresh();
+                        }
                     }
 
                     var currentProject = explorer.GetSelectedProject();
@@ -91,11 +115,29 @@ AnsiConsole.AlternateScreen(() =>
                             layout.UpdateRight(detailsPane.GetContent(h, dw));
                             ctx.Refresh();
                             
+                            debounceCts?.Cancel();
+                            debounceCts = new CancellationTokenSource();
+                            var token = debounceCts.Token;
+
                             _ = Task.Run(async () =>
                             {
-                                await detailsPane.LoadProjectDataAsync(currentPath, currentProject!.Name);
-                                layout.UpdateRight(detailsPane.GetContent(h, dw));
-                            });
+                                try
+                                {
+                                    await Task.Delay(500, token);
+                                    if (token.IsCancellationRequested) return;
+
+                                    await detailsPane.LoadProjectDataAsync(currentPath, currentProject!.Name);
+                                    lock (uiLock) 
+                                    {
+                                        if (!token.IsCancellationRequested)
+                                        {
+                                            layout.UpdateRight(detailsPane.GetContent(h, dw));
+                                            ctx.Refresh();
+                                        }
+                                    }
+                                }
+                                catch (OperationCanceledException) { }
+                            }, token);
                         }
                         else
                         {
@@ -262,16 +304,13 @@ AnsiConsole.AlternateScreen(() =>
                         }
                     }
 
-                    if (dirty)
+                    lock (uiLock)
                     {
+                        if (dirty) ctx.Refresh();
+                        layout.UpdateRight(detailsPane.GetContent(h, dw));
+                        layout.UpdateBottom();
                         ctx.Refresh();
                     }
-
-
-                    await Task.Delay(20);
-                    layout.UpdateRight(detailsPane.GetContent(h, dw));
-                    layout.UpdateBottom();
-                    ctx.Refresh();
                 }
                 catch (Exception ex)
                 {

@@ -24,6 +24,8 @@ public class NuGetDetailsTab : IProjectTab
     private readonly ScrollableList<NuGetPackageInfo> _nugetList = new();
     private readonly ScrollableList<SearchResult> _searchList = new();
     private readonly ScrollableList<string> _versionList = new();
+    
+    private readonly object _lock = new(); // UI Synchronization
 
     // State
     private AppMode _appMode = AppMode.Normal;
@@ -47,37 +49,51 @@ public class NuGetDetailsTab : IProjectTab
 
     public void MoveUp()
     {
-        if (_appMode == AppMode.SearchingNuGet) _searchList.MoveUp();
-        else if (_appMode == AppMode.SelectingVersion) _versionList.MoveUp();
-        else _nugetList.MoveUp();
+        lock (_lock)
+        {
+            if (_appMode == AppMode.SearchingNuGet) _searchList.MoveUp();
+            else if (_appMode == AppMode.SelectingVersion) _versionList.MoveUp();
+            else _nugetList.MoveUp();
+        }
     }
 
     public void MoveDown()
     {
-        if (_appMode == AppMode.SearchingNuGet) _searchList.MoveDown();
-        else if (_appMode == AppMode.SelectingVersion) _versionList.MoveDown();
-        else _nugetList.MoveDown();
+        lock (_lock)
+        {
+            if (_appMode == AppMode.SearchingNuGet) _searchList.MoveDown();
+            else if (_appMode == AppMode.SelectingVersion) _versionList.MoveDown();
+            else _nugetList.MoveDown();
+        }
     }
 
     public string? GetScrollIndicator()
     {
-        if (_currentProjectPath == null || _isLoading) return null;
-        if (_nugetList.Count == 0) return null;
-        return $"{_nugetList.SelectedIndex + 1} of {_nugetList.Count}";
+        lock (_lock)
+        {
+            if (_currentProjectPath == null || _isLoading) return null;
+            if (_nugetList.Count == 0) return null;
+            return $"{_nugetList.SelectedIndex + 1} of {_nugetList.Count}";
+        }
     }
     
     public void ClearData()
     {
-        _nugetList.Clear();
-        _currentProjectPath = null;
-        _currentProjectName = null;
-        _isLoading = false;
-        _appMode = AppMode.Normal;
-        _statusMessage = null;
+        lock (_lock)
+        {
+            _nugetList.Clear();
+            _currentProjectPath = null;
+            _currentProjectName = null;
+            _isLoading = false;
+            _appMode = AppMode.Normal;
+            _statusMessage = null;
+        }
     }
 
     public async Task LoadAsync(string projectPath, string projectName)
     {
+        if (_currentProjectPath == projectPath && !_isLoading) return;
+
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
@@ -111,6 +127,25 @@ public class NuGetDetailsTab : IProjectTab
     {
          if (_isActionRunning) return true;
 
+        // Lock for mode switching and handling
+        // Note: Some handlers are async. We can't lock around async calls easily.
+        // But we can lock the state check and state updates.
+        // Actually, most handlers just modify state or launch tasks.
+        
+        // We will lock only the synchronous parts.
+        // But wait, if we lock here, we might block GetContent?
+        // Yes, but that's expected.
+
+        // However, we can't 'await' inside a lock.
+        // We need to release lock before awaiting.
+        // Or we rely on lock internal to helpers for state mutation?
+        
+        // Let's refactor slightly: lock inside handlers where appropriate.
+        // Or lock here for the dispatch?
+        
+        // Simpler: methods like HandleNormalMode modify _appMode and navigate lists.
+        // They should lock.
+        
         switch (_appMode)
         {
             case AppMode.Normal:
@@ -397,12 +432,13 @@ public class NuGetDetailsTab : IProjectTab
             _statusMessage = "Finalizing restore...";
 
              var pipe = LogAction != null ? PipeTarget.ToDelegate(s => LogAction(Markup.Escape(s))) : PipeTarget.Null;
-             LogAction?.Invoke($"[blue]Running: dotnet restore \"{Markup.Escape(_currentProjectPath)}\"[/]");
-             await CliWrap.Cli.Wrap("dotnet")
+
+             var command = CliWrap.Cli.Wrap("dotnet")
                  .WithArguments($"restore \"{_currentProjectPath}\"")
                  .WithStandardOutputPipe(pipe)
-                 .WithStandardErrorPipe(pipe)
-                 .ExecuteAsync();
+                 .WithStandardErrorPipe(pipe);
+
+             await AppCli.RunAsync(command);
 
              await ReloadData();
         }
@@ -428,52 +464,56 @@ public class NuGetDetailsTab : IProjectTab
 
     public IRenderable GetContent(int availableHeight, int availableWidth)
     {
-        var grid = new Grid();
-        grid.AddColumn();
+        lock (_lock)
+        {
+            var grid = new Grid();
+            grid.AddColumn();
 
-        if (_currentProjectPath == null)
-        {
-            grid.AddRow(new Markup("[dim]Select a project...[/]"));
-            return grid;
-        }
+            if (_currentProjectPath == null)
+            {
+                grid.AddRow(new Markup("[dim]Select a project...[/]"));
+                return grid;
+            }
 
-        if (_appMode == AppMode.SearchingNuGet)
-        {
-            RenderSearchOverlay(grid, availableHeight, availableWidth);
-            return grid;
-        }
-        
-        if (_isLoading || _isActionRunning)
-        {
-            // Show current list even if loading, if possible?
-            // Original code: if isLoading, it showed helper status.
+            if (_appMode == AppMode.SearchingNuGet)
+            {
+                RenderSearchOverlay(grid, availableHeight, availableWidth);
+                return grid;
+            }
             
-            RenderNuGetTab(grid, availableHeight, availableWidth); // Try to render whatever we have
-             var msg = _statusMessage ?? "Loading...";
-             grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(msg)}[/]"));
-             return grid;
-        }
-        
-        if (_appMode == AppMode.SelectingVersion)
-        {
-            RenderVersionOverlay(grid, availableHeight, availableWidth);
+            if (_isLoading || _isActionRunning)
+            {
+                // Only show list if we have data (e.g. background update)
+                if (_nugetList.Count > 0)
+                {
+                    RenderNuGetTab(grid, availableHeight, availableWidth); 
+                }
+                 var msg = _statusMessage ?? "Loading...";
+                 grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(msg)}[/]"));
+                 return grid;
+            }
+            
+            if (_appMode == AppMode.SelectingVersion)
+            {
+                RenderVersionOverlay(grid, availableHeight, availableWidth);
+                return grid;
+            }
+
+            if (_appMode == AppMode.ConfirmingDelete)
+            {
+                grid.AddRow(new Markup($"[red bold]Are you sure you want to remove {_nugetList.SelectedItem?.Id}? (y/n)[/]"));
+                grid.AddRow(new Markup($"[dim]Press Y to confirm, any other key to cancel[/]"));
+            }
+
+            RenderNuGetTab(grid, availableHeight, availableWidth);
+
+            if (_statusMessage != null)
+            {
+                 grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(_statusMessage)}[/]"));
+            }
+
             return grid;
         }
-
-        if (_appMode == AppMode.ConfirmingDelete)
-        {
-            grid.AddRow(new Markup($"[red bold]Are you sure you want to remove {_nugetList.SelectedItem?.Id}? (y/n)[/]"));
-            grid.AddRow(new Markup($"[dim]Press Y to confirm, any other key to cancel[/]"));
-        }
-
-        RenderNuGetTab(grid, availableHeight, availableWidth);
-
-        if (_statusMessage != null)
-        {
-             grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(_statusMessage)}[/]"));
-        }
-
-        return grid;
     }
 
     // Rendering Helpers (Copied and adapted)

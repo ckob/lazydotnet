@@ -36,7 +36,7 @@ public class AppLayout
 
     public void SetDetailsActiveTab(int tab)
     {
-        _detailsActiveTab = Math.Clamp(tab, 0, 1);
+        _detailsActiveTab = Math.Clamp(tab, 0, 2);
     }
 
     public void UpdateLeft(IRenderable renderable)
@@ -57,12 +57,14 @@ public class AppLayout
     public void UpdateRight(IRenderable renderable)
     {
         var isActive = _activePanel == 1;
-        string nugetTab = _detailsActiveTab == 0 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
-        string refsTab = _detailsActiveTab == 1 ? "[green]Project References[/]" : "[dim]Project References[/]";
+        // Refs (0), NuGets (1), Tests (2)
+        string refsTab = _detailsActiveTab == 0 ? "[green]Project References[/]" : "[dim]Project References[/]";
+        string nugetTab = _detailsActiveTab == 1 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
+        string testsTab = _detailsActiveTab == 2 ? "[green]Tests[/]" : "[dim]Tests[/]";
         
         var header = isActive
-            ? $"[green][[2]][/]-{nugetTab} - {refsTab}"
-            : $"[dim][[2]][/]-{nugetTab} - {refsTab}";
+            ? $"[green][[2]][/]-{refsTab} - {nugetTab} - {testsTab}"
+            : $"[dim][[2]][/]-{refsTab} - {nugetTab} - {testsTab}";
         var panel = new Panel(renderable)
             .Header(header)
             .Border(BoxBorder.Rounded)

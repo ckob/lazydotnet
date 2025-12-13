@@ -110,11 +110,12 @@ public class NuGetService
         try
         {
             var cmd = $"package search \"{Markup.Escape(query)}\" --take 20 --format json";
-            logger?.Invoke($"[blue]Running: dotnet {cmd}[/]");
-            var result = await Cli.Wrap("dotnet")
+
+            var command = Cli.Wrap("dotnet")
                 .WithArguments($"package search \"{query}\" --take 20 --format json")
-                .WithValidation(CommandResultValidation.None)
-                .ExecuteBufferedAsync(ct);
+                .WithValidation(CommandResultValidation.None);
+
+            var result = await AppCli.RunBufferedAsync(command, ct);
 
             if (result.ExitCode != 0)
             {
@@ -135,11 +136,12 @@ public class NuGetService
         try
         {
             var cmd = $"package search \"{Markup.Escape(packageId)}\" --exact-match --take 100 --format json";
-            logger?.Invoke($"[blue]Running: dotnet {cmd}[/]");
-            var result = await Cli.Wrap("dotnet")
+
+            var command = Cli.Wrap("dotnet")
                 .WithArguments($"package search \"{packageId}\" --exact-match --take 100 --format json")
-                .WithValidation(CommandResultValidation.None)
-                .ExecuteBufferedAsync(ct);
+                .WithValidation(CommandResultValidation.None);
+
+            var result = await AppCli.RunBufferedAsync(command, ct);
 
              if (result.ExitCode != 0)
             {
@@ -178,27 +180,29 @@ public class NuGetService
         if (!string.IsNullOrEmpty(version)) displayArgs.Append($" -v {version}");
         if (noRestore) displayArgs.Append(" --no-restore");
 
-        logger?.Invoke($"[blue]Running: dotnet {Markup.Escape(displayArgs.ToString())}[/]");
 
-        await Cli.Wrap("dotnet")
+
+        var command = Cli.Wrap("dotnet")
             .WithArguments(args)
             .WithValidation(CommandResultValidation.None)
             .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
-            .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")))
-            .ExecuteAsync();
+            .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")));
+
+        await AppCli.RunAsync(command);
     }
 
     public async Task RemovePackageAsync(string projectPath, string packageId, Action<string>? logger = null)
     {
         var cmd = $"remove \"{projectPath}\" package \"{packageId}\"";
-        logger?.Invoke($"[blue]Running: dotnet {Markup.Escape(cmd)}[/]");
+
         
-        await Cli.Wrap("dotnet")
+        var command = Cli.Wrap("dotnet")
             .WithArguments($"remove \"{projectPath}\" package \"{packageId}\"")
             .WithValidation(CommandResultValidation.None)
             .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
-            .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")))
-            .ExecuteAsync();
+            .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")));
+
+        await AppCli.RunAsync(command);
     }
 
 
@@ -244,21 +248,18 @@ public class NuGetService
             var listCmdDisplay = $"list \"{Markup.Escape(projectPath)}\" package --format json";
             var outdatedCmdDisplay = $"list \"{Markup.Escape(projectPath)}\" package --format json --outdated";
             
-            logger?.Invoke($"[blue]Running: dotnet {listCmdDisplay}[/]");
-            logger?.Invoke($"[blue]Running: dotnet {outdatedCmdDisplay}[/]");
+
             
-
-            var allPackagesTask = Cli.Wrap("dotnet")
+            var allPackagesCmd = Cli.Wrap("dotnet")
                 .WithArguments($"list \"{projectPath}\" package --format json")
-                .WithValidation(CommandResultValidation.None)
-                .ExecuteBufferedAsync(ct)
-                .Task;
+                .WithValidation(CommandResultValidation.None);
 
-            var outdatedTask = Cli.Wrap("dotnet")
+            var outdatedCmd = Cli.Wrap("dotnet")
                 .WithArguments($"list \"{projectPath}\" package --format json --outdated")
-                .WithValidation(CommandResultValidation.None)
-                .ExecuteBufferedAsync(ct)
-                .Task;
+                .WithValidation(CommandResultValidation.None);
+
+            var allPackagesTask = AppCli.RunBufferedAsync(allPackagesCmd, ct);
+            var outdatedTask = AppCli.RunBufferedAsync(outdatedCmd, ct);
 
 
             await Task.WhenAll(allPackagesTask, outdatedTask);

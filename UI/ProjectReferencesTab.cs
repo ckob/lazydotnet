@@ -38,6 +38,8 @@ public class ProjectReferencesTab : IProjectTab
 
     public async Task LoadAsync(string projectPath, string projectName)
     {
+        if (_currentProjectPath == projectPath && !_isLoading) return;
+
         _currentProjectPath = projectPath;
         _isLoading = true;
         _refsList.Clear();
