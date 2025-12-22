@@ -1,14 +1,11 @@
-﻿using Spectre.Console;
+using Spectre.Console;
 using lazydotnet.Services;
 using lazydotnet.UI;
-
-
 
 var solutionService = new SolutionService();
 var commandService = new CommandService();
 var nugetService = new NuGetService();
 var testService = new TestService();
-
 
 var solution = await solutionService.FindAndParseSolutionAsync(Directory.GetCurrentDirectory());
 
@@ -17,7 +14,6 @@ if (solution == null)
     AnsiConsole.MarkupLine("[red]No .sln file found in the current directory.[/]");
     return;
 }
-
 
 var explorer = new SolutionExplorer(solution);
 var detailsPane = new ProjectDetailsPane(nugetService, solutionService, testService);
@@ -28,10 +24,9 @@ CancellationTokenSource? debounceCts = null;
 string? lastSelectedProjectPath = null;
 
 
-    // Lock for UI synchronization
-    object uiLock = new();
+object uiLock = new();
 
-    Console.CancelKeyPress += (sender, e) =>  
+Console.CancelKeyPress += (sender, e) =>
 {
     e.Cancel = true;
     isRunning = false;
@@ -46,7 +41,7 @@ layout.UpdateRight(detailsPane.GetContent(initialH, detailsW));
 layout.UpdateBottom();
 
 detailsPane.LogAction = msg => layout.AddLog(msg);
-AppCli.OnLog += msg => layout.AddLog(msg);
+AppCli.OnLog += layout.AddLog;
 
 AnsiConsole.AlternateScreen(() =>
 {
@@ -54,20 +49,19 @@ AnsiConsole.AlternateScreen(() =>
     AnsiConsole.Live(layout.GetRoot())
         .StartAsync(async ctx =>
         {
-             layout.OnLog += () => 
-             {
-                 lock (uiLock)
-                 {
-                     layout.UpdateBottom();
-                     // We can refresh here, safely
-                     ctx.Refresh();
-                 }
-             };
+            layout.OnLog += () =>
+            {
+                lock (uiLock)
+                {
+                    layout.UpdateBottom();
+                    ctx.Refresh();
+                }
+            };
 
             int lastWidth = Console.WindowWidth;
             int lastHeight = Console.WindowHeight;
 
-            detailsPane.RequestRefresh = () => 
+            detailsPane.RequestRefresh = () =>
             {
                 lock (uiLock)
                 {
@@ -82,6 +76,7 @@ AnsiConsole.AlternateScreen(() =>
             {
                 try
                 {
+                    bool needsRefresh = false;
                     int h = Math.Max(5, lastHeight - 15);
                     int w = lastWidth / 3;
                     int dw = lastWidth * 6 / 10;
@@ -92,29 +87,29 @@ AnsiConsole.AlternateScreen(() =>
                         {
                             lastWidth = Console.WindowWidth;
                             lastHeight = Console.WindowHeight;
-                            
+
                             h = Math.Max(5, lastHeight - 15);
                             w = lastWidth / 3;
                             dw = lastWidth * 6 / 10;
                             layout.UpdateLeft(explorer.GetContent(h, w));
                             layout.UpdateRight(detailsPane.GetContent(h, dw));
-                            ctx.Refresh();
+                            needsRefresh = true;
                         }
                     }
 
                     var currentProject = explorer.GetSelectedProject();
                     var currentPath = currentProject?.Path;
-                    
+
                     if (currentPath != lastSelectedProjectPath)
                     {
                         lastSelectedProjectPath = currentPath;
-                        
+                        needsRefresh = true;
+
                         if (currentPath != null)
                         {
                             detailsPane.ClearData();
                             layout.UpdateRight(detailsPane.GetContent(h, dw));
-                            ctx.Refresh();
-                            
+
                             debounceCts?.Cancel();
                             debounceCts = new CancellationTokenSource();
                             var token = debounceCts.Token;
@@ -127,7 +122,7 @@ AnsiConsole.AlternateScreen(() =>
                                     if (token.IsCancellationRequested) return;
 
                                     await detailsPane.LoadProjectDataAsync(currentPath, currentProject!.Name);
-                                    lock (uiLock) 
+                                    lock (uiLock)
                                     {
                                         if (!token.IsCancellationRequested)
                                         {
@@ -143,17 +138,15 @@ AnsiConsole.AlternateScreen(() =>
                         {
                             detailsPane.ClearForNonProject();
                             layout.UpdateRight(detailsPane.GetContent(h, dw));
-                            ctx.Refresh();
                         }
                     }
 
 
-                    bool dirty = false;
                     while (Console.KeyAvailable)
                     {
                         var key = Console.ReadKey(true);
-                        dirty = true;
-                        
+                        needsRefresh = true;
+
                         h = Math.Max(5, lastHeight - 15);
                         w = lastWidth / 3;
                         dw = lastWidth * 6 / 10;
@@ -240,10 +233,15 @@ AnsiConsole.AlternateScreen(() =>
                                 else if (layout.ActivePanel == 2)
                                 {
                                     layout.LogViewer.MoveUp();
+                                    layout.UpdateBottom();
                                 }
                                 break;
                             case ConsoleKey.PageUp:
-                                if (layout.ActivePanel == 2) layout.LogViewer.PageUp(10);
+                                if (layout.ActivePanel == 2)
+                                {
+                                    layout.LogViewer.PageUp(10);
+                                    layout.UpdateBottom();
+                                }
                                 break;
                             case ConsoleKey.DownArrow:
                             case ConsoleKey.J:
@@ -260,14 +258,19 @@ AnsiConsole.AlternateScreen(() =>
                                 else if (layout.ActivePanel == 2)
                                 {
                                     layout.LogViewer.MoveDown();
+                                    layout.UpdateBottom();
                                 }
                                 break;
                             case ConsoleKey.PageDown:
-                                if (layout.ActivePanel == 2) layout.LogViewer.PageDown(10);
+                                if (layout.ActivePanel == 2)
+                                {
+                                    layout.LogViewer.PageDown(10);
+                                    layout.UpdateBottom();
+                                }
                                 break;
                             case ConsoleKey.B:
                                 var project = explorer.GetSelectedProject();
-                                if (project == null) 
+                                if (project == null)
                                 {
                                     layout.AddLog("[yellow]Cannot build this item (not a project or solution).[/]");
                                     layout.UpdateBottom();
@@ -278,14 +281,14 @@ AnsiConsole.AlternateScreen(() =>
                                 layout.UpdateBottom();
                                 ctx.Refresh();
 
-                                _ = Task.Run(async () => 
+                                _ = Task.Run(async () =>
                                 {
-                                    try 
+                                    try
                                     {
                                         var cts = new CancellationTokenSource();
                                         buildCts = cts;
-                                         
-                                        var result = await commandService.BuildProjectAsync(project.Path, msg => 
+
+                                        var result = await commandService.BuildProjectAsync(project.Path, msg =>
                                         {
                                             layout.AddLog(Markup.Escape(msg));
                                         }, cts.Token);
@@ -304,20 +307,26 @@ AnsiConsole.AlternateScreen(() =>
                         }
                     }
 
-                    lock (uiLock)
+                    if (needsRefresh)
                     {
-                        if (dirty) ctx.Refresh();
-                        layout.UpdateRight(detailsPane.GetContent(h, dw));
-                        layout.UpdateBottom();
-                        ctx.Refresh();
+                        lock (uiLock)
+                        {
+                            layout.UpdateBottom();
+                            ctx.Refresh();
+                        }
                     }
+
+                    await Task.Delay(15);
                 }
                 catch (Exception ex)
                 {
                     layout.AddLog($"[red]CRITICAL ERROR: {ex.Message}[/]");
-                    layout.UpdateBottom();
-                    ctx.Refresh();
-                    await Task.Delay(1000); 
+                    lock (uiLock)
+                    {
+                        layout.UpdateBottom();
+                        ctx.Refresh();
+                    }
+                    await Task.Delay(1000);
                 }
             }
         })
