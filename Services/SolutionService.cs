@@ -9,9 +9,9 @@ public record ProjectInfo
     public string Id { get; init; } = "";
     public string TypeGuid { get; init; } = "";
     public string? ParentId { get; set; }
-    
 
-    public bool IsSolutionFolder => TypeGuid.Equals("{2150E333-8FDC-42A3-9474-1A3956D46DE8}", StringComparison.OrdinalIgnoreCase) 
+
+    public bool IsSolutionFolder => TypeGuid.Equals("{2150E333-8FDC-42A3-9474-1A3956D46DE8}", StringComparison.OrdinalIgnoreCase)
                                  || TypeGuid.Equals("SolutionFolder", StringComparison.OrdinalIgnoreCase);
 }
 
@@ -19,14 +19,14 @@ public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects)
 
 public class SolutionService
 {
-    public Task<SolutionInfo?> FindAndParseSolutionAsync(string directory)
+    public static Task<SolutionInfo?> FindAndParseSolutionAsync(string directory)
     {
         var slnFile = Directory.GetFiles(directory, "*.sln").FirstOrDefault();
         if (slnFile == null) return Task.FromResult<SolutionInfo?>(null);
 
 
         var solution = SolutionFile.Parse(slnFile);
-        
+
         var projects = new List<ProjectInfo>();
 
         foreach (var proj in solution.ProjectsInOrder)
@@ -38,7 +38,7 @@ public class SolutionService
 
             if (!isSolutionFolder && !isProjectFile)
             {
-                continue; 
+                continue;
             }
 
 
@@ -47,7 +47,7 @@ public class SolutionService
                 Name = proj.ProjectName,
                 Path = proj.AbsolutePath,
                 Id = proj.ProjectGuid,
-                TypeGuid = proj.ProjectType.ToString(), 
+                TypeGuid = proj.ProjectType.ToString(),
                 ParentId = proj.ParentProjectGuid
             });
         }
@@ -55,10 +55,10 @@ public class SolutionService
         return Task.FromResult<SolutionInfo?>(new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects));
     }
 
-    public Task<List<string>> GetProjectReferencesAsync(string projectPath)
+    public static Task<List<string>> GetProjectReferencesAsync(string projectPath)
     {
         var references = new List<string>();
-        
+
         try
         {
             if (!File.Exists(projectPath))
@@ -79,7 +79,7 @@ public class SolutionService
         catch
         {
         }
-        
+
         return Task.FromResult(references);
     }
 }

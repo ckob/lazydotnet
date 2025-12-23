@@ -2,12 +2,7 @@ using Spectre.Console;
 using lazydotnet.Services;
 using lazydotnet.UI;
 
-var solutionService = new SolutionService();
-var commandService = new CommandService();
-var nugetService = new NuGetService();
-var testService = new TestService();
-
-var solution = await solutionService.FindAndParseSolutionAsync(Directory.GetCurrentDirectory());
+var solution = await SolutionService.FindAndParseSolutionAsync(Directory.GetCurrentDirectory());
 
 if (solution == null)
 {
@@ -16,7 +11,7 @@ if (solution == null)
 }
 
 var explorer = new SolutionExplorer(solution);
-var detailsPane = new ProjectDetailsPane(nugetService, solutionService, testService);
+var detailsPane = new ProjectDetailsPane();
 var layout = new AppLayout();
 bool isRunning = true;
 CancellationTokenSource? buildCts = null;
@@ -288,7 +283,7 @@ AnsiConsole.AlternateScreen(() =>
                                         var cts = new CancellationTokenSource();
                                         buildCts = cts;
 
-                                        var result = await commandService.BuildProjectAsync(project.Path, msg =>
+                                        var result = await CommandService.BuildProjectAsync(project.Path, msg =>
                                         {
                                             layout.AddLog(Markup.Escape(msg));
                                         }, cts.Token);

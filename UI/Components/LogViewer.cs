@@ -5,13 +5,13 @@ namespace lazydotnet.UI.Components;
 
 public class LogViewer
 {
-    private readonly List<string> _logs = new();
-    private readonly object _lock = new();
-    
+    private readonly List<string> _logs = [];
+    private readonly Lock _lock = new();
+
     private int _scrollOffset = 0;
-    
+
     private int _selectedIndex = -1;
-    
+
     private const int MaxLogLines = 1000;
 
     public void AddLog(string message)
@@ -34,7 +34,7 @@ public class LogViewer
         lock (_lock)
         {
             if (_logs.Count == 0) return;
-            
+
 
             if (_selectedIndex == -1) _selectedIndex = _logs.Count - 1;
             else if (_selectedIndex > 0) _selectedIndex--;
@@ -46,7 +46,7 @@ public class LogViewer
         lock (_lock)
         {
             if (_logs.Count == 0 || _selectedIndex == -1) return;
-            
+
             if (_selectedIndex < _logs.Count - 1)
             {
                 _selectedIndex++;
@@ -57,14 +57,14 @@ public class LogViewer
             }
         }
     }
-    
+
     public void PageUp(int pageSize)
     {
         lock (_lock)
         {
             if (_logs.Count == 0) return;
             if (_selectedIndex == -1) _selectedIndex = _logs.Count - 1;
-            
+
             _selectedIndex = Math.Max(0, _selectedIndex - pageSize);
         }
     }
@@ -74,7 +74,7 @@ public class LogViewer
         lock (_lock)
         {
             if (_logs.Count == 0 || _selectedIndex == -1) return;
-            
+
             if (_selectedIndex + pageSize >= _logs.Count - 1)
                 _selectedIndex = -1;
             else
@@ -107,7 +107,7 @@ public class LogViewer
 
 
             _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, _logs.Count - visibleRows)));
-            
+
 
             int start = _scrollOffset;
             int end = Math.Min(_logs.Count, _scrollOffset + visibleRows);
@@ -122,8 +122,8 @@ public class LogViewer
             for (int i = start; i < end; i++)
             {
                 var msg = _logs[i];
-                var isSelected = (i == _selectedIndex);
-                
+                var isSelected = i == _selectedIndex;
+
                 if (isSelected)
                 {
                     string style = isActive ? "[black on white]" : "[black on silver]";

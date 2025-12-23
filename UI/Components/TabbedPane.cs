@@ -1,6 +1,5 @@
 namespace lazydotnet.UI.Components;
 
-
 public class TabbedPane
 {
     private readonly string[] _tabNames;

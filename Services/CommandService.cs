@@ -1,15 +1,12 @@
 using CliWrap;
-using CliWrap.EventStream;
 using Spectre.Console;
 
 namespace lazydotnet.Services;
 
 public class CommandService
 {
-    public async Task<CommandResult> BuildProjectAsync(string projectPath, Action<string> onOutput, CancellationToken ct)
+    public static async Task<CommandResult> BuildProjectAsync(string projectPath, Action<string> onOutput, CancellationToken ct)
     {
-
-
         var cmd = Cli.Wrap("dotnet")
             .WithArguments($"build \"{projectPath}\" /v:n /nologo")
             .WithValidation(CommandResultValidation.None)

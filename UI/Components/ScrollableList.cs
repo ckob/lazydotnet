@@ -1,9 +1,8 @@
 namespace lazydotnet.UI.Components;
 
-
 public class ScrollableList<T>
 {
-    private List<T> _items = new();
+    private List<T> _items = [];
     private int _selectedIndex = 0;
     private int _scrollOffset = 0;
 

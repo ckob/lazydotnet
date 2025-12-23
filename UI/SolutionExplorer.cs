@@ -8,18 +8,18 @@ public class ExplorerNode
 {
     public string Name { get; set; } = string.Empty;
     public string? ProjectPath { get; set; }
-    public bool IsProject { get; set; } 
+    public bool IsProject { get; set; }
     public bool IsSolution { get; set; }
     public bool IsExpanded { get; set; } = true;
     public int Depth { get; set; }
-    public List<ExplorerNode> Children { get; } = new();
+    public List<ExplorerNode> Children { get; } = [];
     public ExplorerNode? Parent { get; set; }
 }
 
 public class SolutionExplorer
 {
     private readonly ExplorerNode _root;
-    private List<ExplorerNode> _visibleNodes = new();
+    private readonly List<ExplorerNode> _visibleNodes = [];
     private int _selectedIndex = 0;
     private int _scrollOffset = 0;
 
@@ -29,30 +29,30 @@ public class SolutionExplorer
         RefreshVisibleNodes();
     }
 
-    private ExplorerNode BuildTree(SolutionInfo solution)
+    private static ExplorerNode BuildTree(SolutionInfo solution)
     {
-        var root = new ExplorerNode 
-        { 
-            Name = solution.Name, 
-            Depth = 0, 
-            IsExpanded = true, 
+        var root = new ExplorerNode
+        {
+            Name = solution.Name,
+            Depth = 0,
+            IsExpanded = true,
             IsProject = false,
             IsSolution = true,
-            ProjectPath = solution.Path 
+            ProjectPath = solution.Path
         };
-        
+
         var nodeMap = new Dictionary<string, ExplorerNode>(StringComparer.OrdinalIgnoreCase);
 
 
         foreach (var proj in solution.Projects)
         {
 
-            var node = new ExplorerNode 
-            { 
-                Name = proj.Name, 
+            var node = new ExplorerNode
+            {
+                Name = proj.Name,
                 IsProject = !proj.IsSolutionFolder,
                 ProjectPath = proj.IsSolutionFolder ? null : proj.Path,
-                IsExpanded = true 
+                IsExpanded = true
             };
             nodeMap[proj.Id] = node;
         }
@@ -61,10 +61,9 @@ public class SolutionExplorer
         foreach (var proj in solution.Projects)
         {
             var node = nodeMap[proj.Id];
-            
-            if (!string.IsNullOrEmpty(proj.ParentId) && nodeMap.ContainsKey(proj.ParentId))
+
+            if (!string.IsNullOrEmpty(proj.ParentId) && nodeMap.TryGetValue(proj.ParentId, out ExplorerNode? parent))
             {
-                var parent = nodeMap[proj.ParentId];
                 parent.Children.Add(node);
                 node.Parent = parent;
             }
@@ -74,7 +73,7 @@ public class SolutionExplorer
                 node.Parent = root;
             }
         }
-        
+
 
         PruneTree(root);
 
@@ -82,8 +81,8 @@ public class SolutionExplorer
         SortTree(root);
         return root;
     }
-    
-    private bool PruneTree(ExplorerNode node)
+
+    private static bool PruneTree(ExplorerNode node)
     {
 
         bool hasContent = false;
@@ -103,11 +102,11 @@ public class SolutionExplorer
 
 
         if (node.IsSolution || node.IsProject) return true;
-        
+
         return hasContent;
     }
 
-    private void CalculateDepths(ExplorerNode node, int depth)
+    private static void CalculateDepths(ExplorerNode node, int depth)
     {
         node.Depth = depth;
         foreach (var child in node.Children)
@@ -116,13 +115,13 @@ public class SolutionExplorer
         }
     }
 
-    private void SortTree(ExplorerNode node)
+    private static void SortTree(ExplorerNode node)
     {
-        node.Children.Sort((a, b) => 
+        node.Children.Sort((a, b) =>
         {
             if (a.IsProject == b.IsProject) return string.Compare(a.Name, b.Name);
-            
-            return a.IsProject ? 1 : -1; 
+
+            return a.IsProject ? 1 : -1;
         });
 
         foreach (var child in node.Children)
@@ -148,7 +147,7 @@ public class SolutionExplorer
     public void ToggleExpand()
     {
         var node = GetSelectedNode();
-        if (!node.IsProject || node.Children.Count > 0) 
+        if (!node.IsProject || node.Children.Count > 0)
         {
             node.IsExpanded = !node.IsExpanded;
             RefreshVisibleNodes();
@@ -198,7 +197,7 @@ public class SolutionExplorer
             _selectedIndex++;
         }
     }
-    
+
     private void EnsureVisible(int height)
     {
         int contentHeight = Math.Max(1, height);
@@ -210,7 +209,7 @@ public class SolutionExplorer
         {
             _scrollOffset = _selectedIndex - contentHeight + 1;
         }
-        
+
         if (_scrollOffset > _visibleNodes.Count - contentHeight)
             _scrollOffset = Math.Max(0, _visibleNodes.Count - contentHeight);
     }
@@ -245,7 +244,7 @@ public class SolutionExplorer
             var node = _visibleNodes[i];
             bool isSelected = i == _selectedIndex;
 
-            string indent = new string(' ', node.Depth * 2);
+            string indent = new(' ', node.Depth * 2);
             string icon;
             if (node.IsSolution)
             {
@@ -259,20 +258,20 @@ public class SolutionExplorer
             {
                  icon = node.IsExpanded ? "[yellow]v[/]" : "[yellow]>[/]";
             }
-            
+
             string name = node.Name;
             int usedWidth = (node.Depth * 2) + 6;
             int maxNameWidth = Math.Max(5, availableWidth - usedWidth - 1);
-            if (name.Length > maxNameWidth) name = name.Substring(0, maxNameWidth - 3) + "...";
+            if (name.Length > maxNameWidth) name = string.Concat(name.AsSpan(0, maxNameWidth - 3), "...");
 
             string text = $"{indent} {icon} {Markup.Escape(name)}";
-            
+
             if (isSelected)
             {
                 int visibleLength = (node.Depth * 2) + (node.IsSolution ? 4 : (node.IsProject ? 3 : 2)) + name.Length + 2;
                 int paddingNeeded = Math.Max(0, availableWidth - visibleLength);
-                string padding = new string(' ', paddingNeeded);
-                
+                string padding = new(' ', paddingNeeded);
+
                 grid.AddRow(new Markup($"[black on blue]{text}{padding}[/]"));
             }
             else

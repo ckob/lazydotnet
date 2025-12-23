@@ -5,36 +5,30 @@ using lazydotnet.UI.Components;
 
 namespace lazydotnet.UI;
 
-public class TestDetailsTab : IProjectTab
+public class TestDetailsTab() : IProjectTab
 {
-    private readonly TestService _testService;
     private TestNode? _root;
-    private List<TestNode> _visibleNodes = new();
+    private readonly List<TestNode> _visibleNodes = [];
     private int _selectedIndex = 0;
     private int _scrollOffset = 0;
     private string? _currentPath;
-    
-    private readonly object _lock = new(); // Synchronization lock
+
+    private readonly Lock _lock = new(); // Synchronization lock
 
     private bool _isLoading = false;
-    private bool _isRunningTests = false;
+    private readonly bool _isRunningTests = false;
     private string? _statusMessage;
-    
+
     // For tracking ongoing test runs
     // Map full test name to status
-    private Dictionary<string, TestResult> _testResults = new();
-    
+    private readonly Dictionary<string, TestResult> _testResults = [];
+
     private int _runningTestCount = 0;
-    
+
     private CancellationTokenSource? _discoveryCts;
 
-    public string Title => "Tests";
+    public static string Title => "Tests";
 
-    public TestDetailsTab(TestService testService)
-    {
-        _testService = testService;
-    }
-    
     public async Task LoadAsync(string projectPath, string projectName)
     {
         if (_currentPath == projectPath && !_isLoading) return;
@@ -56,18 +50,18 @@ public class TestDetailsTab : IProjectTab
         _visibleNodes.Clear();
         _testResults.Clear();
         _statusMessage = "Discovering tests...";
-        
-        try 
+
+        try
         {
             // Heavy processing offloaded to thread pool
-            var (rootNode, count) = await Task.Run(async () => 
+            var (rootNode, count) = await Task.Run(async () =>
             {
-                var tests = await _testService.DiscoverTestsAsync(projectPath, token);
-                if (tests.Any())
+                var tests = await TestService.DiscoverTestsAsync(projectPath, token);
+                if (tests.Count != 0)
                 {
-                    var r = _testService.BuildTestTree(tests);
+                    var r = TestService.BuildTestTree(tests);
                     // Pre-calculate visible nodes logic or just set expanded here?
-                    r.IsExpanded = true; 
+                    r.IsExpanded = true;
                     return (r, tests.Count);
                 }
                 return (null, 0);
@@ -92,7 +86,7 @@ public class TestDetailsTab : IProjectTab
             // Ignore, likely superceded
             // However, we should be careful not to unset loading if we were cancelled by a NEW load
             // But if a NEW load started, it would have set _isLoading=true AFTER we were cancelled?
-            // Wait, LoadAsync runs strictly on UI thread or async? 
+            // Wait, LoadAsync runs strictly on UI thread or async?
             // If we are cancelled by another LoadAsync call, that call proceeds.
             // We should just return.
             return;
@@ -140,12 +134,12 @@ public class TestDetailsTab : IProjectTab
         if (_selectedIndex < _visibleNodes.Count - 1)
         {
             _selectedIndex++;
-            // detailed visibility logic depends on height, so we defer to GetContent 
-            // or we assume a safe check if we knew height. 
+            // detailed visibility logic depends on height, so we defer to GetContent
+            // or we assume a safe check if we knew height.
             // For now, GetContent handles the "into view" logic well enough for down.
         }
     }
-    
+
     // ...
 
     public string? GetScrollIndicator()
@@ -156,7 +150,7 @@ public class TestDetailsTab : IProjectTab
 
     public async Task<bool> HandleKey(ConsoleKeyInfo key)
     {
-        if (_isLoading || _isRunningTests) return true; 
+        if (_isLoading || _isRunningTests) return true;
 
         lock (_lock)
         {
@@ -185,7 +179,7 @@ public class TestDetailsTab : IProjectTab
                  {
                      // Jump to parent
                      var idx = _visibleNodes.IndexOf(node.Parent);
-                     if (idx != -1) 
+                     if (idx != -1)
                      {
                          _selectedIndex = idx;
                          if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
@@ -193,7 +187,7 @@ public class TestDetailsTab : IProjectTab
                  }
                  return true;
             }
-            
+
             if (key.Key == ConsoleKey.Spacebar || key.Key == ConsoleKey.Enter)
             {
                  if (node.IsContainer)
@@ -203,7 +197,7 @@ public class TestDetailsTab : IProjectTab
                  }
                  return true;
             }
-            
+
             if (key.KeyChar == 'r' || key.KeyChar == 'R')
             {
                  // Run leaf or container
@@ -230,28 +224,28 @@ public class TestDetailsTab : IProjectTab
             {
                  return new Markup(_statusMessage ?? "[dim]No tests available.[/]");
             }
-            
+
             // Single Grid, No Layout Split
             var treeGrid = new Grid();
             treeGrid.AddColumn(new GridColumn().NoWrap());
-            
+
             // Handle scrolling
-            int contentHeight = Math.Max(1, availableHeight); 
+            int contentHeight = Math.Max(1, availableHeight);
             if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
             if (_selectedIndex >= _scrollOffset + contentHeight) _scrollOffset = _selectedIndex - contentHeight + 1;
-            
+
             int end = Math.Min(_scrollOffset + contentHeight, _visibleNodes.Count);
 
             for (int i = _scrollOffset; i < end; i++)
             {
                 var node = _visibleNodes[i];
                 bool isSelected = i == _selectedIndex;
-                
-                string indent = new string(' ', (node.Depth - 1) * 2); 
-                
+
+                string indent = new(' ', (node.Depth - 1) * 2);
+
                 string iconColor = "yellow";
                 string iconSymbol = node.IsExpanded ? "v" : ">";
-                
+
                 if (!node.IsContainer)
                 {
                     iconSymbol = node.Status switch
@@ -269,24 +263,24 @@ public class TestDetailsTab : IProjectTab
                         _ => "dim"
                     };
                 }
-                
+
                 // Truncation logic
                 int width = Math.Max(10, availableWidth);
-                int prefixLen = indent.Length + 1 + iconSymbol.Length + 1; 
+                int prefixLen = indent.Length + 1 + iconSymbol.Length + 1;
                 int maxNameLen = width - prefixLen - 1;
-                
+
                 string dispName = node.Name;
                 if (dispName.Length > maxNameLen && maxNameLen > 0)
                 {
-                    dispName = dispName.Substring(0, maxNameLen - 1) + "…";
+                    dispName = string.Concat(dispName.AsSpan(0, maxNameLen - 1), "…");
                 }
-                
+
                 string style = isSelected ? "[black on blue]" : "";
                 string closeStyle = isSelected ? "[/]" : "";
-                
+
                 treeGrid.AddRow(new Markup($"{style}{indent} [{iconColor}]{iconSymbol}[/] {Markup.Escape(dispName)}{closeStyle}"));
             }
-            
+
             return treeGrid;
         }
     }
@@ -294,9 +288,9 @@ public class TestDetailsTab : IProjectTab
     private async Task RunSelectedTest(TestNode node)
     {
         if (_currentPath == null) return;
-        
+
         Interlocked.Increment(ref _runningTestCount);
-        
+
         // Update status for all involved tests
         if (node.IsContainer)
         {
@@ -307,10 +301,10 @@ public class TestDetailsTab : IProjectTab
             node.Status = TestStatus.Running;
             UpdateParentStatus(node);
         }
-        
+
         _statusMessage = $"Running tests ({_runningTestCount} active)...";
 
-        _ = Task.Run(async () => 
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -328,15 +322,15 @@ public class TestDetailsTab : IProjectTab
                     // Exact match for leaf
                     filter = $"FullyQualifiedName={node.FullName}";
                 }
-                 
-                 var results = await _testService.RunTestAsync(_currentPath, filter);
-                 
+
+                 var results = await TestService.RunTestAsync(_currentPath, filter);
+
                  if (results.Count == 0)
                  {
-                     if (node.IsContainer) 
+                     if (node.IsContainer)
                      {
-                         // If container run returned nothing, maybe just cancel running status?
-                         SetStatusRecursive(node, TestStatus.None);
+                        // If container run returned nothing, maybe just cancel running status?
+                        SetStatusRecursive(node, TestStatus.None);
                      }
                      else
                      {
@@ -348,7 +342,7 @@ public class TestDetailsTab : IProjectTab
                      ProcessTestResults(node, results);
                  }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 if (node.IsContainer) SetStatusRecursive(node, TestStatus.Failed);
                 else node.Status = TestStatus.Failed;
@@ -364,19 +358,19 @@ public class TestDetailsTab : IProjectTab
                 {
                     _statusMessage = $"Running tests ({_runningTestCount} active)...";
                 }
-                
+
                 // Final status update for parents (important for container run too)
                 if (node.Parent != null) UpdateParentStatus(node.Parent); // If node is root (Tests), parent is null
-                else if (node.IsContainer) 
+                else if (node.IsContainer)
                 {
                     // If we ran the root "Tests", we need to ensure its status is updated based on children
                     bool anyFailed = false;
                     bool allPassed = true;
                     bool anyNone = false;
-                    
+
                     // We can reuse UpdateParentStatus logic but applied to self?
                     // Actually ProcessTestResults -> ApplyResultsRecursive calls node.Status = ... for tests
-                    // and for containers it aggregates. 
+                    // and for containers it aggregates.
                     // So we probably don't need manual update here IF ProcessTestResults did its job.
                     // But safe to check.
                 }
@@ -384,19 +378,19 @@ public class TestDetailsTab : IProjectTab
         });
     }
 
-    private List<TestNode> GetAllLeafNodes(TestNode node)
+    private static List<TestNode> GetAllLeafNodes(TestNode node)
     {
         var leaves = new List<TestNode>();
         if (node.IsTest) leaves.Add(node);
-        
+
         foreach (var child in node.Children)
         {
             leaves.AddRange(GetAllLeafNodes(child));
         }
         return leaves;
     }
-    
-    private void UpdateParentStatus(TestNode node)
+
+    private static void UpdateParentStatus(TestNode node)
     {
         var parent = node.Parent;
         while (parent != null)
@@ -405,7 +399,7 @@ public class TestDetailsTab : IProjectTab
             bool anyFailed = false;
             bool allPassed = true;
             bool anyNone = false;
-            
+
             foreach (var child in parent.Children)
             {
                 if (child.Status == TestStatus.Running) anyRunning = true;
@@ -413,29 +407,29 @@ public class TestDetailsTab : IProjectTab
                 if (child.Status != TestStatus.Passed) allPassed = false;
                 if (child.Status == TestStatus.None) anyNone = true;
             }
-            
+
             if (anyRunning) parent.Status = TestStatus.Running;
             else if (anyFailed) parent.Status = TestStatus.Failed;
             else if (allPassed && !anyNone) parent.Status = TestStatus.Passed;
             else parent.Status = TestStatus.None; // Mixed or incomplete
-            
+
             parent = parent.Parent;
         }
     }
-    
-    private void ProcessTestResults(TestNode rootNode, List<TestResult> results)
+
+    private static void ProcessTestResults(TestNode rootNode, List<TestResult> results)
     {
         // Filter out null names if any
         var resultLookup = results
             .Where(r => r.FullyQualifiedName != null)
             .GroupBy(r => r.FullyQualifiedName!)
             .ToDictionary(g => g.Key, g => g.First());
-        
+
         // Start from rootNode - in parallel execution rootNode is always a LEAF here
         // But we keep recursion just in case logic changes or for safety
         ApplyResultsRecursive(rootNode, resultLookup);
     }
-    
+
     private void ApplyResultsRecursive(TestNode node, Dictionary<string, TestResult> lookup)
     {
         if (node.IsTest)
@@ -457,27 +451,27 @@ public class TestDetailsTab : IProjectTab
         }
         else
         {
-            // Container: status is aggregate of children? 
+            // Container: status is aggregate of children?
             // Or just container status.
             // Let's recurse first
             bool anyFailed = false;
             bool allPassed = true;
-            
-            foreach(var child in node.Children) 
+
+            foreach(var child in node.Children)
             {
                 ApplyResultsRecursive(child, lookup);
                 if (child.Status == TestStatus.Failed) anyFailed = true;
                 if (child.Status != TestStatus.Passed) allPassed = false;
             }
-            
+
             // Update container status based on children
             if (anyFailed) node.Status = TestStatus.Failed;
             else if (allPassed) node.Status = TestStatus.Passed;
             else node.Status = TestStatus.None; // Mixed or skipped
         }
     }
-    
-    private void SetStatusRecursive(TestNode node, TestStatus status)
+
+    private static void SetStatusRecursive(TestNode node, TestStatus status)
     {
         node.Status = status;
         foreach(var child in node.Children) SetStatusRecursive(child, status);
@@ -491,8 +485,8 @@ public class TestDetailsTab : IProjectTab
 
     private void Traverse(TestNode node)
     {
-        if (node != _root) _visibleNodes.Add(node); 
-        
+        if (node != _root) _visibleNodes.Add(node);
+
         if (node.IsExpanded)
         {
             foreach (var child in node.Children) Traverse(child);

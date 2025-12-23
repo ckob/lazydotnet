@@ -11,29 +11,29 @@ public class ProjectDetailsPane
     private readonly NuGetDetailsTab _nugetTab;
     private readonly ProjectReferencesTab _refsTab;
     private readonly TestDetailsTab _testsTab;
-    private readonly List<IProjectTab> _tabInstances = new();
+    private readonly List<IProjectTab> _tabInstances = [];
 
     private string? _currentProjectPath;
     private string? _currentProjectName;
 
-    public Action<string>? LogAction 
-    { 
-        get => _nugetTab.LogAction; 
-        set => _nugetTab.LogAction = value; 
+    public Action<string>? LogAction
+    {
+        get => _nugetTab.LogAction;
+        set => _nugetTab.LogAction = value;
     }
 
     public Action? RequestRefresh { get; set; }
 
-    public ProjectDetailsPane(NuGetService nugetService, SolutionService solutionService, TestService testService)
+    public ProjectDetailsPane()
     {
-        _nugetTab = new NuGetDetailsTab(nugetService);
-        _refsTab = new ProjectReferencesTab(solutionService);
-        _testsTab = new TestDetailsTab(testService);
-        
+        _nugetTab = new NuGetDetailsTab();
+        _refsTab = new ProjectReferencesTab();
+        _testsTab = new TestDetailsTab();
+
         _tabInstances.Add(_refsTab);
         _tabInstances.Add(_nugetTab);
         _tabInstances.Add(_testsTab);
-        
+
         _tabs = new TabbedPane(_refsTab.Title, _nugetTab.Title, _testsTab.Title);
     }
 
@@ -73,9 +73,9 @@ public class ProjectDetailsPane
     {
         _currentProjectPath = projectPath;
         _currentProjectName = projectName;
-        
+
         TriggerLoad();
-        
+
         return Task.CompletedTask;
     }
 
@@ -84,7 +84,7 @@ public class ProjectDetailsPane
         if (_currentProjectPath != null && _currentProjectName != null)
         {
              var task = _tabInstances[_tabs.ActiveTab].LoadAsync(_currentProjectPath, _currentProjectName);
-             _ = Task.Run(async () => 
+             _ = Task.Run(async () =>
              {
                  try { await task; } catch { }
                  RequestRefresh?.Invoke();

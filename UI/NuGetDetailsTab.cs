@@ -3,7 +3,6 @@ using Spectre.Console.Rendering;
 using lazydotnet.Services;
 using lazydotnet.UI.Components;
 using CliWrap;
-using CliWrap.Buffered;
 
 namespace lazydotnet.UI;
 
@@ -16,16 +15,14 @@ public enum AppMode
     Busy // Showing spinner/progress
 }
 
-public class NuGetDetailsTab : IProjectTab
+public class NuGetDetailsTab() : IProjectTab
 {
-    private readonly NuGetService _nugetService;
-    
     // Lists
     private readonly ScrollableList<NuGetPackageInfo> _nugetList = new();
     private readonly ScrollableList<SearchResult> _searchList = new();
     private readonly ScrollableList<string> _versionList = new();
-    
-    private readonly object _lock = new(); // UI Synchronization
+
+    private readonly Lock _lock = new(); // UI Synchronization
 
     // State
     private AppMode _appMode = AppMode.Normal;
@@ -37,15 +34,10 @@ public class NuGetDetailsTab : IProjectTab
     private string? _currentProjectPath;
     private string? _currentProjectName;
     private CancellationTokenSource? _loadCts;
-    
-    public Action<string>? LogAction { get; set; }
-    
-    public string Title => "NuGets";
 
-    public NuGetDetailsTab(NuGetService nugetService)
-    {
-        _nugetService = nugetService;
-    }
+    public Action<string>? LogAction { get; set; }
+
+    public string Title => "NuGets";
 
     public void MoveUp()
     {
@@ -76,7 +68,7 @@ public class NuGetDetailsTab : IProjectTab
             return $"{_nugetList.SelectedIndex + 1} of {_nugetList.Count}";
         }
     }
-    
+
     public void ClearData()
     {
         lock (_lock)
@@ -102,10 +94,10 @@ public class NuGetDetailsTab : IProjectTab
         _currentProjectName = projectName;
         _isLoading = true;
         _nugetList.Clear();
-        
+
         try
         {
-            var packages = await _nugetService.GetPackagesAsync(projectPath, LogAction, ct);
+            var packages = await NuGetService.GetPackagesAsync(projectPath, LogAction, ct);
              if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
                 return;
 
@@ -131,7 +123,7 @@ public class NuGetDetailsTab : IProjectTab
         // Note: Some handlers are async. We can't lock around async calls easily.
         // But we can lock the state check and state updates.
         // Actually, most handlers just modify state or launch tasks.
-        
+
         // We will lock only the synchronous parts.
         // But wait, if we lock here, we might block GetContent?
         // Yes, but that's expected.
@@ -139,13 +131,13 @@ public class NuGetDetailsTab : IProjectTab
         // However, we can't 'await' inside a lock.
         // We need to release lock before awaiting.
         // Or we rely on lock internal to helpers for state mutation?
-        
+
         // Let's refactor slightly: lock inside handlers where appropriate.
         // Or lock here for the dispatch?
-        
+
         // Simpler: methods like HandleNormalMode modify _appMode and navigate lists.
         // They should lock.
-        
+
         switch (_appMode)
         {
             case AppMode.Normal:
@@ -159,7 +151,7 @@ public class NuGetDetailsTab : IProjectTab
         }
         return false;
     }
-    
+
     private async Task<bool> HandleNormalMode(ConsoleKeyInfo key)
     {
         switch (key.KeyChar)
@@ -198,7 +190,7 @@ public class NuGetDetailsTab : IProjectTab
 
         return false;
     }
-    
+
      private async Task<bool> HandleSearchMode(ConsoleKeyInfo key)
     {
         if (key.Key == ConsoleKey.Escape)
@@ -234,7 +226,7 @@ public class NuGetDetailsTab : IProjectTab
             }
             return true;
         }
-        
+
         if (key.Key == ConsoleKey.UpArrow || (key.Key == ConsoleKey.P && (key.Modifiers & ConsoleModifiers.Control) != 0))
         {
             _searchList.MoveUp();
@@ -284,7 +276,7 @@ public class NuGetDetailsTab : IProjectTab
         {
             var selectedVersion = _versionList.SelectedItem;
             var selectedPackage = _nugetList.SelectedItem;
-            
+
             if (selectedVersion != null && selectedPackage != null)
             {
                 _ = InstallPackage(selectedPackage.Id, selectedVersion);
@@ -295,7 +287,7 @@ public class NuGetDetailsTab : IProjectTab
 
         return true;
     }
-    
+
     private Task<bool> HandleConfirmDelete(ConsoleKeyInfo key)
     {
         if (key.Key == ConsoleKey.Y)
@@ -304,11 +296,11 @@ public class NuGetDetailsTab : IProjectTab
              _appMode = AppMode.Normal;
              return Task.FromResult(true);
         }
-        
+
         _appMode = AppMode.Normal;
         return Task.FromResult(true);
     }
-    
+
     // Actions
 
     private async Task PerformSearch(string query)
@@ -318,11 +310,11 @@ public class NuGetDetailsTab : IProjectTab
         _statusMessage = "Searching...";
 
         // Fire and forget
-        _ = Task.Run(async () => 
+        _ = Task.Run(async () =>
         {
             try
             {
-                 var results = await _nugetService.SearchPackagesAsync(query, LogAction);
+                 var results = await NuGetService.SearchPackagesAsync(query, LogAction);
                  _searchList.SetItems(results);
                  _statusMessage = results.Count == 0 ? "No results." : $"Found {results.Count} packages.";
             }
@@ -342,13 +334,13 @@ public class NuGetDetailsTab : IProjectTab
     {
         _isActionRunning = true;
         _statusMessage = "Fetching versions...";
-        _ = Task.Run(async () => 
+        _ = Task.Run(async () =>
         {
             try
             {
                 var pkg = _nugetList.SelectedItem;
                 if (pkg == null) return;
-                var versions = await _nugetService.GetPackageVersionsAsync(pkg.Id, LogAction);
+                var versions = await NuGetService.GetPackageVersionsAsync(pkg.Id, LogAction);
 
                 _versionList.SetItems(versions);
                 if (versions.Count > 0) _appMode = AppMode.SelectingVersion;
@@ -374,7 +366,7 @@ public class NuGetDetailsTab : IProjectTab
         _statusMessage = $"Installing {packageId} {(version ?? "latest")}...";
         try
         {
-            await _nugetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
+            await NuGetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
             await ReloadData();
         }
         catch (Exception ex)
@@ -397,7 +389,7 @@ public class NuGetDetailsTab : IProjectTab
         _statusMessage = $"Removing {packageId}...";
         try
         {
-            await _nugetService.RemovePackageAsync(_currentProjectPath, packageId, LogAction);
+            await NuGetService.RemovePackageAsync(_currentProjectPath, packageId, LogAction);
             await ReloadData();
         }
         catch (Exception ex)
@@ -415,7 +407,7 @@ public class NuGetDetailsTab : IProjectTab
     private async Task UpdateAllOutdated()
     {
         if (_currentProjectPath == null) return;
-        
+
         var outdated = _nugetList.Items.Where(p => p.IsOutdated).ToList();
         if (!outdated.Any()) return;
 
@@ -426,7 +418,7 @@ public class NuGetDetailsTab : IProjectTab
             {
                 var pkg = outdated[i];
                 _statusMessage = $"Updating {i + 1}/{outdated.Count}: {pkg.Id}...";
-                await _nugetService.InstallPackageAsync(_currentProjectPath, pkg.Id, null, noRestore: true, logger: LogAction);
+                await NuGetService.InstallPackageAsync(_currentProjectPath, pkg.Id, null, noRestore: true, logger: LogAction);
             }
 
             _statusMessage = "Finalizing restore...";
@@ -480,19 +472,19 @@ public class NuGetDetailsTab : IProjectTab
                 RenderSearchOverlay(grid, availableHeight, availableWidth);
                 return grid;
             }
-            
+
             if (_isLoading || _isActionRunning)
             {
                 // Only show list if we have data (e.g. background update)
                 if (_nugetList.Count > 0)
                 {
-                    RenderNuGetTab(grid, availableHeight, availableWidth); 
+                    RenderNuGetTab(grid, availableHeight, availableWidth);
                 }
                  var msg = _statusMessage ?? "Loading...";
                  grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(msg)}[/]"));
                  return grid;
             }
-            
+
             if (_appMode == AppMode.SelectingVersion)
             {
                 RenderVersionOverlay(grid, availableHeight, availableWidth);
@@ -517,11 +509,11 @@ public class NuGetDetailsTab : IProjectTab
     }
 
     // Rendering Helpers (Copied and adapted)
-    
+
      private void RenderSearchOverlay(Grid grid, int height, int width)
     {
         grid.AddRow(new Markup($"[blue]Search NuGet: [/] {Markup.Escape(_searchQuery)}_"));
-        
+
         if (_isActionRunning)
         {
              var msg = _statusMessage ?? "Searching...";
@@ -534,17 +526,17 @@ public class NuGetDetailsTab : IProjectTab
              var table = new Table().Border(TableBorder.Rounded).Expand();
              table.AddColumn("Id");
              table.AddColumn("Latest");
-             
+
              int visibleRows = Math.Max(1, height - 3);
              var (start, end) = _searchList.GetVisibleRange(visibleRows);
-             
+
              for(int i = start; i < end; i++)
              {
                  var item = _searchList.Items[i];
                  bool selected = i == _searchList.SelectedIndex;
                  string style = selected ? "[black on blue]" : "";
                  string closeStyle = selected ? "[/]" : "";
-                 
+
                  table.AddRow(
                      new Markup($"{style}{Markup.Escape(item.Id)}{closeStyle}"),
                      new Markup($"{style}{Markup.Escape(item.LatestVersion)}{closeStyle}")
@@ -562,9 +554,9 @@ public class NuGetDetailsTab : IProjectTab
     {
         var pkg = _nugetList.SelectedItem;
         if (pkg == null) return;
-        
+
         grid.AddRow(new Markup($"[blue]Select version for {Markup.Escape(pkg.Id)}:[/]"));
-        
+
         var table = new Table().Border(TableBorder.Rounded).Expand();
         table.AddColumn("Version");
 
@@ -577,7 +569,7 @@ public class NuGetDetailsTab : IProjectTab
              bool selected = i == _versionList.SelectedIndex;
              string style = selected ? "[black on blue]" : "";
              string closeStyle = selected ? "[/]" : "";
-             
+
 
              if (v == pkg.ResolvedVersion) style = selected ? "[black on green]" : "[green]";
              if (v == pkg.LatestVersion) style = selected ? "[black on yellow]" : "[yellow]";
@@ -586,7 +578,7 @@ public class NuGetDetailsTab : IProjectTab
         }
         grid.AddRow(table);
     }
-    
+
     private void RenderNuGetTab(Grid grid, int maxRows, int width)
     {
         if (_nugetList.Count == 0)
@@ -650,7 +642,7 @@ public class NuGetDetailsTab : IProjectTab
             grid.AddRow(new Markup($"[dim]{indicator}[/]"));
         }
     }
-    
+
     private static string FormatColoredVersion(string current, string latest, VersionUpdateType updateType)
     {
         var color = updateType switch

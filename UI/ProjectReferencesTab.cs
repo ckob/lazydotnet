@@ -7,17 +7,11 @@ namespace lazydotnet.UI;
 
 public class ProjectReferencesTab : IProjectTab
 {
-    private readonly SolutionService _solutionService;
     private readonly ScrollableList<string> _refsList = new();
     private bool _isLoading;
     private string? _currentProjectPath;
 
     public string Title => "Project References";
-
-    public ProjectReferencesTab(SolutionService solutionService)
-    {
-        _solutionService = solutionService;
-    }
 
     public void MoveUp() => _refsList.MoveUp();
 
@@ -46,7 +40,7 @@ public class ProjectReferencesTab : IProjectTab
 
         try
         {
-            var refs = await _solutionService.GetProjectReferencesAsync(projectPath);
+            var refs = await SolutionService.GetProjectReferencesAsync(projectPath);
             // Check if we are still on the same project
             if (_currentProjectPath == projectPath)
             {
@@ -64,12 +58,12 @@ public class ProjectReferencesTab : IProjectTab
                 _isLoading = false;
             }
         }
-        
+
     }
 
     public Task<bool> HandleKey(ConsoleKeyInfo key)
     {
-        // No specific actions for references tab yet other than scrolling which is handled by parent/layout 
+        // No specific actions for references tab yet other than scrolling which is handled by parent/layout
         // passing MoveUp/MoveDown calls based on keys, but if we want to add specific key handling here we can.
         // The original implementation didn't have specific keys for this tab besides navigation.
         return Task.FromResult(false);
@@ -98,7 +92,7 @@ public class ProjectReferencesTab : IProjectTab
         }
 
         // Subtract for header/etc if needed, but usually just fill available
-        // Original code calculation: int visibleRows = Math.Max(1, maxRows - 2); 
+        // Original code calculation: int visibleRows = Math.Max(1, maxRows - 2);
         // We will assume availableHeight is the content area height.
         int visibleRows = Math.Max(1, availableHeight);
         var (start, end) = _refsList.GetVisibleRange(visibleRows);
@@ -117,27 +111,27 @@ public class ProjectReferencesTab : IProjectTab
                 grid.AddRow(new Markup($"  [green]→[/] {Markup.Escape(refName)}"));
             }
         }
-        
+
         // Scroll indicator is handled by the parent often, or we can add it here if GetContent returns the whole panel content.
         // The interface says GetContent returns IRenderable. The previous implementation returned a Grid that included the scroll indicator.
-        // Let's add it if there is space? 
-        // Actually, the previous implementation added it as a row. 
+        // Let's add it if there is space?
+        // Actually, the previous implementation added it as a row.
         // But here we might run out of height if we consumed satisfied visibleRows = availableHeight.
         // Let's use availableHeight - 1 for list if we have indicator?
-        // To keep it simple and consistent with previous behavior, let's just return the list rows. 
+        // To keep it simple and consistent with previous behavior, let's just return the list rows.
         // The parent ProjectDetailsPane seemed to append the status message at the bottom.
         // Wait, the previous implementation RenderReferencesTab added rows to a passed Grid.
         // Here we return a Grid.
-        
+
         // Let's re-read ProjectDetailsPane.cs:
         // RenderReferencesTab(grid, availableHeight);
         // int visibleRows = Math.Max(1, maxRows - 2);
         // ...
         // var indicator = _refsList.GetScrollIndicator(visibleRows);
         // if (indicator != null) grid.AddRow(...)
-        
+
         // So we should probably reserve space for indicator if needed.
-        
+
         return grid;
     }
 }

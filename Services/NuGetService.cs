@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using System.Text;
 using System.Text.RegularExpressions;
 using CliWrap;
-using CliWrap.Buffered;
 using Spectre.Console;
 
 namespace lazydotnet.Services;
@@ -16,7 +15,7 @@ public enum VersionUpdateType
     Major
 }
 
-public record NuGetPackageInfo(string Id, string ResolvedVersion, string? LatestVersion)
+public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string? LatestVersion)
 {
     public bool IsOutdated => LatestVersion != null && LatestVersion != ResolvedVersion;
 
@@ -48,7 +47,7 @@ public record NuGetPackageInfo(string Id, string ResolvedVersion, string? Latest
     private static (int Major, int Minor, int Patch, bool IsPreRelease)? ParseVersion(string version)
     {
 
-        var match = Regex.Match(version, @"^(\d+)\.(\d+)(?:\.(\d+))?(?:[\.\-].*)?$");
+        var match = VersionRegex().Match(version);
         if (!match.Success)
             return null;
 
@@ -59,6 +58,9 @@ public record NuGetPackageInfo(string Id, string ResolvedVersion, string? Latest
 
         return (major, minor, patch, isPreRelease);
     }
+
+    [GeneratedRegex(@"^(\d+)\.(\d+)(?:\.(\d+))?(?:[\.\-].*)?$")]
+    private static partial Regex VersionRegex();
 }
 
 public class NuGetReport
@@ -67,7 +69,7 @@ public class NuGetReport
     public int Version { get; set; }
 
     [JsonPropertyName("projects")]
-    public List<NuGetProject> Projects { get; set; } = new();
+    public List<NuGetProject> Projects { get; set; } = [];
 }
 
 public class NuGetProject
@@ -76,7 +78,7 @@ public class NuGetProject
     public string Path { get; set; } = "";
 
     [JsonPropertyName("frameworks")]
-    public List<NuGetFramework> Frameworks { get; set; } = new();
+    public List<NuGetFramework> Frameworks { get; set; } = [];
 }
 
 public class NuGetFramework
@@ -85,7 +87,7 @@ public class NuGetFramework
     public string Framework { get; set; } = "";
 
     [JsonPropertyName("topLevelPackages")]
-    public List<NuGetPackageJson> TopLevelPackages { get; set; } = new();
+    public List<NuGetPackageJson> TopLevelPackages { get; set; } = [];
 }
 
 public class NuGetPackageJson
@@ -105,7 +107,7 @@ public class NuGetPackageJson
 
 public class NuGetService
 {
-    public async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
+    public static async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
@@ -127,11 +129,11 @@ public class NuGetService
         catch (Exception ex)
         {
             logger?.Invoke($"[red]Search error: {Markup.Escape(ex.Message)}[/]");
-            return new List<SearchResult>();
+            return [];
         }
     }
 
-    public async Task<List<string>> GetPackageVersionsAsync(string packageId, Action<string>? logger = null, CancellationToken ct = default)
+    public static async Task<List<string>> GetPackageVersionsAsync(string packageId, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
@@ -150,20 +152,20 @@ public class NuGetService
 
             var searchResults = ParseSearchResults(result.StandardOutput);
             var package = searchResults.FirstOrDefault(p => p.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase));
-            
-            return package?.Versions.Select(v => v.Version).ToList() ?? new List<string>();
+
+            return package?.Versions.Select(v => v.Version).ToList() ?? [];
         }
         catch (Exception ex)
         {
             logger?.Invoke($"[red]Version search error: {Markup.Escape(ex.Message)}[/]");
-            return new List<string>();
+            return [];
         }
     }
 
-    public async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
+    public static async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
     {
         var args = new List<string> { "add", projectPath, "package", packageId };
-        
+
         if (!string.IsNullOrEmpty(version))
         {
             args.Add("-v");
@@ -191,11 +193,11 @@ public class NuGetService
         await AppCli.RunAsync(command);
     }
 
-    public async Task RemovePackageAsync(string projectPath, string packageId, Action<string>? logger = null)
+    public static async Task RemovePackageAsync(string projectPath, string packageId, Action<string>? logger = null)
     {
         var cmd = $"remove \"{projectPath}\" package \"{packageId}\"";
 
-        
+
         var command = Cli.Wrap("dotnet")
             .WithArguments($"remove \"{projectPath}\" package \"{packageId}\"")
             .WithValidation(CommandResultValidation.None)
@@ -206,16 +208,16 @@ public class NuGetService
     }
 
 
-    private List<SearchResult> ParseSearchResults(string output)
+    private static List<SearchResult> ParseSearchResults(string output)
     {
         int jsonStart = output.IndexOf('{');
-        if (jsonStart < 0) return new List<SearchResult>();
+        if (jsonStart < 0) return [];
 
-        var jsonContent = output.Substring(jsonStart);
-        try 
+        var jsonContent = output[jsonStart..];
+        try
         {
             var report = JsonSerializer.Deserialize<SearchReport>(jsonContent);
-            if (report?.SearchResult == null) return new List<SearchResult>();
+            if (report?.SearchResult == null) return [];
 
             // Flatten all packages from all sources
             var allPackages = report.SearchResult
@@ -228,7 +230,7 @@ public class NuGetService
                 {
                     Id = g.Key,
                     LatestVersion = g.MaxBy(p => p.LatestVersion ?? p.Version, new VersionComparer())?.LatestVersion ?? g.First().LatestVersion ?? g.First().Version ?? "",
-                    Versions = g.Select(p => new SearchVersion { Version = p.Version ?? "" }).Where(v => !string.IsNullOrEmpty(v.Version)).ToList()
+                    Versions = [.. g.Select(p => new SearchVersion { Version = p.Version ?? "" }).Where(v => !string.IsNullOrEmpty(v.Version))]
                 })
                 .ToList();
 
@@ -236,20 +238,18 @@ public class NuGetService
         }
         catch
         {
-            return new List<SearchResult>();
+            return [];
         }
     }
 
-    public async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
+    public static async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
 
             var listCmdDisplay = $"list \"{Markup.Escape(projectPath)}\" package --format json";
             var outdatedCmdDisplay = $"list \"{Markup.Escape(projectPath)}\" package --format json --outdated";
-            
 
-            
             var allPackagesCmd = Cli.Wrap("dotnet")
                 .WithArguments($"list \"{projectPath}\" package --format json")
                 .WithValidation(CommandResultValidation.None);
@@ -261,39 +261,36 @@ public class NuGetService
             var allPackagesTask = AppCli.RunBufferedAsync(allPackagesCmd, ct);
             var outdatedTask = AppCli.RunBufferedAsync(outdatedCmd, ct);
 
-
             await Task.WhenAll(allPackagesTask, outdatedTask);
-
 
             var allPackages = ParseReport(allPackagesTask.Result.StandardOutput);
             var outdatedPackages = ParseReport(outdatedTask.Result.StandardOutput);
 
-
             var outdatedDict = outdatedPackages.ToDictionary(p => p.Id, p => p.LatestVersion);
 
-            return allPackages.Select(p => new NuGetPackageInfo(
+            return [.. allPackages.Select(p => new NuGetPackageInfo(
                 p.Id,
                 p.ResolvedVersion,
                 outdatedDict.TryGetValue(p.Id, out var latest) ? latest : null
-            )).ToList();
+            ))];
         }
         catch
         {
-            return new List<NuGetPackageInfo>();
+            return [];
         }
     }
 
-    private List<NuGetPackageInfo> ParseReport(string output)
+    private static List<NuGetPackageInfo> ParseReport(string output)
     {
         int jsonStart = output.IndexOf('{');
         if (jsonStart < 0)
-            return new List<NuGetPackageInfo>();
+            return [];
 
-        var jsonContent = output.Substring(jsonStart);
+        var jsonContent = output[jsonStart..];
 
         var report = JsonSerializer.Deserialize<NuGetReport>(jsonContent);
         if (report == null)
-            return new List<NuGetPackageInfo>();
+            return [];
 
         var packages = new List<NuGetPackageInfo>();
         foreach (var project in report.Projects)
@@ -318,13 +315,13 @@ public class SearchResult
     public string Id { get; set; } = "";
     public string LatestVersion { get; set; } = "";
     public string? Description { get; set; }
-    public List<SearchVersion> Versions { get; set; } = new();
+    public List<SearchVersion> Versions { get; set; } = [];
 }
 
 public class SearchReport
 {
     [JsonPropertyName("searchResult")]
-    public List<SearchSourceResult> SearchResult { get; set; } = new();
+    public List<SearchSourceResult> SearchResult { get; set; } = [];
 }
 
 public class SearchSourceResult
@@ -333,7 +330,7 @@ public class SearchSourceResult
     public string SourceName { get; set; } = "";
 
     [JsonPropertyName("packages")]
-    public List<JsonPackageResult> Packages { get; set; } = new();
+    public List<JsonPackageResult> Packages { get; set; } = [];
 }
 
 public class JsonPackageResult
@@ -361,10 +358,8 @@ public class VersionComparer : IComparer<string?>
 {
     public int Compare(string? x, string? y)
     {
-
-        if (System.Version.TryParse(x, out var v1) && System.Version.TryParse(y, out var v2))
+        if (Version.TryParse(x, out var v1) && System.Version.TryParse(y, out var v2))
             return v1.CompareTo(v2);
         return string.Compare(x, y, StringComparison.Ordinal);
     }
 }
-
