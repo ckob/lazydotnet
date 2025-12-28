@@ -1,18 +1,23 @@
-using System.Text.RegularExpressions;
 using Spectre.Console;
 using Spectre.Console.Rendering;
+using lazydotnet.Services;
 
 namespace lazydotnet.UI.Components;
 
-public class LogViewer
+public class TestOutputViewer
 {
-    private readonly List<string> _logs = [];
+    private List<TestOutputLine> _lines = [];
+    private int _scrollOffset = 0;
+    private int _selectedLogicalIndex = 0; 
     private readonly Lock _lock = new();
 
-    private int _scrollOffset = 0;
-    private int _selectedLogicalIndex = -1; // -1 means auto-scroll
-
-    private const int MaxLogLines = 1000;
+    public void SetOutput(List<TestOutputLine> lines)
+    {
+        lock (_lock)
+        {
+            _lines = lines;
+        }
+    }
 
     public bool HandleInput(ConsoleKeyInfo key)
     {
@@ -26,40 +31,21 @@ public class LogViewer
             case ConsoleKey.J:
                 MoveDown();
                 return true;
-            case ConsoleKey.PageUp:
-                PageUp(10);
-                return true;
-            case ConsoleKey.PageDown:
-                PageDown(10);
-                return true;
         }
         return false;
     }
 
-    public void AddLog(string message)
+    private void MoveUp()
     {
         lock (_lock)
         {
-            _logs.Add(message);
-            if (_logs.Count > MaxLogLines)
-            {
-                _logs.RemoveAt(0);
-                if (_selectedLogicalIndex >= 0) _selectedLogicalIndex--;
-            }
-        }
-    }
-
-    public void MoveUp()
-    {
-        lock (_lock)
-        {
-            if (_logs.Count == 0) return;
+            if (_lines.Count == 0) return;
             
-            var index = _selectedLogicalIndex == -1 ? _logs.Count - 1 : _selectedLogicalIndex;
+            var index = _selectedLogicalIndex;
             while (index > 0)
             {
                 index--;
-                if (!string.IsNullOrWhiteSpace(_logs[index]))
+                if (!string.IsNullOrWhiteSpace(_lines[index].Text))
                 {
                     _selectedLogicalIndex = index;
                     return;
@@ -70,46 +56,22 @@ public class LogViewer
         }
     }
 
-    public void MoveDown()
+    private void MoveDown()
     {
         lock (_lock)
         {
-            if (_logs.Count == 0 || _selectedLogicalIndex == -1) return;
-
+            if (_lines.Count == 0) return;
+            
             var index = _selectedLogicalIndex;
-            while (index < _logs.Count - 1)
+            while (index < _lines.Count - 1)
             {
                 index++;
-                if (!string.IsNullOrWhiteSpace(_logs[index]))
+                if (!string.IsNullOrWhiteSpace(_lines[index].Text))
                 {
                     _selectedLogicalIndex = index;
                     return;
                 }
             }
-            
-            _selectedLogicalIndex = -1; // Resume auto-scroll
-        }
-    }
-
-    public void PageUp(int pageSize)
-    {
-        lock (_lock)
-        {
-            if (_logs.Count == 0) return;
-            if (_selectedLogicalIndex == -1) _selectedLogicalIndex = _logs.Count - 1;
-            _selectedLogicalIndex = Math.Max(0, _selectedLogicalIndex - pageSize);
-        }
-    }
-
-    public void PageDown(int pageSize)
-    {
-        lock (_lock)
-        {
-            if (_logs.Count == 0 || _selectedLogicalIndex == -1) return;
-            if (_selectedLogicalIndex + pageSize >= _logs.Count - 1)
-                _selectedLogicalIndex = -1;
-            else
-                _selectedLogicalIndex += pageSize;
         }
     }
 
@@ -124,18 +86,16 @@ public class LogViewer
     {
         lock (_lock)
         {
-            if (_logs.Count == 0) return new Markup("");
+            if (_lines.Count == 0) return new Markup("");
 
             var visibleRows = Math.Max(1, height); 
             var renderWidth = Math.Max(1, width - 4);
 
-            // 1. Flatten to physical lines
             var physicalLines = new List<PhysicalLine>();
-            for (int i = 0; i < _logs.Count; i++)
+            for (int i = 0; i < _lines.Count; i++)
             {
-                var logical = _logs[i];
-                var (cleanText, style) = ExtractStyle(logical);
-                var wrapped = WrapText(cleanText, renderWidth);
+                var logical = _lines[i];
+                var wrapped = WrapText(logical.Text, renderWidth);
                 
                 foreach (var w in wrapped)
                 {
@@ -143,17 +103,12 @@ public class LogViewer
                     { 
                         Text = w, 
                         LogicalIndex = i, 
-                        Style = style 
+                        Style = logical.Style 
                     });
                 }
             }
 
-            // 2. Scrolling logic on physical lines
-            if (_selectedLogicalIndex == -1)
-            {
-                _scrollOffset = Math.Max(0, physicalLines.Count - visibleRows);
-            }
-            else
+            if (_selectedLogicalIndex != -1)
             {
                 int first = -1;
                 int last = -1;
@@ -172,16 +127,19 @@ public class LogViewer
                     if (last >= _scrollOffset + visibleRows) _scrollOffset = last - visibleRows + 1;
                 }
             }
+            else
+            {
+                _scrollOffset = Math.Max(0, physicalLines.Count - visibleRows);
+            }
 
             _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, physicalLines.Count - visibleRows)));
 
-            // 3. Render
             var table = new Table()
                 .Border(TableBorder.None)
                 .HideHeaders()
                 .NoSafeBorder()
                 .Expand()
-                .AddColumn(new TableColumn("Log").NoWrap().Width(renderWidth));
+                .AddColumn(new TableColumn("Output").NoWrap().Width(renderWidth));
 
             int start = _scrollOffset;
             int renderedCount = 0;
@@ -199,11 +157,9 @@ public class LogViewer
                 }
                 else
                 {
-                    string contentMarkup = escapedText;
-                    if (!string.IsNullOrEmpty(line.Style))
-                    {
-                        contentMarkup = $"[{line.Style}]{escapedText}[/]";
-                    }
+                    string contentMarkup = !string.IsNullOrEmpty(line.Style) 
+                        ? $"[{line.Style}]{escapedText}[/]" 
+                        : escapedText;
                     table.AddRow(new Markup(contentMarkup));
                 }
                 renderedCount++;
@@ -218,16 +174,6 @@ public class LogViewer
 
             return table;
         }
-    }
-
-    private static (string Text, string? Style) ExtractStyle(string input)
-    {
-        var match = Regex.Match(input, @"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$");
-        if (match.Success)
-        {
-            return (match.Groups["text"].Value, match.Groups["style"].Value);
-        }
-        return (input, null);
     }
 
     private static List<string> WrapText(string text, int width)

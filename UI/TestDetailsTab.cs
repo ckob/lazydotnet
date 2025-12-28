@@ -223,6 +223,16 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
     // ...
 
+    public TestNode? GetSelectedNode()
+    {
+        lock (_lock)
+        {
+            if (_visibleNodes.Count == 0 || _selectedIndex < 0 || _selectedIndex >= _visibleNodes.Count)
+                return null;
+            return _visibleNodes[_selectedIndex];
+        }
+    }
+
     public IRenderable GetContent(int availableHeight, int availableWidth)
     {
         if (_isLoading)
@@ -370,11 +380,45 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                         targetNode.Duration = res.Duration ?? 0;
                         targetNode.ErrorMessage = string.Join(Environment.NewLine, res.ErrorMessage);
                         
-                        // We could also consume StackTrace and StdOut if needed, 
-                        // but for now let's just keep the basic status.
-                        // To avoid hanging, we should at least drain them.
-                        _ = Task.Run(async () => { await foreach (var _ in res.StackTrace) ; });
-                        _ = Task.Run(async () => { await foreach (var _ in res.StdOut) ; });
+                        lock (targetNode.OutputLock)
+                        {
+                            targetNode.Output.Clear();
+                            if (res.ErrorMessage.Length > 0)
+                            {
+                                targetNode.Output.Add(new TestOutputLine("Error:", "red"));
+                                foreach (var err in res.ErrorMessage)
+                                {
+                                    targetNode.Output.Add(new TestOutputLine(err));
+                                }
+                                targetNode.Output.Add(new TestOutputLine(""));
+                            }
+                        }
+
+                        // Consume StackTrace and StdOut
+                        var nodeRef = targetNode;
+                        _ = Task.Run(async () => 
+                        { 
+                            await foreach (var line in res.StackTrace) 
+                            {
+                                lock (nodeRef.OutputLock)
+                                {
+                                    nodeRef.Output.Add(new TestOutputLine(line, "dim"));
+                                }
+                                RequestRefresh?.Invoke();
+                            }
+                        });
+                        
+                        _ = Task.Run(async () => 
+                        { 
+                            await foreach (var line in res.StdOut) 
+                            {
+                                lock (nodeRef.OutputLock)
+                                {
+                                    nodeRef.Output.Add(new TestOutputLine(line));
+                                }
+                                RequestRefresh?.Invoke();
+                            }
+                        });
 
                         UpdateParentStatus(targetNode);
                         RequestRefresh?.Invoke();

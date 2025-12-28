@@ -43,6 +43,11 @@ public class ProjectDetailsPane
 
     public int ActiveTab => _tabs.ActiveTab;
 
+    public TestNode? GetSelectedTestNode()
+    {
+        return _testsTab.GetSelectedNode();
+    }
+
     public void NextTab()
     {
         _tabs.NextTab();

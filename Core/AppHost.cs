@@ -34,7 +34,8 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                     {
                         lock (_uiLock)
                         {
-                            _layout.UpdateBottom();
+                            int h = _layout.GetBottomHeight(Console.WindowHeight);
+                            _layout.UpdateBottom(Console.WindowWidth, h);
                             ctx.Refresh();
                         }
                     };
@@ -85,7 +86,8 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                                 lock (_uiLock)
                                 {
                                     _currentScreen.Render(_layout, width, height);
-                                    _layout.UpdateBottom();
+                                    int bottomH = _layout.GetBottomHeight(height);
+                                    _layout.UpdateBottom(width, bottomH);
                                     ctx.Refresh();
                                 }
                             }
@@ -97,7 +99,8 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                             _layout.AddLog($"[red]CRITICAL ERROR: {ex.Message}[/]");
                             lock (_uiLock)
                             {
-                                _layout.UpdateBottom();
+                                int bottomH = _layout.GetBottomHeight(Console.WindowHeight);
+                                _layout.UpdateBottom(Console.WindowWidth, bottomH);
                                 ctx.Refresh();
                             }
                             await Task.Delay(1000);

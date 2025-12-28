@@ -20,7 +20,19 @@ public class TestNode
     public double Duration { get; set; }
     public string? FilePath { get; set; }
     public int? LineNumber { get; set; }
+    public List<TestOutputLine> Output { get; } = [];
+    public readonly Lock OutputLock = new();
+
+    public List<TestOutputLine> GetOutputSnapshot()
+    {
+        lock (OutputLock)
+        {
+            return [.. Output];
+        }
+    }
 }
+
+public record TestOutputLine(string Text, string? Style = null);
 
 public enum TestStatus
 {

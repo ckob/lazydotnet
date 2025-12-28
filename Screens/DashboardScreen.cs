@@ -45,9 +45,6 @@ public class DashboardScreen : IScreen
             _lastSelectedProjectPath = currentPath;
             _needsRefresh = true;
 
-            int h = Math.Max(5, _lastHeight - 15);
-            int dw = _lastWidth * 6 / 10;
-
             if (currentPath != null)
             {
                 _detailsPane.ClearData();
@@ -72,6 +69,16 @@ public class DashboardScreen : IScreen
             else
             {
                 _detailsPane.ClearForNonProject();
+            }
+        }
+
+        // Synchronize test output if the test tab is active
+        if (_layout.ActivePanel == 1 && _layout.GetRoot()["Right"].Name == "Right" && _detailsPane.ActiveTab == 2)
+        {
+            var selectedTest = _detailsPane.GetSelectedTestNode();
+            if (selectedTest != null)
+            {
+                _layout.TestOutputViewer.SetOutput(selectedTest.GetOutputSnapshot());
             }
         }
 
@@ -103,6 +110,22 @@ public class DashboardScreen : IScreen
                 return this;
         }
 
+        // Handle Tab switching for panels
+        if (key.KeyChar == '[' || key.KeyChar == ']')
+        {
+            if (layout.ActivePanel == 1)
+            {
+                await _detailsPane.HandleInputAsync(key, layout);
+                return this;
+            }
+            if (layout.ActivePanel == 2)
+            {
+                if (key.KeyChar == '[') layout.PreviousBottomTab();
+                else layout.NextBottomTab();
+                return this;
+            }
+        }
+
         // 2. Delegate to active panel
         switch (layout.ActivePanel)
         {
@@ -113,7 +136,10 @@ public class DashboardScreen : IScreen
                 await _detailsPane.HandleInputAsync(key, layout);
                 break;
             case 2:
-                layout.LogViewer.HandleInput(key);
+                if (layout.BottomActiveTab == 0)
+                    layout.LogViewer.HandleInput(key);
+                else
+                    layout.TestOutputViewer.HandleInput(key);
                 break;
         }
 
@@ -164,11 +190,16 @@ public class DashboardScreen : IScreen
         _lastWidth = width;
         _lastHeight = height;
 
-        int h = Math.Max(5, height - 15);
+        int bottomH = layout.GetBottomHeight(height);
+        int topH = height - bottomH;
+        
+        // Subtract 2 for panel borders
+        int contentTopH = Math.Max(1, topH - 2);
+        
         int w = width / 3;
         int dw = width * 6 / 10;
 
-        layout.UpdateLeft(_explorer.GetContent(h, w));
-        layout.UpdateRight(_detailsPane.GetContent(h, dw));
+        layout.UpdateLeft(_explorer.GetContent(contentTopH, w - 2));
+        layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2));
     }
 }
