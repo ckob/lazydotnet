@@ -1,17 +1,8 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text;
 using System.Text.RegularExpressions;
 using CliWrap;
 using Spectre.Console;
 
 namespace lazydotnet.Services;
-
-[JsonSerializable(typeof(SearchReport))]
-[JsonSerializable(typeof(NuGetReport))]
-internal partial class NuGetJsonContext : JsonSerializerContext
-{
-}
 
 public enum VersionUpdateType
 {
@@ -36,7 +27,6 @@ public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string
         if (current == null || latest == null)
             return VersionUpdateType.Major;
 
-
         if (latest.Value.IsPreRelease)
             return VersionUpdateType.Major;
 
@@ -52,7 +42,6 @@ public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string
 
     private static (int Major, int Minor, int Patch, bool IsPreRelease)? ParseVersion(string version)
     {
-
         var match = VersionRegex().Match(version);
         if (!match.Success)
             return null;
@@ -69,66 +58,25 @@ public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string
     private static partial Regex VersionRegex();
 }
 
-public class NuGetReport
-{
-    [JsonPropertyName("version")]
-    public int Version { get; set; }
-
-    [JsonPropertyName("projects")]
-    public List<NuGetProject> Projects { get; set; } = [];
-}
-
-public class NuGetProject
-{
-    [JsonPropertyName("path")]
-    public string Path { get; set; } = "";
-
-    [JsonPropertyName("frameworks")]
-    public List<NuGetFramework> Frameworks { get; set; } = [];
-}
-
-public class NuGetFramework
-{
-    [JsonPropertyName("framework")]
-    public string Framework { get; set; } = "";
-
-    [JsonPropertyName("topLevelPackages")]
-    public List<NuGetPackageJson> TopLevelPackages { get; set; } = [];
-}
-
-public class NuGetPackageJson
-{
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-
-    [JsonPropertyName("requestedVersion")]
-    public string RequestedVersion { get; set; } = "";
-
-    [JsonPropertyName("resolvedVersion")]
-    public string ResolvedVersion { get; set; } = "";
-
-    [JsonPropertyName("latestVersion")]
-    public string? LatestVersion { get; set; }
-}
-
-public class NuGetService
+public class NuGetService(EasyDotnetService easyDotnetService)
 {
     public async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
-            var command = Cli.Wrap("dotnet")
-                .WithArguments($"package search \"{query}\" --take 20 --format json")
-                .WithValidation(CommandResultValidation.None);
-
-            var result = await AppCli.RunBufferedAsync(command, ct);
-
-            if (result.ExitCode != 0)
+            var results = await easyDotnetService.SearchPackagesAsync(query);
+            var list = new List<SearchResult>();
+            await foreach (var item in results.WithCancellation(ct))
             {
-                logger?.Invoke($"[red]Search failed (ExitCode {result.ExitCode}): {Markup.Escape(result.StandardError)}[/]");
+                list.Add(new SearchResult
+                {
+                    Id = item.Id,
+                    LatestVersion = item.Version,
+                    Description = item.Description,
+                    Versions = [new SearchVersion { Version = item.Version }]
+                });
             }
-
-            return ParseSearchResults(result.StandardOutput);
+            return list;
         }
         catch (Exception ex)
         {
@@ -141,25 +89,52 @@ public class NuGetService
     {
         try
         {
-            var command = Cli.Wrap("dotnet")
-                .WithArguments($"package search \"{packageId}\" --exact-match --take 100 --format json")
-                .WithValidation(CommandResultValidation.None);
-
-            var result = await AppCli.RunBufferedAsync(command, ct);
-
-             if (result.ExitCode != 0)
+            var versions = await easyDotnetService.GetPackageVersionsAsync(packageId);
+            var list = new List<string>();
+            await foreach (var v in versions.WithCancellation(ct))
             {
-                logger?.Invoke($"[red]Version search failed: {Markup.Escape(result.StandardError)}[/]");
+                list.Add(v);
             }
-
-            var searchResults = ParseSearchResults(result.StandardOutput);
-            var package = searchResults.FirstOrDefault(p => p.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase));
-
-            return package?.Versions.Select(v => v.Version).ToList() ?? [];
+            return list;
         }
         catch (Exception ex)
         {
             logger?.Invoke($"[red]Version search error: {Markup.Escape(ex.Message)}[/]");
+            return [];
+        }
+    }
+
+    public async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var properties = await easyDotnetService.GetProjectPropertiesAsync(projectPath);
+            var tfm = properties.TargetFramework ?? "";
+
+            var packagesTask = await easyDotnetService.ListPackageReferencesAsync(projectPath, tfm);
+            var outdatedTask = await easyDotnetService.GetOutdatedPackagesAsync(projectPath);
+
+            var packages = new List<PackageReference>();
+            await foreach (var p in packagesTask.WithCancellation(ct))
+            {
+                packages.Add(p);
+            }
+
+            var outdated = new Dictionary<string, string>();
+            await foreach (var o in outdatedTask.WithCancellation(ct))
+            {
+                outdated[o.Name] = o.LatestVersion;
+            }
+
+            return packages.Select(p => new NuGetPackageInfo(
+                p.Id,
+                p.ResolvedVersion,
+                outdated.TryGetValue(p.Id, out var latest) ? latest : null
+            )).ToList();
+        }
+        catch (Exception ex)
+        {
+            logger?.Invoke($"[red]Error loading packages: {Markup.Escape(ex.Message)}[/]");
             return [];
         }
     }
@@ -198,104 +173,6 @@ public class NuGetService
 
         await AppCli.RunAsync(command);
     }
-
-
-    private List<SearchResult> ParseSearchResults(string output)
-    {
-        int jsonStart = output.IndexOf('{');
-        if (jsonStart < 0) return [];
-
-        var jsonContent = output[jsonStart..];
-        try
-        {
-            var report = JsonSerializer.Deserialize(jsonContent, NuGetJsonContext.Default.SearchReport);
-            if (report?.SearchResult == null) return [];
-
-            var allPackages = report.SearchResult
-                .SelectMany(s => s.Packages)
-                .ToList();
-
-            var grouped = allPackages
-                .GroupBy(p => p.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(g => new SearchResult
-                {
-                    Id = g.Key,
-                    LatestVersion = g.MaxBy(p => p.LatestVersion ?? p.Version, new VersionComparer())?.LatestVersion ?? g.First().LatestVersion ?? g.First().Version ?? "",
-                    Versions = [.. g.Select(p => new SearchVersion { Version = p.Version ?? "" }).Where(v => !string.IsNullOrEmpty(v.Version))]
-                })
-                .ToList();
-
-            return grouped;
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    public async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
-    {
-        try
-        {
-            var allPackagesCmd = Cli.Wrap("dotnet")
-                .WithArguments($"list \"{projectPath}\" package --format json")
-                .WithValidation(CommandResultValidation.None);
-
-            var outdatedCmd = Cli.Wrap("dotnet")
-                .WithArguments($"list \"{projectPath}\" package --format json --outdated")
-                .WithValidation(CommandResultValidation.None);
-
-            var allPackagesTask = AppCli.RunBufferedAsync(allPackagesCmd, ct);
-            var outdatedTask = AppCli.RunBufferedAsync(outdatedCmd, ct);
-
-            var allPackagesResult = await allPackagesTask;
-            var outdatedResult = await outdatedTask;
-
-            var allPackages = ParseReport(allPackagesResult.StandardOutput);
-            var outdatedPackages = ParseReport(outdatedResult.StandardOutput);
-
-            var outdatedDict = outdatedPackages.ToDictionary(p => p.Id, p => p.LatestVersion);
-
-            return [.. allPackages.Select(p => new NuGetPackageInfo(
-                p.Id,
-                p.ResolvedVersion,
-                outdatedDict.TryGetValue(p.Id, out var latest) ? latest : null
-            ))];
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    private List<NuGetPackageInfo> ParseReport(string output)
-    {
-        int jsonStart = output.IndexOf('{');
-        if (jsonStart < 0)
-            return [];
-
-        var jsonContent = output[jsonStart..];
-
-        var report = JsonSerializer.Deserialize(jsonContent, NuGetJsonContext.Default.NuGetReport);
-        if (report == null)
-            return [];
-
-        var packages = new List<NuGetPackageInfo>();
-        foreach (var project in report.Projects)
-        {
-            foreach (var framework in project.Frameworks)
-            {
-                foreach (var pkg in framework.TopLevelPackages)
-                {
-                    if (!packages.Any(p => p.Id == pkg.Id))
-                    {
-                        packages.Add(new NuGetPackageInfo(pkg.Id, pkg.ResolvedVersion, pkg.LatestVersion));
-                    }
-                }
-            }
-        }
-        return packages;
-    }
 }
 
 public class SearchResult
@@ -306,40 +183,9 @@ public class SearchResult
     public List<SearchVersion> Versions { get; set; } = [];
 }
 
-public class SearchReport
-{
-    [JsonPropertyName("searchResult")]
-    public List<SearchSourceResult> SearchResult { get; set; } = [];
-}
-
-public class SearchSourceResult
-{
-    [JsonPropertyName("sourceName")]
-    public string SourceName { get; set; } = "";
-
-    [JsonPropertyName("packages")]
-    public List<JsonPackageResult> Packages { get; set; } = [];
-}
-
-public class JsonPackageResult
-{
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-
-    [JsonPropertyName("latestVersion")]
-    public string? LatestVersion { get; set; }
-
-    [JsonPropertyName("version")]
-    public string? Version { get; set; }
-
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-}
-
 public class SearchVersion
 {
     public string Version { get; set; } = "";
-    public long Downloads { get; set; }
 }
 
 public class VersionComparer : IComparer<string?>

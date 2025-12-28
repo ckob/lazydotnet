@@ -11,6 +11,8 @@ public class ProjectReferencesTab(SolutionService solutionService) : IProjectTab
     private bool _isLoading;
     private string? _currentProjectPath;
 
+    public Action? RequestRefresh { get; set; }
+
     public string Title => "Project References";
 
     public void MoveUp() => _refsList.MoveUp();
@@ -30,9 +32,9 @@ public class ProjectReferencesTab(SolutionService solutionService) : IProjectTab
         _isLoading = false;
     }
 
-    public async Task LoadAsync(string projectPath, string projectName)
+    public async Task LoadAsync(string projectPath, string projectName, bool force = false)
     {
-        if (_currentProjectPath == projectPath && !_isLoading) return;
+        if (!force && _currentProjectPath == projectPath && !_isLoading) return;
 
         _currentProjectPath = projectPath;
         _isLoading = true;

@@ -33,6 +33,11 @@ public class ProjectDetailsPane
         _tabInstances.Add(_nugetTab);
         _tabInstances.Add(_testsTab);
 
+        foreach (var tab in _tabInstances)
+        {
+            tab.RequestRefresh = () => RequestRefresh?.Invoke();
+        }
+
         _tabs = new TabbedPane(_refsTab.Title, _nugetTab.Title, _testsTab.Title);
     }
 

@@ -27,11 +27,13 @@ public class TestDetailsTab(TestService testService) : IProjectTab
 
     private CancellationTokenSource? _discoveryCts;
 
+    public Action? RequestRefresh { get; set; }
+
     public string Title => "Tests";
 
-    public async Task LoadAsync(string projectPath, string projectName)
+    public async Task LoadAsync(string projectPath, string projectName, bool force = false)
     {
-        if (_currentPath == projectPath && !_isLoading) return;
+        if (!force && _currentPath == projectPath && !_isLoading) return;
 
         // Cancel previous discovery if running
         if (_discoveryCts != null)
@@ -74,6 +76,7 @@ public class TestDetailsTab(TestService testService) : IProjectTab
                     _root = result.RootNode;
                     RefreshVisibleNodes();
                     _statusMessage = $"Found {result.Count} tests.";
+                    RequestRefresh?.Invoke();
                 }
             }
             else
@@ -315,6 +318,7 @@ public class TestDetailsTab(TestService testService) : IProjectTab
         }
 
         _statusMessage = $"Running tests ({_runningTestCount} active)...";
+        RequestRefresh?.Invoke();
 
         _ = Task.Run(async () =>
         {
@@ -373,6 +377,7 @@ public class TestDetailsTab(TestService testService) : IProjectTab
 
                 // Final status update for parents (important for container run too)
                 if (node.Parent != null) UpdateParentStatus(node.Parent); // If node is root (Tests), parent is null
+                RequestRefresh?.Invoke();
             }
         });
     }

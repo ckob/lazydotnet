@@ -36,6 +36,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
     private CancellationTokenSource? _loadCts;
 
     public Action<string>? LogAction { get; set; }
+    public Action? RequestRefresh { get; set; }
 
     public string Title => "NuGets";
 
@@ -82,9 +83,9 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         }
     }
 
-    public async Task LoadAsync(string projectPath, string projectName)
+    public async Task LoadAsync(string projectPath, string projectName, bool force = false)
     {
-        if (_currentProjectPath == projectPath && !_isLoading) return;
+        if (!force && _currentProjectPath == projectPath && !_isLoading) return;
 
         if (_loadCts != null)
         {
@@ -118,16 +119,17 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         }
     }
 
+    private async Task ReloadDataAsync()
+    {
+        if (_currentProjectPath != null && _currentProjectName != null)
+        {
+            await LoadAsync(_currentProjectPath, _currentProjectName, force: true);
+        }
+    }
+
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
     {
          if (_isActionRunning) return true;
-
-        // Vertical navigation applies to all modes except maybe typing if we want,
-        // but J/K are usually fine if not in a text box.
-        // In SearchMode, we have a text box, so J/K might interfere with typing?
-        // Actually, the original code had J/K in the God method.
-        // If the user types 'j', it adds to search query.
-        // So J/K should ONLY navigate if NOT in SearchMode.
 
         if (_appMode != AppMode.SearchingNuGet)
         {
@@ -328,6 +330,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             finally
             {
                 _isActionRunning = false;
+                RequestRefresh?.Invoke();
             }
         });
     }
@@ -336,6 +339,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
     {
         _isActionRunning = true;
         _statusMessage = "Fetching versions...";
+        RequestRefresh?.Invoke();
         _ = Task.Run(async () =>
         {
             try
@@ -356,6 +360,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             finally
             {
                 _isActionRunning = false;
+                RequestRefresh?.Invoke();
             }
         });
     }
@@ -366,6 +371,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 
         _isActionRunning = true;
         _statusMessage = $"Installing {packageId} {version ?? "latest"}...";
+        RequestRefresh?.Invoke();
         try
         {
             await nuGetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
@@ -380,6 +386,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         {
             _isActionRunning = false;
             _statusMessage = null;
+            RequestRefresh?.Invoke();
         }
     }
 
@@ -389,6 +396,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 
         _isActionRunning = true;
         _statusMessage = $"Removing {packageId}...";
+        RequestRefresh?.Invoke();
         try
         {
             await nuGetService.RemovePackageAsync(_currentProjectPath, packageId, LogAction);
@@ -403,6 +411,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         {
             _isActionRunning = false;
             _statusMessage = null;
+            RequestRefresh?.Invoke();
         }
     }
 
@@ -414,16 +423,19 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         if (outdated.Count == 0) return;
 
         _isActionRunning = true;
+        RequestRefresh?.Invoke();
         try
         {
             for (int i = 0; i < outdated.Count; i++)
             {
                 var pkg = outdated[i];
                 _statusMessage = $"Updating {i + 1}/{outdated.Count}: {pkg.Id}...";
+                RequestRefresh?.Invoke();
                 await nuGetService.InstallPackageAsync(_currentProjectPath, pkg.Id, null, noRestore: true, logger: LogAction);
             }
 
             _statusMessage = "Finalizing restore...";
+            RequestRefresh?.Invoke();
 
              var pipe = LogAction != null ? PipeTarget.ToDelegate(s => LogAction(Markup.Escape(s))) : PipeTarget.Null;
 
@@ -445,17 +457,9 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         {
             _isActionRunning = false;
             _statusMessage = null;
+            RequestRefresh?.Invoke();
         }
     }
-
-    private async Task ReloadDataAsync()
-    {
-        if (_currentProjectPath != null && _currentProjectName != null)
-        {
-            await LoadAsync(_currentProjectPath, _currentProjectName);
-        }
-    }
-
 
     public IRenderable GetContent(int availableHeight, int availableWidth)
     {

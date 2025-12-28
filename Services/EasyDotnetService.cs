@@ -137,7 +137,7 @@ public class EasyDotnetService : IAsyncDisposable
                 "solution/list-projects",
                 new { solutionFilePath });
 
-            return result;
+            return result ?? [];
         }
         catch (Exception ex)
         {
@@ -154,13 +154,59 @@ public class EasyDotnetService : IAsyncDisposable
             var result = await _jsonRpc!.InvokeWithParameterObjectAsync<List<string>>(
                 "msbuild/list-project-reference",
                 new { projectPath });
-            return result;
+            return result ?? [];
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Error calling list-project-reference: {ex.Message}");
             throw;
         }
+    }
+
+    public async Task<IAsyncEnumerable<NugetPackageMetadata>> SearchPackagesAsync(string searchTerm, List<string>? sources = null)
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<NugetPackageMetadata>>(
+            "nuget/search-packages",
+            new { searchTerm, sources });
+    }
+
+    public async Task<IAsyncEnumerable<string>> GetPackageVersionsAsync(string packageId, List<string>? sources = null, bool includePrerelease = false)
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<string>>(
+            "nuget/get-package-versions",
+            new { packageId, sources, includePrerelease });
+    }
+
+    public async Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>> GetOutdatedPackagesAsync(string targetPath, bool? includeTransitive = null)
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<OutdatedDependencyInfoResponse>>(
+            "outdated/packages",
+            new { targetPath, includeTransitive });
+    }
+
+    public async Task<IAsyncEnumerable<PackageReference>> ListPackageReferencesAsync(string projectPath, string targetFramework = "")
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<PackageReference>>(
+            "msbuild/list-package-reference",
+            new { projectPath, targetFramework });
+    }
+
+    public async Task RestorePackagesAsync(string targetPath)
+    {
+        await EnsureInitializedAsync();
+        await _jsonRpc!.InvokeWithParameterObjectAsync("nuget/restore", new { targetPath });
+    }
+
+    public async Task<DotnetProjectV1> GetProjectPropertiesAsync(string targetPath, string targetFramework = "", string configuration = "")
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<DotnetProjectV1>(
+            "msbuild/project-properties",
+            new { request = new { targetPath, targetFramework, configuration } });
     }
 
     public async ValueTask DisposeAsync()
