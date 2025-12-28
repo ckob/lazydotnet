@@ -5,7 +5,7 @@ namespace lazydotnet.Services;
 
 public class CommandService
 {
-    public static async Task<CommandResult> BuildProjectAsync(string projectPath, Action<string> onOutput, CancellationToken ct)
+    public async Task<CommandResult> BuildProjectAsync(string projectPath, Action<string> onOutput, CancellationToken ct)
     {
         var cmd = Cli.Wrap("dotnet")
             .WithArguments($"build \"{projectPath}\" /v:n /nologo")

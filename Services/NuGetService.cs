@@ -7,6 +7,12 @@ using Spectre.Console;
 
 namespace lazydotnet.Services;
 
+[JsonSerializable(typeof(SearchReport))]
+[JsonSerializable(typeof(NuGetReport))]
+internal partial class NuGetJsonContext : JsonSerializerContext
+{
+}
+
 public enum VersionUpdateType
 {
     None,
@@ -107,12 +113,10 @@ public class NuGetPackageJson
 
 public class NuGetService
 {
-    public static async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
+    public async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
-            var cmd = $"package search \"{Markup.Escape(query)}\" --take 20 --format json";
-
             var command = Cli.Wrap("dotnet")
                 .WithArguments($"package search \"{query}\" --take 20 --format json")
                 .WithValidation(CommandResultValidation.None);
@@ -133,12 +137,10 @@ public class NuGetService
         }
     }
 
-    public static async Task<List<string>> GetPackageVersionsAsync(string packageId, Action<string>? logger = null, CancellationToken ct = default)
+    public async Task<List<string>> GetPackageVersionsAsync(string packageId, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
-            var cmd = $"package search \"{Markup.Escape(packageId)}\" --exact-match --take 100 --format json";
-
             var command = Cli.Wrap("dotnet")
                 .WithArguments($"package search \"{packageId}\" --exact-match --take 100 --format json")
                 .WithValidation(CommandResultValidation.None);
@@ -162,7 +164,7 @@ public class NuGetService
         }
     }
 
-    public static async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
+    public async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
     {
         var args = new List<string> { "add", projectPath, "package", packageId };
 
@@ -177,13 +179,6 @@ public class NuGetService
             args.Add("--no-restore");
         }
 
-
-        var displayArgs = new StringBuilder($"add \"{projectPath}\" package \"{packageId}\"");
-        if (!string.IsNullOrEmpty(version)) displayArgs.Append($" -v {version}");
-        if (noRestore) displayArgs.Append(" --no-restore");
-
-
-
         var command = Cli.Wrap("dotnet")
             .WithArguments(args)
             .WithValidation(CommandResultValidation.None)
@@ -193,11 +188,8 @@ public class NuGetService
         await AppCli.RunAsync(command);
     }
 
-    public static async Task RemovePackageAsync(string projectPath, string packageId, Action<string>? logger = null)
+    public async Task RemovePackageAsync(string projectPath, string packageId, Action<string>? logger = null)
     {
-        var cmd = $"remove \"{projectPath}\" package \"{packageId}\"";
-
-
         var command = Cli.Wrap("dotnet")
             .WithArguments($"remove \"{projectPath}\" package \"{packageId}\"")
             .WithValidation(CommandResultValidation.None)
@@ -208,7 +200,7 @@ public class NuGetService
     }
 
 
-    private static List<SearchResult> ParseSearchResults(string output)
+    private List<SearchResult> ParseSearchResults(string output)
     {
         int jsonStart = output.IndexOf('{');
         if (jsonStart < 0) return [];
@@ -216,10 +208,9 @@ public class NuGetService
         var jsonContent = output[jsonStart..];
         try
         {
-            var report = JsonSerializer.Deserialize<SearchReport>(jsonContent);
+            var report = JsonSerializer.Deserialize(jsonContent, NuGetJsonContext.Default.SearchReport);
             if (report?.SearchResult == null) return [];
 
-            // Flatten all packages from all sources
             var allPackages = report.SearchResult
                 .SelectMany(s => s.Packages)
                 .ToList();
@@ -242,14 +233,10 @@ public class NuGetService
         }
     }
 
-    public static async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
+    public async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
-
-            var listCmdDisplay = $"list \"{Markup.Escape(projectPath)}\" package --format json";
-            var outdatedCmdDisplay = $"list \"{Markup.Escape(projectPath)}\" package --format json --outdated";
-
             var allPackagesCmd = Cli.Wrap("dotnet")
                 .WithArguments($"list \"{projectPath}\" package --format json")
                 .WithValidation(CommandResultValidation.None);
@@ -261,10 +248,11 @@ public class NuGetService
             var allPackagesTask = AppCli.RunBufferedAsync(allPackagesCmd, ct);
             var outdatedTask = AppCli.RunBufferedAsync(outdatedCmd, ct);
 
-            await Task.WhenAll(allPackagesTask, outdatedTask);
+            var allPackagesResult = await allPackagesTask;
+            var outdatedResult = await outdatedTask;
 
-            var allPackages = ParseReport(allPackagesTask.Result.StandardOutput);
-            var outdatedPackages = ParseReport(outdatedTask.Result.StandardOutput);
+            var allPackages = ParseReport(allPackagesResult.StandardOutput);
+            var outdatedPackages = ParseReport(outdatedResult.StandardOutput);
 
             var outdatedDict = outdatedPackages.ToDictionary(p => p.Id, p => p.LatestVersion);
 
@@ -280,7 +268,7 @@ public class NuGetService
         }
     }
 
-    private static List<NuGetPackageInfo> ParseReport(string output)
+    private List<NuGetPackageInfo> ParseReport(string output)
     {
         int jsonStart = output.IndexOf('{');
         if (jsonStart < 0)
@@ -288,7 +276,7 @@ public class NuGetService
 
         var jsonContent = output[jsonStart..];
 
-        var report = JsonSerializer.Deserialize<NuGetReport>(jsonContent);
+        var report = JsonSerializer.Deserialize(jsonContent, NuGetJsonContext.Default.NuGetReport);
         if (report == null)
             return [];
 

@@ -9,6 +9,7 @@ public class DashboardScreen : IScreen
 {
     private readonly SolutionExplorer _explorer;
     private readonly ProjectDetailsPane _detailsPane;
+    private readonly CommandService _commandService;
     private string? _lastSelectedProjectPath;
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _buildCts;
@@ -18,11 +19,12 @@ public class DashboardScreen : IScreen
 
     private readonly AppLayout _layout;
 
-    public DashboardScreen(SolutionExplorer explorer, ProjectDetailsPane detailsPane, AppLayout layout)
+    public DashboardScreen(SolutionExplorer explorer, ProjectDetailsPane detailsPane, AppLayout layout, CommandService commandService)
     {
         _explorer = explorer;
         _detailsPane = detailsPane;
         _layout = layout;
+        _commandService = commandService;
         
         _detailsPane.LogAction = msg => _layout.AddLog(msg);
         _detailsPane.RequestRefresh = () => _needsRefresh = true;
@@ -78,7 +80,7 @@ public class DashboardScreen : IScreen
         return result;
     }
 
-    public async Task<IScreen?> HandleInput(ConsoleKeyInfo key, AppLayout layout)
+    public async Task<IScreen?> HandleInputAsync(ConsoleKeyInfo key, AppLayout layout)
     {
         _needsRefresh = true;
 
@@ -97,7 +99,7 @@ public class DashboardScreen : IScreen
                 layout.SetActivePanel(2);
                 return this;
             case ConsoleKey.B:
-                await HandleBuild(layout);
+                await HandleBuildAsync(layout);
                 return this;
         }
 
@@ -108,7 +110,7 @@ public class DashboardScreen : IScreen
                 _explorer.HandleInput(key);
                 break;
             case 1:
-                await _detailsPane.HandleInput(key, layout);
+                await _detailsPane.HandleInputAsync(key, layout);
                 break;
             case 2:
                 layout.LogViewer.HandleInput(key);
@@ -118,7 +120,7 @@ public class DashboardScreen : IScreen
         return this;
     }
 
-    private async Task HandleBuild(AppLayout layout)
+    private async Task HandleBuildAsync(AppLayout layout)
     {
         var project = _explorer.GetSelectedProject();
         if (project == null)
@@ -132,9 +134,12 @@ public class DashboardScreen : IScreen
         {
             try
             {
-                _buildCts?.Cancel();
+                if (_buildCts != null)
+                {
+                    await _buildCts.CancelAsync();
+                }
                 _buildCts = new CancellationTokenSource();
-                var result = await CommandService.BuildProjectAsync(project.Path, msg =>
+                var result = await _commandService.BuildProjectAsync(project.Path, msg =>
                 {
                     layout.AddLog(Markup.Escape(msg));
                 }, _buildCts.Token);

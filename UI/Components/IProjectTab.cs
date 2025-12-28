@@ -7,7 +7,7 @@ public interface IProjectTab
     string Title { get; }
     Task LoadAsync(string projectPath, string projectName);
     IRenderable GetContent(int height, int width);
-    Task<bool> HandleKey(ConsoleKeyInfo key);
+    Task<bool> HandleKeyAsync(ConsoleKeyInfo key);
     void MoveUp();
     void MoveDown();
     string? GetScrollIndicator();

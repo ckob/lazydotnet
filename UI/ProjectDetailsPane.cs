@@ -1,5 +1,6 @@
 using Spectre.Console.Rendering;
 using lazydotnet.UI.Components;
+using lazydotnet.Services;
 
 namespace lazydotnet.UI;
 
@@ -22,11 +23,11 @@ public class ProjectDetailsPane
 
     public Action? RequestRefresh { get; set; }
 
-    public ProjectDetailsPane()
+    public ProjectDetailsPane(SolutionService solutionService, NuGetService nuGetService, TestService testService)
     {
-        _nugetTab = new NuGetDetailsTab();
-        _refsTab = new ProjectReferencesTab();
-        _testsTab = new TestDetailsTab();
+        _nugetTab = new NuGetDetailsTab(nuGetService);
+        _refsTab = new ProjectReferencesTab(solutionService);
+        _testsTab = new TestDetailsTab(testService);
 
         _tabInstances.Add(_refsTab);
         _tabInstances.Add(_nugetTab);
@@ -90,7 +91,7 @@ public class ProjectDetailsPane
         }
     }
 
-    public async Task<bool> HandleInput(ConsoleKeyInfo key, AppLayout layout)
+    public async Task<bool> HandleInputAsync(ConsoleKeyInfo key, AppLayout layout)
     {
         if (key.Key == ConsoleKey.Tab || key.KeyChar == ']')
         {
@@ -105,7 +106,7 @@ public class ProjectDetailsPane
             return true;
         }
 
-        return await _tabInstances[_tabs.ActiveTab].HandleKey(key);
+        return await _tabInstances[_tabs.ActiveTab].HandleKeyAsync(key);
     }
 
     public IRenderable GetContent(int availableHeight, int availableWidth)

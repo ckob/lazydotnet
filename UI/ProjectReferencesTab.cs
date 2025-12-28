@@ -5,7 +5,7 @@ using lazydotnet.UI.Components;
 
 namespace lazydotnet.UI;
 
-public class ProjectReferencesTab : IProjectTab
+public class ProjectReferencesTab(SolutionService solutionService) : IProjectTab
 {
     private readonly ScrollableList<string> _refsList = new();
     private bool _isLoading;
@@ -40,7 +40,7 @@ public class ProjectReferencesTab : IProjectTab
 
         try
         {
-            var refs = await SolutionService.GetProjectReferencesAsync(projectPath);
+            var refs = await solutionService.GetProjectReferencesAsync(projectPath);
             // Check if we are still on the same project
             if (_currentProjectPath == projectPath)
             {
@@ -61,20 +61,20 @@ public class ProjectReferencesTab : IProjectTab
 
     }
 
-    public Task<bool> HandleKey(ConsoleKeyInfo key)
+    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
     {
         switch (key.Key)
         {
             case ConsoleKey.UpArrow:
             case ConsoleKey.K:
                 MoveUp();
-                return Task.FromResult(true);
+                return true;
             case ConsoleKey.DownArrow:
             case ConsoleKey.J:
                 MoveDown();
-                return Task.FromResult(true);
+                return true;
         }
-        return Task.FromResult(false);
+        return false;
     }
 
     public IRenderable GetContent(int availableHeight, int availableWidth)

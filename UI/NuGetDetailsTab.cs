@@ -15,7 +15,7 @@ public enum AppMode
     Busy // Showing spinner/progress
 }
 
-public class NuGetDetailsTab() : IProjectTab
+public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 {
     // Lists
     private readonly ScrollableList<NuGetPackageInfo> _nugetList = new();
@@ -86,7 +86,10 @@ public class NuGetDetailsTab() : IProjectTab
     {
         if (_currentProjectPath == projectPath && !_isLoading) return;
 
-        _loadCts?.Cancel();
+        if (_loadCts != null)
+        {
+            await _loadCts.CancelAsync();
+        }
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
@@ -97,7 +100,7 @@ public class NuGetDetailsTab() : IProjectTab
 
         try
         {
-            var packages = await NuGetService.GetPackagesAsync(projectPath, LogAction, ct);
+            var packages = await nuGetService.GetPackagesAsync(projectPath, LogAction, ct);
              if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
                 return;
 
@@ -115,7 +118,7 @@ public class NuGetDetailsTab() : IProjectTab
         }
     }
 
-    public async Task<bool> HandleKey(ConsoleKeyInfo key)
+    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
     {
          if (_isActionRunning) return true;
 
@@ -143,15 +146,15 @@ public class NuGetDetailsTab() : IProjectTab
 
         return _appMode switch
         {
-            AppMode.Normal => await HandleNormalMode(key),
-            AppMode.SearchingNuGet => await HandleSearchMode(key),
-            AppMode.SelectingVersion => await HandleVersionMode(key),
-            AppMode.ConfirmingDelete => await HandleConfirmDelete(key),
+            AppMode.Normal => await HandleNormalModeAsync(key),
+            AppMode.SearchingNuGet => await HandleSearchModeAsync(key),
+            AppMode.SelectingVersion => await HandleVersionModeAsync(key),
+            AppMode.ConfirmingDelete => await HandleConfirmDeleteAsync(key),
             _ => false,
         };
     }
 
-    private async Task<bool> HandleNormalMode(ConsoleKeyInfo key)
+    private async Task<bool> HandleNormalModeAsync(ConsoleKeyInfo key)
     {
         switch (key.KeyChar)
         {
@@ -164,7 +167,7 @@ public class NuGetDetailsTab() : IProjectTab
             case 'u':
                 if (_nugetList.SelectedItem != null && _nugetList.SelectedItem.IsOutdated)
                 {
-                    _ = InstallPackage(_nugetList.SelectedItem.Id, _nugetList.SelectedItem.LatestVersion);
+                    _ = InstallPackageAsync(_nugetList.SelectedItem.Id, _nugetList.SelectedItem.LatestVersion);
                 }
                 return true;
             case 'd':
@@ -174,7 +177,7 @@ public class NuGetDetailsTab() : IProjectTab
                 }
                 return true;
             case 'U':
-                _ = UpdateAllOutdated();
+                _ = UpdateAllOutdatedAsync();
                 return true;
         }
 
@@ -182,7 +185,7 @@ public class NuGetDetailsTab() : IProjectTab
         {
             if (_nugetList.SelectedItem != null)
             {
-                _ = ShowVersionsForPackage(_nugetList.SelectedItem.Id);
+                _ = ShowVersionsForPackageAsync(_nugetList.SelectedItem.Id);
             }
             return true;
         }
@@ -190,7 +193,7 @@ public class NuGetDetailsTab() : IProjectTab
         return false;
     }
 
-     private async Task<bool> HandleSearchMode(ConsoleKeyInfo key)
+     private async Task<bool> HandleSearchModeAsync(ConsoleKeyInfo key)
     {
         if (key.Key == ConsoleKey.Escape)
         {
@@ -204,7 +207,7 @@ public class NuGetDetailsTab() : IProjectTab
 
             if (_searchQuery != _lastSearchQuery && !string.IsNullOrWhiteSpace(_searchQuery))
             {
-                 _ = PerformSearch(_searchQuery);
+                 _ = PerformSearchAsync(_searchQuery);
                  return true;
             }
 
@@ -214,14 +217,14 @@ public class NuGetDetailsTab() : IProjectTab
                 var selected = _searchList.SelectedItem;
                 if (selected != null)
                 {
-                    _ = InstallPackage(selected.Id, null);
+                    _ = InstallPackageAsync(selected.Id, null);
                     _appMode = AppMode.Normal;
                     _statusMessage = null;
                 }
             }
             else if (!string.IsNullOrWhiteSpace(_searchQuery))
             {
-                _ = PerformSearch(_searchQuery);
+                _ = PerformSearchAsync(_searchQuery);
             }
             return true;
         }
@@ -252,7 +255,7 @@ public class NuGetDetailsTab() : IProjectTab
         return true;
     }
 
-    private async Task<bool> HandleVersionMode(ConsoleKeyInfo key)
+    private async Task<bool> HandleVersionModeAsync(ConsoleKeyInfo key)
     {
         if (key.Key == ConsoleKey.Escape)
         {
@@ -278,7 +281,7 @@ public class NuGetDetailsTab() : IProjectTab
 
             if (selectedVersion != null && selectedPackage != null)
             {
-                _ = InstallPackage(selectedPackage.Id, selectedVersion);
+                _ = InstallPackageAsync(selectedPackage.Id, selectedVersion);
                 _appMode = AppMode.Normal;
             }
             return true;
@@ -287,11 +290,11 @@ public class NuGetDetailsTab() : IProjectTab
         return true;
     }
 
-    private Task<bool> HandleConfirmDelete(ConsoleKeyInfo key)
+    private Task<bool> HandleConfirmDeleteAsync(ConsoleKeyInfo key)
     {
         if (key.Key == ConsoleKey.Y)
         {
-             _ = RemovePackage(_nugetList.SelectedItem!.Id);
+             _ = RemovePackageAsync(_nugetList.SelectedItem!.Id);
              _appMode = AppMode.Normal;
              return Task.FromResult(true);
         }
@@ -302,7 +305,7 @@ public class NuGetDetailsTab() : IProjectTab
 
     // Actions
 
-    private async Task PerformSearch(string query)
+    private async Task PerformSearchAsync(string query)
     {
         _lastSearchQuery = query;
         _isActionRunning = true;
@@ -313,7 +316,7 @@ public class NuGetDetailsTab() : IProjectTab
         {
             try
             {
-                 var results = await NuGetService.SearchPackagesAsync(query, LogAction);
+                 var results = await nuGetService.SearchPackagesAsync(query, LogAction);
                  _searchList.SetItems(results);
                  _statusMessage = results.Count == 0 ? "No results." : $"Found {results.Count} packages.";
             }
@@ -329,7 +332,7 @@ public class NuGetDetailsTab() : IProjectTab
         });
     }
 
-    private async Task ShowVersionsForPackage(string packageId)
+    private async Task ShowVersionsForPackageAsync(string packageId)
     {
         _isActionRunning = true;
         _statusMessage = "Fetching versions...";
@@ -339,7 +342,7 @@ public class NuGetDetailsTab() : IProjectTab
             {
                 var pkg = _nugetList.SelectedItem;
                 if (pkg == null) return;
-                var versions = await NuGetService.GetPackageVersionsAsync(pkg.Id, LogAction);
+                var versions = await nuGetService.GetPackageVersionsAsync(pkg.Id, LogAction);
 
                 _versionList.SetItems(versions);
                 if (versions.Count > 0) _appMode = AppMode.SelectingVersion;
@@ -357,7 +360,7 @@ public class NuGetDetailsTab() : IProjectTab
         });
     }
 
-    private async Task InstallPackage(string packageId, string? version)
+    private async Task InstallPackageAsync(string packageId, string? version)
     {
         if (_currentProjectPath == null) return;
 
@@ -365,8 +368,8 @@ public class NuGetDetailsTab() : IProjectTab
         _statusMessage = $"Installing {packageId} {version ?? "latest"}...";
         try
         {
-            await NuGetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
-            await ReloadData();
+            await nuGetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
+            await ReloadDataAsync();
         }
         catch (Exception ex)
         {
@@ -380,7 +383,7 @@ public class NuGetDetailsTab() : IProjectTab
         }
     }
 
-    private async Task RemovePackage(string packageId)
+    private async Task RemovePackageAsync(string packageId)
     {
         if (_currentProjectPath == null) return;
 
@@ -388,13 +391,13 @@ public class NuGetDetailsTab() : IProjectTab
         _statusMessage = $"Removing {packageId}...";
         try
         {
-            await NuGetService.RemovePackageAsync(_currentProjectPath, packageId, LogAction);
-            await ReloadData();
+            await nuGetService.RemovePackageAsync(_currentProjectPath, packageId, LogAction);
+            await ReloadDataAsync();
         }
         catch (Exception ex)
         {
-             _statusMessage = $"Remove failed: {ex.Message}";
-             await Task.Delay(3000);
+            _statusMessage = $"Remove failed: {ex.Message}";
+            await Task.Delay(3000);
         }
         finally
         {
@@ -403,7 +406,7 @@ public class NuGetDetailsTab() : IProjectTab
         }
     }
 
-    private async Task UpdateAllOutdated()
+    private async Task UpdateAllOutdatedAsync()
     {
         if (_currentProjectPath == null) return;
 
@@ -417,7 +420,7 @@ public class NuGetDetailsTab() : IProjectTab
             {
                 var pkg = outdated[i];
                 _statusMessage = $"Updating {i + 1}/{outdated.Count}: {pkg.Id}...";
-                await NuGetService.InstallPackageAsync(_currentProjectPath, pkg.Id, null, noRestore: true, logger: LogAction);
+                await nuGetService.InstallPackageAsync(_currentProjectPath, pkg.Id, null, noRestore: true, logger: LogAction);
             }
 
             _statusMessage = "Finalizing restore...";
@@ -431,7 +434,7 @@ public class NuGetDetailsTab() : IProjectTab
 
              await AppCli.RunAsync(command);
 
-             await ReloadData();
+             await ReloadDataAsync();
         }
         catch (Exception ex)
         {
@@ -445,13 +448,14 @@ public class NuGetDetailsTab() : IProjectTab
         }
     }
 
-    private async Task ReloadData()
+    private async Task ReloadDataAsync()
     {
         if (_currentProjectPath != null && _currentProjectName != null)
         {
             await LoadAsync(_currentProjectPath, _currentProjectName);
         }
     }
+
 
     public IRenderable GetContent(int availableHeight, int availableWidth)
     {

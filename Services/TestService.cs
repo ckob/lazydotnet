@@ -6,16 +6,15 @@ namespace lazydotnet.Services;
 
 public class TestNode
 {
-    public string Name { get; set; } = string.Empty; // Just the leaf part (e.g. MethodName)
-    public string FullName { get; set; } = string.Empty; // Fully qualified name
+    public string Name { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
     public List<TestNode> Children { get; } = [];
     public TestNode? Parent { get; set; }
-    public bool IsContainer { get; set; } // Namespace or Class
+    public bool IsContainer { get; set; }
     public bool IsTest { get; set; }
     public bool IsExpanded { get; set; } = true;
     public int Depth { get; set; }
 
-    // Status
     public TestStatus Status { get; set; } = TestStatus.None;
     public string? ErrorMessage { get; set; }
     public string? StackTrace { get; set; }
@@ -32,16 +31,9 @@ public enum TestStatus
 
 public class TestService
 {
-    public static async Task<List<string>> DiscoverTestsAsync(string projectOrSolutionPath, CancellationToken cancellationToken = default)
+    public async Task<List<string>> DiscoverTestsAsync(string projectOrSolutionPath, CancellationToken cancellationToken = default)
     {
         var testNames = new List<string>();
-        // Using --list-tests
-        // Output typically looks like:
-        // The following Tests are available:
-        //     Namespace.Class.Test1
-        //     Namespace.Class.Test2
-
-        // We need to capture stdout
         var stdOut = new List<string>();
 
         try
@@ -50,7 +42,7 @@ public class TestService
                 .WithArguments($"test \"{projectOrSolutionPath}\" --list-tests")
                 .WithValidation(CommandResultValidation.None)
                 .WithStandardOutputPipe(PipeTarget.ToDelegate(stdOut.Add))
-                .WithStandardErrorPipe(PipeTarget.ToDelegate(l => { })); // Ignore stderr
+                .WithStandardErrorPipe(PipeTarget.ToDelegate(l => { }));
 
             await AppCli.RunAsync(command, cancellationToken).ConfigureAwait(false);
 
@@ -59,7 +51,6 @@ public class TestService
             {
                 var trimmed = line.Trim();
 
-                // Typical header: "The following Tests are available:"
                 if (trimmed.Contains("The following Tests are available", StringComparison.OrdinalIgnoreCase))
                 {
                     startCapturing = true;
@@ -68,11 +59,8 @@ public class TestService
 
                 if (startCapturing)
                 {
-                    // Ignore empty lines or build info lines if they sneak in (though usually they are above)
-                    // Tests are usually indented.
                     if (string.IsNullOrWhiteSpace(line)) continue;
 
-                    // Heuristic: ignore lines starting with common build output prefixes if they appear after header
                     if (line.StartsWith("Build started") ||
                         line.StartsWith("Determining projects") ||
                         line.Contains("Microsoft (R) Test Execution Command Line Tool"))
@@ -80,15 +68,10 @@ public class TestService
                         continue;
                     }
 
-                    // Strip parameterized test arguments (e.g. "Theory(x: 1)")
-                    // Regex to remove everything from the first '(' onwards
                     var cleanedName = Regex.Replace(trimmed, @"\(.*$", "");
                     cleanedName = cleanedName.Trim();
 
                     if (string.IsNullOrWhiteSpace(cleanedName)) continue;
-
-                    // If it still has spaces, it's likely a build message or noise
-                    // A valid fully qualified test name (Namespace.Class.Method) shouldn't have spaces
                     if (cleanedName.Contains(' ')) continue;
 
                     testNames.Add(cleanedName);
@@ -97,18 +80,16 @@ public class TestService
         }
         catch (OperationCanceledException)
         {
-            // Propagate or handle? Usually propagate.
             throw;
         }
         catch (Exception)
         {
-            // Fallback or ignore
         }
 
         return [.. testNames.Distinct()];
     }
 
-    public static TestNode BuildTestTree(List<string> testNames)
+    public TestNode BuildTestTree(List<string> testNames)
     {
         var root = new TestNode { Name = "Tests", IsContainer = true, Depth = 0 };
 
@@ -142,82 +123,62 @@ public class TestService
 
         CompactTree(root);
         SortTree(root);
-        // Recalculate depths after compaction
         RecalculateDepth(root, 0);
 
         return root;
     }
 
-    private static void CompactTree(TestNode node)
+    private void CompactTree(TestNode node)
     {
-        // Post-order traversal to compact from bottom up?
-        // Or top down.
-        // If I have A -> B -> C.
-        // A has 1 child B. B is container. Merge. A becomes "A.B". Child is C.
-        // Then "A.B" has 1 child C. If C is container, merge?
-        // Yes.
-
         bool changed = true;
         while (changed)
         {
             changed = false;
-            // Check if WE can merge into our SINGLE child? No, we merge the child into US.
-            // But we need to iterate children first.
-
-            // Let's iterate backwards safely
             for (int i = node.Children.Count - 1; i >= 0; i--)
             {
                 CompactTree(node.Children[i]);
             }
 
-            // Now check if THIS node needs to merge with its single child
             if (node.Children.Count == 1)
             {
                 var child = node.Children[0];
-                if (child.IsContainer && !child.IsTest) // Only merge containers
+                if (child.IsContainer && !child.IsTest)
                 {
-                    // Merge child into this node
-                    if (node.Depth > 0) // Don't merge root "Tests" usually, or do we?
+                    if (node.Depth > 0)
                     {
-                        // "Lidl" -> "Plus" becomes "Lidl.Plus"
                         node.Name = $"{node.Name}.{child.Name}";
-                        node.FullName = child.FullName; // Use child's full name
+                        node.FullName = child.FullName;
                         node.Children.Clear();
                         node.Children.AddRange(child.Children);
 
                         foreach (var c in node.Children) c.Parent = node;
 
                         changed = true;
-                        // Since we changed, we might need to merge again if the new child is also single container
-                        // The while loop handles this.
                     }
                 }
             }
         }
     }
 
-    private static void RecalculateDepth(TestNode node, int depth)
+    private void RecalculateDepth(TestNode node, int depth)
     {
         node.Depth = depth;
         foreach (var c in node.Children) RecalculateDepth(c, depth + 1);
     }
 
-    private static void SortTree(TestNode node)
+    private void SortTree(TestNode node)
     {
         node.Children.Sort((a, b) => string.Compare(a.Name, b.Name));
         foreach(var child in node.Children) SortTree(child);
     }
 
-    public static async Task<List<TestResult>> RunTestAsync(string projectOrPath, string filterExpression)
+    public async Task<List<TestResult>> RunTestAsync(string projectOrPath, string filterExpression)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
         {
-             // dotnet test [Path] --filter [Filter] --results-directory [TempDir] --logger "trx"
-             // Using the passed filterExpression directly.
-
              var command = Cli.Wrap("dotnet")
                 .WithArguments(args => args
                     .Add("test")
@@ -228,7 +189,7 @@ public class TestService
                     .Add(tempDir)
                     .Add("--logger")
                     .Add("trx"))
-                .WithValidation(CommandResultValidation.None); // Don't throw on failed tests
+                .WithValidation(CommandResultValidation.None);
 
              await AppCli.RunAsync(command).ConfigureAwait(false);
 
@@ -248,7 +209,7 @@ public class TestService
         }
     }
 
-    private static List<TestResult> ParseTrx(string trxPath)
+    private List<TestResult> ParseTrx(string trxPath)
     {
         var resultsList = new List<TestResult>();
         try
@@ -261,22 +222,6 @@ public class TestService
             foreach (var r in results)
             {
                 var testName = r.Attribute("testName")?.Value;
-                // Parse parameterized args if present to match our deduplicated names?
-                // Actually, the TestNode.FullName corresponds to the "FullyQualifiedName".
-                // In TRX, "testName" might be short name, "testId" etc.
-                // We need the FullyQualifiedName to map back.
-
-                // Usually <UnitTestResult testName="Namespace.Class.Method" ... />
-                // But sometimes "Method (args)".
-                // We stored "FullyQualifiedName" in TestNode.
-                // Let's hope TRX provides it distinctly?
-                // TRX structure: <UnitTestResult ...> <InnerTest > ... </UnitTestResult>
-                // It's often in `testName` attribute but might need cleanup.
-
-                // Actually, let's look for definitions. <TestDefinitions> <UnitTest name="..." storage="..." id="...">
-                // The `executionId` links them.
-                // But simpler: `testName` usually suffices if we clean it up same way we did for discovery.
-
                 var cleanedName = testName;
                 if (cleanedName != null)
                 {
@@ -311,7 +256,6 @@ public class TestService
         }
         catch (Exception)
         {
-            // Ignore parse errors or return partial
         }
         return resultsList;
     }

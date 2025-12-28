@@ -1,85 +1,63 @@
-using Microsoft.Build.Construction;
-
 namespace lazydotnet.Services;
 
 public record ProjectInfo
 {
-    public string Name { get; init; } = "";
-    public string Path { get; init; } = "";
-    public string Id { get; init; } = "";
-    public string TypeGuid { get; init; } = "";
-    public string? ParentId { get; set; }
-
-
-    public bool IsSolutionFolder => TypeGuid.Equals("{2150E333-8FDC-42A3-9474-1A3956D46DE8}", StringComparison.OrdinalIgnoreCase)
-                                 || TypeGuid.Equals("SolutionFolder", StringComparison.OrdinalIgnoreCase);
+    public required string Name { get; init; }
+    public required string Path { get; init; }
+    public required string Id { get; init; }
 }
 
 public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects);
 
-public class SolutionService
+public class SolutionService(EasyDotnetService easyDotnetService)
 {
-    public static Task<SolutionInfo?> FindAndParseSolutionAsync(string directory)
+    public async Task<SolutionInfo?> FindAndParseSolutionAsync(string path)
     {
-        var slnFile = Directory.GetFiles(directory, "*.sln").FirstOrDefault();
-        if (slnFile == null) return Task.FromResult<SolutionInfo?>(null);
+        string? slnFile = null;
+        string? rootDir = null;
 
-
-        var solution = SolutionFile.Parse(slnFile);
-
-        var projects = new List<ProjectInfo>();
-
-        foreach (var proj in solution.ProjectsInOrder)
+        if (Directory.Exists(path))
         {
-
-            bool isSolutionFolder = proj.ProjectType == SolutionProjectType.SolutionFolder;
-            string extension = Path.GetExtension(proj.AbsolutePath);
-            bool isProjectFile = extension.EndsWith("proj", StringComparison.OrdinalIgnoreCase); // csproj, fsproj, etc.
-
-            if (!isSolutionFolder && !isProjectFile)
-            {
-                continue;
-            }
-
-
-            projects.Add(new ProjectInfo
-            {
-                Name = proj.ProjectName,
-                Path = proj.AbsolutePath,
-                Id = proj.ProjectGuid,
-                TypeGuid = proj.ProjectType.ToString(),
-                ParentId = proj.ParentProjectGuid
-            });
+            slnFile = Directory.GetFiles(path, "*.sln").FirstOrDefault();
+            rootDir = Path.GetFullPath(path);
+        }
+        else if (File.Exists(path) && path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            slnFile = Path.GetFullPath(path);
+            rootDir = Path.GetDirectoryName(slnFile);
         }
 
-        return Task.FromResult<SolutionInfo?>(new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects));
+        if (slnFile == null || rootDir == null) return null;
+
+        easyDotnetService.InitializeContext(rootDir, slnFile);
+
+        var projectsResponse = await easyDotnetService.ListProjectsAsync(slnFile);
+
+        var projects = projectsResponse
+            .DistinctBy(p => p.AbsolutePath)
+            .Select(proj => new ProjectInfo
+        {
+            Name = proj.ProjectName,
+            Path = proj.AbsolutePath,
+            Id = proj.AbsolutePath
+        }).ToList();
+
+        return new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects);
     }
 
-    public static Task<List<string>> GetProjectReferencesAsync(string projectPath)
+    public async Task<List<string>> GetProjectReferencesAsync(string projectPath)
     {
-        var references = new List<string>();
-
         try
         {
             if (!File.Exists(projectPath))
-                return Task.FromResult(references);
+                return [];
 
-            var doc = System.Xml.Linq.XDocument.Load(projectPath);
-            var projectRefs = doc.Descendants()
-                .Where(e => e.Name.LocalName == "ProjectReference")
-                .Select(e => e.Attribute("Include")?.Value)
-                .Where(v => v != null);
-
-            foreach (var refPath in projectRefs)
-            {
-                var projectName = Path.GetFileNameWithoutExtension(refPath);
-                references.Add(projectName!);
-            }
+            var references = await easyDotnetService.ListProjectReferencesAsync(projectPath);
+            return references.Select(Path.GetFileNameWithoutExtension).Where(v => v != null).Cast<string>().ToList();
         }
         catch
         {
+            return [];
         }
-
-        return Task.FromResult(references);
     }
 }

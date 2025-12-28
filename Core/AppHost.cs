@@ -63,7 +63,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                             while (Console.KeyAvailable)
                             {
                                 var key = Console.ReadKey(true);
-                                var nextScreen = await _currentScreen.HandleInput(key, _layout);
+                                var nextScreen = await _currentScreen.HandleInputAsync(key, _layout);
 
                                 if (nextScreen == null)
                                 {

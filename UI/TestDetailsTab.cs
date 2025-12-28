@@ -5,7 +5,7 @@ using lazydotnet.UI.Components;
 
 namespace lazydotnet.UI;
 
-public class TestDetailsTab() : IProjectTab
+public class TestDetailsTab(TestService testService) : IProjectTab
 {
     private TestNode? _root;
     private readonly List<TestNode> _visibleNodes = [];
@@ -36,7 +36,7 @@ public class TestDetailsTab() : IProjectTab
         // Cancel previous discovery if running
         if (_discoveryCts != null)
         {
-            _discoveryCts.Cancel();
+            await _discoveryCts.CancelAsync();
             _discoveryCts.Dispose();
             _discoveryCts = null;
         }
@@ -54,26 +54,26 @@ public class TestDetailsTab() : IProjectTab
         try
         {
             // Heavy processing offloaded to thread pool
-            var (rootNode, count) = await Task.Run(async () =>
+            var result = await Task.Run(async () =>
             {
-                var tests = await TestService.DiscoverTestsAsync(projectPath, token);
+                var tests = await testService.DiscoverTestsAsync(projectPath, token);
                 if (tests.Count != 0)
                 {
-                    var r = TestService.BuildTestTree(tests);
+                    var r = testService.BuildTestTree(tests);
                     // Pre-calculate visible nodes logic or just set expanded here?
                     r.IsExpanded = true;
-                    return (r, tests.Count);
+                    return (RootNode: r, Count: tests.Count);
                 }
-                return (null, 0);
+                return (RootNode: (TestNode?)null, Count: 0);
             }, token);
 
-            if (rootNode != null)
+            if (result.RootNode != null)
             {
                 lock (_lock)
                 {
-                    _root = rootNode;
+                    _root = result.RootNode;
                     RefreshVisibleNodes();
-                    _statusMessage = $"Found {count} tests.";
+                    _statusMessage = $"Found {result.Count} tests.";
                 }
             }
             else
@@ -148,7 +148,7 @@ public class TestDetailsTab() : IProjectTab
         return $"{_selectedIndex + 1} of {_visibleNodes.Count}";
     }
 
-    public async Task<bool> HandleKey(ConsoleKeyInfo key)
+    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
     {
         if (_isLoading || _isRunningTests) return true;
 
@@ -213,7 +213,7 @@ public class TestDetailsTab() : IProjectTab
             if (key.KeyChar == 'r' || key.KeyChar == 'R')
             {
                  // Run leaf or container
-                 _ = RunSelectedTest(node);
+                 _ = RunSelectedTestAsync(node);
                  return true;
             }
         }
@@ -297,7 +297,7 @@ public class TestDetailsTab() : IProjectTab
         }
     }
 
-    private async Task RunSelectedTest(TestNode node)
+    private async Task RunSelectedTestAsync(TestNode node)
     {
         if (_currentPath == null) return;
 
@@ -335,7 +335,7 @@ public class TestDetailsTab() : IProjectTab
                     filter = $"FullyQualifiedName={node.FullName}";
                 }
 
-                 var results = await TestService.RunTestAsync(_currentPath, filter);
+                 var results = await testService.RunTestAsync(_currentPath, filter);
 
                  if (results.Count == 0)
                  {
@@ -373,19 +373,6 @@ public class TestDetailsTab() : IProjectTab
 
                 // Final status update for parents (important for container run too)
                 if (node.Parent != null) UpdateParentStatus(node.Parent); // If node is root (Tests), parent is null
-                else if (node.IsContainer)
-                {
-                    // If we ran the root "Tests", we need to ensure its status is updated based on children
-                    bool anyFailed = false;
-                    bool allPassed = true;
-                    bool anyNone = false;
-
-                    // We can reuse UpdateParentStatus logic but applied to self?
-                    // Actually ProcessTestResults -> ApplyResultsRecursive calls node.Status = ... for tests
-                    // and for containers it aggregates.
-                    // So we probably don't need manual update here IF ProcessTestResults did its job.
-                    // But safe to check.
-                }
             }
         });
     }

@@ -20,8 +20,8 @@ public class SolutionExplorer
 {
     private readonly ExplorerNode _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
-    private int _selectedIndex = 0;
-    private int _scrollOffset = 0;
+    private int _selectedIndex;
+    private int _scrollOffset;
 
     public SolutionExplorer(SolutionInfo solution)
     {
@@ -41,55 +41,93 @@ public class SolutionExplorer
             ProjectPath = solution.Path
         };
 
-        var nodeMap = new Dictionary<string, ExplorerNode>(StringComparer.OrdinalIgnoreCase);
+        var solutionDir = Path.GetDirectoryName(solution.Path) ?? "";
+        var nodeMap = InitializeNodeMap(solution);
 
-
+        // Second pass: build hierarchy
         foreach (var proj in solution.Projects)
         {
-
-            var node = new ExplorerNode
-            {
-                Name = proj.Name,
-                IsProject = !proj.IsSolutionFolder,
-                ProjectPath = proj.IsSolutionFolder ? null : proj.Path,
-                IsExpanded = true
-            };
-            nodeMap[proj.Id] = node;
+            AddProjectToHierarchy(root, nodeMap, proj, solutionDir);
         }
-
-
-        foreach (var proj in solution.Projects)
-        {
-            var node = nodeMap[proj.Id];
-
-            if (!string.IsNullOrEmpty(proj.ParentId) && nodeMap.TryGetValue(proj.ParentId, out ExplorerNode? parent))
-            {
-                parent.Children.Add(node);
-                node.Parent = parent;
-            }
-            else
-            {
-                root.Children.Add(node);
-                node.Parent = root;
-            }
-        }
-
 
         PruneTree(root);
-
         CalculateDepths(root, 0);
         SortTree(root);
         return root;
     }
 
+    private static Dictionary<string, ExplorerNode> InitializeNodeMap(SolutionInfo solution)
+    {
+        var nodeMap = new Dictionary<string, ExplorerNode>(StringComparer.OrdinalIgnoreCase);
+        foreach (var proj in solution.Projects)
+        {
+            nodeMap[proj.Id] = new ExplorerNode
+            {
+                Name = proj.Name,
+                IsProject = true,
+                ProjectPath = proj.Path,
+                IsExpanded = true
+            };
+        }
+        return nodeMap;
+    }
+
+    private static void AddProjectToHierarchy(ExplorerNode root, Dictionary<string, ExplorerNode> nodeMap, ProjectInfo proj, string solutionDir)
+    {
+        var node = nodeMap[proj.Id];
+        var relativePath = Path.GetRelativePath(solutionDir, Path.GetDirectoryName(proj.Path) ?? "");
+
+        if (relativePath == "." || string.IsNullOrEmpty(relativePath))
+        {
+            root.Children.Add(node);
+            node.Parent = root;
+            return;
+        }
+
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        var currentParent = root;
+        var pathAccumulator = "";
+
+        foreach (var segment in segments)
+        {
+            pathAccumulator = string.IsNullOrEmpty(pathAccumulator) ? segment : Path.Combine(pathAccumulator, segment);
+            currentParent = GetOrCreateFolderNode(currentParent, nodeMap, segment, pathAccumulator);
+        }
+
+        currentParent.Children.Add(node);
+        node.Parent = currentParent;
+    }
+
+    private static ExplorerNode GetOrCreateFolderNode(ExplorerNode currentParent, Dictionary<string, ExplorerNode> nodeMap, string segment, string pathAccumulator)
+    {
+        var folderId = $"folder:{pathAccumulator}";
+
+        if (nodeMap.TryGetValue(folderId, out var folderNode))
+        {
+            return folderNode;
+        }
+
+        folderNode = new ExplorerNode
+        {
+            Name = segment,
+            IsProject = false,
+            IsSolution = false,
+            IsExpanded = true,
+            Parent = currentParent
+        };
+        currentParent.Children.Add(folderNode);
+        nodeMap[folderId] = folderNode;
+        return folderNode;
+    }
+
     private static bool PruneTree(ExplorerNode node)
     {
 
-        bool hasContent = false;
-        for (int i = node.Children.Count - 1; i >= 0; i--)
+        var hasContent = false;
+        for (var i = node.Children.Count - 1; i >= 0; i--)
         {
 
-            bool childKept = PruneTree(node.Children[i]);
+            var childKept = PruneTree(node.Children[i]);
             if (childKept)
             {
                 hasContent = true;
@@ -119,7 +157,7 @@ public class SolutionExplorer
     {
         node.Children.Sort((a, b) =>
         {
-            if (a.IsProject == b.IsProject) return string.Compare(a.Name, b.Name);
+            if (a.IsProject == b.IsProject) return string.CompareOrdinal(a.Name, b.Name);
 
             return a.IsProject ? 1 : -1;
         });
@@ -137,11 +175,10 @@ public class SolutionExplorer
     private void Traverse(ExplorerNode node)
     {
         _visibleNodes.Add(node);
-        if (node.IsExpanded)
-        {
-             foreach(var child in node.Children)
-                Traverse(child);
-        }
+        if (!node.IsExpanded)
+            return;
+        foreach(var child in node.Children)
+            Traverse(child);
     }
 
     public bool HandleInput(ConsoleKeyInfo key)
@@ -170,28 +207,24 @@ public class SolutionExplorer
         return false;
     }
 
-    public void ToggleExpand()
+    private void ToggleExpand()
     {
         var node = GetSelectedNode();
-        if (!node.IsProject || node.Children.Count > 0)
-        {
-            node.IsExpanded = !node.IsExpanded;
-            RefreshVisibleNodes();
-        }
+        if (node is { IsProject: true, Children.Count: <= 0 }) return;
+        node.IsExpanded = !node.IsExpanded;
+        RefreshVisibleNodes();
     }
 
-    public void Expand()
+    private void Expand()
     {
         var node = GetSelectedNode();
 
-        if ((!node.IsProject || node.Children.Count > 0) && !node.IsExpanded)
-        {
-            node.IsExpanded = true;
-            RefreshVisibleNodes();
-        }
+        if (node is { IsProject: true, Children.Count: <= 0 } || node.IsExpanded) return;
+        node.IsExpanded = true;
+        RefreshVisibleNodes();
     }
 
-    public void Collapse()
+    private void Collapse()
     {
         var node = GetSelectedNode();
 
@@ -207,16 +240,16 @@ public class SolutionExplorer
         }
     }
 
-    public void MoveUp()
+    private void MoveUp()
     {
-        if (_selectedIndex > 0)
-        {
-            _selectedIndex--;
-            if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
-        }
+        if (_selectedIndex <= 0)
+            return;
+        _selectedIndex--;
+        if (_selectedIndex < _scrollOffset)
+            _scrollOffset = _selectedIndex;
     }
 
-    public void MoveDown()
+    private void MoveDown()
     {
         if (_selectedIndex < _visibleNodes.Count - 1)
         {
@@ -226,7 +259,7 @@ public class SolutionExplorer
 
     private void EnsureVisible(int height)
     {
-        int contentHeight = Math.Max(1, height);
+        var contentHeight = Math.Max(1, height);
         if (_selectedIndex < _scrollOffset)
         {
             _scrollOffset = _selectedIndex;
@@ -240,10 +273,9 @@ public class SolutionExplorer
             _scrollOffset = Math.Max(0, _visibleNodes.Count - contentHeight);
     }
 
-    public ExplorerNode GetSelectedNode()
+    private ExplorerNode GetSelectedNode()
     {
-        if (_visibleNodes.Count == 0) return _root;
-        return _visibleNodes[_selectedIndex];
+        return _visibleNodes.Count == 0 ? _root : _visibleNodes[_selectedIndex];
     }
 
     public ProjectInfo? GetSelectedProject()
@@ -252,7 +284,7 @@ public class SolutionExplorer
 
         if ((node.IsProject || node.IsSolution) && node.ProjectPath != null)
         {
-            return new ProjectInfo { Name = node.Name, Path = node.ProjectPath };
+            return new ProjectInfo { Name = node.Name, Path = node.ProjectPath, Id = node.ProjectPath };
         }
         return null;
     }
@@ -263,48 +295,55 @@ public class SolutionExplorer
         var grid = new Grid();
         grid.AddColumn();
 
-        int end = Math.Min(_scrollOffset + availableHeight, _visibleNodes.Count);
+        var end = Math.Min(_scrollOffset + availableHeight, _visibleNodes.Count);
 
-        for (int i = _scrollOffset; i < end; i++)
+        for (var i = _scrollOffset; i < end; i++)
         {
             var node = _visibleNodes[i];
-            bool isSelected = i == _selectedIndex;
-
-            string indent = new(' ', node.Depth * 2);
-            string icon;
-            if (node.IsSolution)
-            {
-                 icon = "[purple]SLN[/]";
-            }
-            else if (node.IsProject)
-            {
-                 icon = "[green]C#[/]";
-            }
-            else
-            {
-                 icon = node.IsExpanded ? "[yellow]v[/]" : "[yellow]>[/]";
-            }
-
-            string name = node.Name;
-            int usedWidth = (node.Depth * 2) + 6;
-            int maxNameWidth = Math.Max(5, availableWidth - usedWidth - 1);
-            if (name.Length > maxNameWidth) name = string.Concat(name.AsSpan(0, maxNameWidth - 3), "...");
-
-            string text = $"{indent} {icon} {Markup.Escape(name)}";
-
-            if (isSelected)
-            {
-                int visibleLength = (node.Depth * 2) + (node.IsSolution ? 4 : (node.IsProject ? 3 : 2)) + name.Length + 2;
-                int paddingNeeded = Math.Max(0, availableWidth - visibleLength);
-                string padding = new(' ', paddingNeeded);
-
-                grid.AddRow(new Markup($"[black on blue]{text}{padding}[/]"));
-            }
-            else
-            {
-                 grid.AddRow(new Markup($"[white]{text}[/]"));
-            }
+            var isSelected = i == _selectedIndex;
+            grid.AddRow(RenderNode(node, isSelected, availableWidth));
         }
         return grid;
+    }
+
+    private static Markup RenderNode(ExplorerNode node, bool isSelected, int availableWidth)
+    {
+        var indent = new string(' ', node.Depth * 2);
+        var icon = GetNodeIcon(node);
+        var name = GetTruncatedName(node.Name, node.Depth, availableWidth);
+
+        var text = $"{indent} {icon} {Markup.Escape(name)}";
+
+        if (!isSelected)
+            return new Markup($"[white]{text}[/]");
+
+        var iconWidth = GetIconWidth(node);
+        var visibleLength = (node.Depth * 2) + iconWidth + name.Length + 2;
+        var paddingNeeded = Math.Max(0, availableWidth - visibleLength);
+        var padding = new string(' ', paddingNeeded);
+
+        return new Markup($"[black on blue]{text}{padding}[/]");
+    }
+
+    private static string GetNodeIcon(ExplorerNode node)
+    {
+        if (node.IsSolution) return "[purple]SLN[/]";
+        if (node.IsProject) return "[green]C#[/]";
+        return node.IsExpanded ? "[yellow]v[/]" : "[yellow]>[/]";
+    }
+
+    private static int GetIconWidth(ExplorerNode node)
+    {
+        if (node.IsSolution) return 4;
+        return node.IsProject ? 3 : 2;
+    }
+
+    private static string GetTruncatedName(string name, int depth, int availableWidth)
+    {
+        var usedWidth = (depth * 2) + 6;
+        var maxNameWidth = Math.Max(5, availableWidth - usedWidth - 1);
+        return name.Length > maxNameWidth
+            ? string.Concat(name.AsSpan(0, maxNameWidth - 3), "...")
+            : name;
     }
 }
