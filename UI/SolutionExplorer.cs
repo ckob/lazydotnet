@@ -20,12 +20,14 @@ public class SolutionExplorer
 {
     private readonly ExplorerNode _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
+    private readonly IEditorService _editorService;
     private int _selectedIndex;
     private int _scrollOffset;
 
-    public SolutionExplorer(SolutionInfo solution)
+    public SolutionExplorer(SolutionInfo solution, IEditorService editorService)
     {
         _root = BuildTree(solution);
+        _editorService = editorService;
         RefreshVisibleNodes();
     }
 
@@ -203,8 +205,21 @@ public class SolutionExplorer
             case ConsoleKey.Spacebar:
                 ToggleExpand();
                 return true;
+            case ConsoleKey.E:
+            case ConsoleKey.O:
+                _ = OpenInEditorAsync();
+                return true;
         }
         return false;
+    }
+
+    private async Task OpenInEditorAsync()
+    {
+        var node = GetSelectedNode();
+        if (node.ProjectPath != null)
+        {
+            await _editorService.OpenFileAsync(node.ProjectPath);
+        }
     }
 
     private void ToggleExpand()

@@ -23,11 +23,11 @@ public class ProjectDetailsPane
 
     public Action? RequestRefresh { get; set; }
 
-    public ProjectDetailsPane(SolutionService solutionService, NuGetService nuGetService, TestService testService)
+    public ProjectDetailsPane(SolutionService solutionService, NuGetService nuGetService, TestService testService, IEditorService editorService)
     {
         _nugetTab = new NuGetDetailsTab(nuGetService);
-        _refsTab = new ProjectReferencesTab(solutionService);
-        _testsTab = new TestDetailsTab(testService);
+        _refsTab = new ProjectReferencesTab(solutionService, editorService);
+        _testsTab = new TestDetailsTab(testService, editorService);
 
         _tabInstances.Add(_refsTab);
         _tabInstances.Add(_nugetTab);

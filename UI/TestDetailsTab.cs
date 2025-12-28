@@ -5,7 +5,7 @@ using lazydotnet.UI.Components;
 
 namespace lazydotnet.UI;
 
-public class TestDetailsTab(TestService testService) : IProjectTab
+public class TestDetailsTab(TestService testService, IEditorService editorService) : IProjectTab
 {
     private TestNode? _root;
     private readonly List<TestNode> _visibleNodes = [];
@@ -19,9 +19,7 @@ public class TestDetailsTab(TestService testService) : IProjectTab
     private readonly bool _isRunningTests = false;
     private string? _statusMessage;
 
-    // For tracking ongoing test runs
-    // Map full test name to status
-    private readonly Dictionary<string, TestResult> _testResults = [];
+    private readonly Dictionary<string, TestRunResult> _testResults = [];
 
     private int _runningTestCount = 0;
 
@@ -52,30 +50,21 @@ public class TestDetailsTab(TestService testService) : IProjectTab
         _visibleNodes.Clear();
         _testResults.Clear();
         _statusMessage = "Discovering tests...";
+        RequestRefresh?.Invoke();
 
         try
         {
-            // Heavy processing offloaded to thread pool
-            var result = await Task.Run(async () =>
+            var tests = await testService.DiscoverTestsAsync(projectPath, token);
+            if (tests.Count != 0)
             {
-                var tests = await testService.DiscoverTestsAsync(projectPath, token);
-                if (tests.Count != 0)
-                {
-                    var r = testService.BuildTestTree(tests);
-                    // Pre-calculate visible nodes logic or just set expanded here?
-                    r.IsExpanded = true;
-                    return (RootNode: r, Count: tests.Count);
-                }
-                return (RootNode: (TestNode?)null, Count: 0);
-            }, token);
-
-            if (result.RootNode != null)
-            {
+                var r = testService.BuildTestTree(tests);
+                r.IsExpanded = true;
+                
                 lock (_lock)
                 {
-                    _root = result.RootNode;
+                    _root = r;
                     RefreshVisibleNodes();
-                    _statusMessage = $"Found {result.Count} tests.";
+                    _statusMessage = $"Found {tests.Count} tests.";
                     RequestRefresh?.Invoke();
                 }
             }
@@ -86,12 +75,6 @@ public class TestDetailsTab(TestService testService) : IProjectTab
         }
         catch (OperationCanceledException)
         {
-            // Ignore, likely superceded
-            // However, we should be careful not to unset loading if we were cancelled by a NEW load
-            // But if a NEW load started, it would have set _isLoading=true AFTER we were cancelled?
-            // Wait, LoadAsync runs strictly on UI thread or async?
-            // If we are cancelled by another LoadAsync call, that call proceeds.
-            // We should just return.
             return;
         }
         catch (Exception ex)
@@ -100,10 +83,10 @@ public class TestDetailsTab(TestService testService) : IProjectTab
         }
         finally
         {
-            // Only set not loading if *we* are still the active token
             if (!token.IsCancellationRequested)
             {
                 _isLoading = false;
+                RequestRefresh?.Invoke();
             }
         }
     }
@@ -219,9 +202,23 @@ public class TestDetailsTab(TestService testService) : IProjectTab
                  _ = RunSelectedTestAsync(node);
                  return true;
             }
+
+            if (key.KeyChar == 'e' || key.KeyChar == 'o')
+            {
+                _ = OpenInEditorAsync(node);
+                return true;
+            }
         }
 
         return false;
+    }
+
+    private async Task OpenInEditorAsync(TestNode node)
+    {
+        if (node.FilePath != null)
+        {
+            await editorService.OpenFileAsync(node.FilePath, node.LineNumber);
+        }
     }
 
     // ...
@@ -258,42 +255,57 @@ public class TestDetailsTab(TestService testService) : IProjectTab
 
                 string indent = new(' ', (node.Depth - 1) * 2);
 
-                string iconColor = "yellow";
-                string iconSymbol = node.IsExpanded ? "v" : ">";
-
-                if (!node.IsContainer)
+                string expandIcon = node.IsContainer ? (node.IsExpanded ? "v" : ">") : " ";
+                string statusIcon = node.Status switch
                 {
-                    iconSymbol = node.Status switch
-                    {
-                        TestStatus.Passed => "ok",
-                        TestStatus.Failed => "XX",
-                        TestStatus.Running => "..",
-                        _ => "()"
-                    };
-                    iconColor = node.Status switch
-                    {
-                        TestStatus.Passed => "green",
-                        TestStatus.Failed => "red",
-                        TestStatus.Running => "yellow",
-                        _ => "dim"
-                    };
-                }
+                    TestStatus.Passed => "ok",
+                    TestStatus.Failed => "XX",
+                    TestStatus.Running => "..",
+                    _ => "()"
+                };
+                string statusColor = node.Status switch
+                {
+                    TestStatus.Passed => "green",
+                    TestStatus.Failed => "red",
+                    TestStatus.Running => "yellow",
+                    _ => "dim"
+                };
+
+                string lineIcon = $"[yellow]{expandIcon}[/] [{statusColor}]{statusIcon}[/]";
+                int visibleIconLen = 1 + 1 + statusIcon.Length;
 
                 // Truncation logic
                 int width = Math.Max(10, availableWidth);
-                int prefixLen = indent.Length + 1 + iconSymbol.Length + 1;
+                int prefixLen = indent.Length + 1 + visibleIconLen + 1;
+                
+                string dispName = node.Name;
+                if (node.IsContainer && node.TestCount > 0)
+                {
+                    dispName += $" [dim]({node.TestCount} tests)[/]";
+                }
+
+                // Calculate max name length without markup
+                int cleanNameLen = node.Name.Length + (node.IsContainer && node.TestCount > 0 ? $" ({node.TestCount} tests)".Length : 0);
                 int maxNameLen = width - prefixLen - 1;
 
-                string dispName = node.Name;
-                if (dispName.Length > maxNameLen && maxNameLen > 0)
+                if (cleanNameLen > maxNameLen && maxNameLen > 0)
                 {
-                    dispName = string.Concat(dispName.AsSpan(0, maxNameLen - 1), "…");
+                    // Very rough truncation for names with markup
+                    dispName = node.Name;
+                    if (dispName.Length > maxNameLen - 10)
+                    {
+                         dispName = string.Concat(dispName.AsSpan(0, Math.Max(0, maxNameLen - 13)), "…");
+                    }
+                    if (node.IsContainer && node.TestCount > 0)
+                    {
+                        dispName += $" [dim]({node.TestCount})[/]";
+                    }
                 }
 
                 string style = isSelected ? "[black on blue]" : "";
                 string closeStyle = isSelected ? "[/]" : "";
 
-                treeGrid.AddRow(new Markup($"{style}{indent} [{iconColor}]{iconSymbol}[/] {Markup.Escape(dispName)}{closeStyle}"));
+                treeGrid.AddRow(new Markup($"{style}{indent} {lineIcon} {dispName}{closeStyle}"));
             }
 
             return treeGrid;
@@ -306,15 +318,28 @@ public class TestDetailsTab(TestService testService) : IProjectTab
 
         Interlocked.Increment(ref _runningTestCount);
 
-        // Update status for all involved tests
-        if (node.IsContainer)
+        // Collect tests to run
+        var testsToRun = new List<TestNode>();
+        if (node.IsTest)
         {
-            SetStatusRecursive(node, TestStatus.Running);
+            testsToRun.Add(node);
         }
         else
         {
-            node.Status = TestStatus.Running;
-            UpdateParentStatus(node);
+            testsToRun.AddRange(GetAllLeafNodes(node));
+        }
+
+        if (testsToRun.Count == 0)
+        {
+            Interlocked.Decrement(ref _runningTestCount);
+            return;
+        }
+
+        // Update status for all involved tests
+        foreach (var t in testsToRun)
+        {
+            t.Status = TestStatus.Running;
+            UpdateParentStatus(t);
         }
 
         _statusMessage = $"Running tests ({_runningTestCount} active)...";
@@ -324,44 +349,46 @@ public class TestDetailsTab(TestService testService) : IProjectTab
         {
             try
             {
-                string filter;
-                if (node.IsContainer)
-                {
-                    // Contains filter: "FullyQualifiedName~Namespace"
-                    // Note: TestNode.FullName is the fully qualified name or partial for containers (e.g. Namespace.Class)
-                    // The ~ operator is "contains".
-                    // If we have a container "Lidl.Plus", it matches "Lidl.Plus.Feature.Test"
-                    filter = $"FullyQualifiedName~{node.FullName}";
-                }
-                else
-                {
-                    // Exact match for leaf
-                    filter = $"FullyQualifiedName={node.FullName}";
-                }
+                var filter = testsToRun
+                    .Where(t => t.Uid != null)
+                    .Select(t => new RunRequestNode(t.Uid!, t.Name))
+                    .ToArray();
 
-                 var results = await testService.RunTestAsync(_currentPath, filter);
+                var results = await testService.RunTestsAsync(_currentPath, filter);
 
-                 if (results.Count == 0)
-                 {
-                     if (node.IsContainer)
-                     {
-                        // If container run returned nothing, maybe just cancel running status?
-                        SetStatusRecursive(node, TestStatus.None);
-                     }
-                     else
-                     {
-                         node.Status = TestStatus.None;
-                     }
-                 }
-                 else
-                 {
-                     ProcessTestResults(node, results);
-                 }
+                await foreach (var res in results)
+                {
+                    var targetNode = testsToRun.FirstOrDefault(t => t.Uid == res.Id);
+                    if (targetNode != null)
+                    {
+                        targetNode.Status = res.Outcome.ToLower() switch
+                        {
+                            "passed" => TestStatus.Passed,
+                            "failed" => TestStatus.Failed,
+                            _ => TestStatus.None
+                        };
+                        targetNode.Duration = res.Duration ?? 0;
+                        targetNode.ErrorMessage = string.Join(Environment.NewLine, res.ErrorMessage);
+                        
+                        // We could also consume StackTrace and StdOut if needed, 
+                        // but for now let's just keep the basic status.
+                        // To avoid hanging, we should at least drain them.
+                        _ = Task.Run(async () => { await foreach (var _ in res.StackTrace) ; });
+                        _ = Task.Run(async () => { await foreach (var _ in res.StdOut) ; });
+
+                        UpdateParentStatus(targetNode);
+                        RequestRefresh?.Invoke();
+                    }
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                if (node.IsContainer) SetStatusRecursive(node, TestStatus.Failed);
-                else node.Status = TestStatus.Failed;
+                _statusMessage = $"Run error: {ex.Message}";
+                foreach (var t in testsToRun)
+                {
+                    if (t.Status == TestStatus.Running) t.Status = TestStatus.Failed;
+                    UpdateParentStatus(t);
+                }
             }
             finally
             {
@@ -374,9 +401,6 @@ public class TestDetailsTab(TestService testService) : IProjectTab
                 {
                     _statusMessage = $"Running tests ({_runningTestCount} active)...";
                 }
-
-                // Final status update for parents (important for container run too)
-                if (node.Parent != null) UpdateParentStatus(node.Parent); // If node is root (Tests), parent is null
                 RequestRefresh?.Invoke();
             }
         });
@@ -406,72 +430,18 @@ public class TestDetailsTab(TestService testService) : IProjectTab
 
             foreach (var child in parent.Children)
             {
-                if (child.Status == TestStatus.Running) anyRunning = true;
                 if (child.Status == TestStatus.Failed) anyFailed = true;
+                if (child.Status == TestStatus.Running) anyRunning = true;
                 if (child.Status != TestStatus.Passed) allPassed = false;
                 if (child.Status == TestStatus.None) anyNone = true;
             }
 
-            if (anyRunning) parent.Status = TestStatus.Running;
-            else if (anyFailed) parent.Status = TestStatus.Failed;
+            if (anyFailed) parent.Status = TestStatus.Failed;
+            else if (anyRunning) parent.Status = TestStatus.Running;
             else if (allPassed && !anyNone) parent.Status = TestStatus.Passed;
-            else parent.Status = TestStatus.None; // Mixed or incomplete
+            else parent.Status = TestStatus.None;
 
             parent = parent.Parent;
-        }
-    }
-
-    private void ProcessTestResults(TestNode rootNode, List<TestResult> results)
-    {
-        // Filter out null names if any
-        var resultLookup = results
-            .Where(r => r.FullyQualifiedName != null)
-            .GroupBy(r => r.FullyQualifiedName!)
-            .ToDictionary(g => g.Key, g => g.First());
-
-        // Start from rootNode - in parallel execution rootNode is always a LEAF here
-        // But we keep recursion just in case logic changes or for safety
-        ApplyResultsRecursive(rootNode, resultLookup);
-    }
-
-    private void ApplyResultsRecursive(TestNode node, Dictionary<string, TestResult> lookup)
-    {
-        if (node.IsTest)
-        {
-            if (lookup.TryGetValue(node.FullName, out var res))
-            {
-                 node.Status = res.Outcome;
-                 node.ErrorMessage = res.ErrorMessage;
-                 node.StackTrace = res.StackTrace;
-                 node.Duration = res.Duration;
-                 _testResults[node.FullName] = res;
-            }
-            else
-            {
-                // If it was marked running but not found in results, maybe it was skipped or didn't run?
-                // Leave as is or reset?
-                if (node.Status == TestStatus.Running) node.Status = TestStatus.None;
-            }
-        }
-        else
-        {
-            // Container: status is aggregate of children?
-            // Or just container status.
-            // Let's recurse first
-            bool anyFailed = false;
-            bool allPassed = true;
-
-            foreach(var child in node.Children)
-            {
-                ApplyResultsRecursive(child, lookup);
-                if (child.Status == TestStatus.Failed) anyFailed = true;
-                if (child.Status != TestStatus.Passed) allPassed = false;
-            }
-
-            // Update container status based on children
-            if (anyFailed) node.Status = TestStatus.Failed;
-            else if (allPassed) node.Status = TestStatus.Passed;
-            else node.Status = TestStatus.None; // Mixed or skipped
         }
     }
 
@@ -489,7 +459,10 @@ public class TestDetailsTab(TestService testService) : IProjectTab
 
     private void Traverse(TestNode node)
     {
-        if (node != _root) _visibleNodes.Add(node);
+        if (node != _root)
+        {
+            _visibleNodes.Add(node);
+        }
 
         if (node.IsExpanded)
         {

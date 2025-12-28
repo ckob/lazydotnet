@@ -1,24 +1,25 @@
-using System.Text.RegularExpressions;
-using System.Xml.Linq;
-using CliWrap;
-
 namespace lazydotnet.Services;
 
 public class TestNode
 {
     public string Name { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
+    public string? Uid { get; set; }
     public List<TestNode> Children { get; } = [];
     public TestNode? Parent { get; set; }
     public bool IsContainer { get; set; }
     public bool IsTest { get; set; }
+    public bool IsTheoryContainer { get; set; }
     public bool IsExpanded { get; set; } = true;
     public int Depth { get; set; }
+    public int TestCount { get; set; }
 
     public TestStatus Status { get; set; } = TestStatus.None;
     public string? ErrorMessage { get; set; }
     public string? StackTrace { get; set; }
     public double Duration { get; set; }
+    public string? FilePath { get; set; }
+    public int? LineNumber { get; set; }
 }
 
 public enum TestStatus
@@ -29,103 +30,182 @@ public enum TestStatus
     Failed
 }
 
-public class TestService
+public class TestService(EasyDotnetService easyDotnetService)
 {
-    public async Task<List<string>> DiscoverTestsAsync(string projectOrSolutionPath, CancellationToken cancellationToken = default)
+    public async Task<List<DiscoveredTest>> DiscoverTestsAsync(string projectPath, CancellationToken cancellationToken = default)
     {
-        var testNames = new List<string>();
-        var stdOut = new List<string>();
-
         try
         {
-            var command = Cli.Wrap("dotnet")
-                .WithArguments($"test \"{projectOrSolutionPath}\" --list-tests")
-                .WithValidation(CommandResultValidation.None)
-                .WithStandardOutputPipe(PipeTarget.ToDelegate(stdOut.Add))
-                .WithStandardErrorPipe(PipeTarget.ToDelegate(l => { }));
-
-            await AppCli.RunAsync(command, cancellationToken).ConfigureAwait(false);
-
-            bool startCapturing = false;
-            foreach (var line in stdOut)
+            var results = await easyDotnetService.DiscoverTestsAsync(projectPath);
+            var list = new List<DiscoveredTest>();
+            await foreach (var item in results.WithCancellation(cancellationToken))
             {
-                var trimmed = line.Trim();
-
-                if (trimmed.Contains("The following Tests are available", StringComparison.OrdinalIgnoreCase))
-                {
-                    startCapturing = true;
-                    continue;
-                }
-
-                if (startCapturing)
-                {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    if (line.StartsWith("Build started") ||
-                        line.StartsWith("Determining projects") ||
-                        line.Contains("Microsoft (R) Test Execution Command Line Tool"))
-                    {
-                        continue;
-                    }
-
-                    var cleanedName = Regex.Replace(trimmed, @"\(.*$", "");
-                    cleanedName = cleanedName.Trim();
-
-                    if (string.IsNullOrWhiteSpace(cleanedName)) continue;
-                    if (cleanedName.Contains(' ')) continue;
-
-                    testNames.Add(cleanedName);
-                }
+                list.Add(item);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
+            return list;
         }
         catch (Exception)
         {
+            return [];
         }
-
-        return [.. testNames.Distinct()];
     }
 
-    public TestNode BuildTestTree(List<string> testNames)
+    public TestNode BuildTestTree(List<DiscoveredTest> tests)
     {
         var root = new TestNode { Name = "Tests", IsContainer = true, Depth = 0 };
 
-        foreach (var test in testNames)
+        foreach (var test in tests)
         {
-            var parts = test.Split('.');
+            // The Namespace field from easy-dotnet-server contains the FullyQualifiedName of the method
+            var fqn = test.Namespace ?? test.Id;
+            var parts = fqn.Split('.');
             var current = root;
 
-            for (int i = 0; i < parts.Length; i++)
+            // Build hierarchy up to the class (all parts except the last one which is the method)
+            for (int i = 0; i < parts.Length - 1; i++)
             {
                 var part = parts[i];
-                var isLeaf = i == parts.Length - 1;
-
-                var existingWrapper = current.Children.FirstOrDefault(c => c.Name == part);
-                if (existingWrapper == null)
+                var existing = current.Children.FirstOrDefault(c => c.Name == part && c.IsContainer);
+                if (existing == null)
                 {
-                    existingWrapper = new TestNode
+                    existing = new TestNode
                     {
                         Name = part,
                         Parent = current,
                         Depth = current.Depth + 1,
-                        IsContainer = !isLeaf,
-                        IsTest = isLeaf,
-                        FullName = isLeaf ? test : string.Join(".", parts.Take(i + 1))
+                        IsContainer = true,
+                        FullName = string.Join(".", parts.Take(i + 1))
                     };
-                    current.Children.Add(existingWrapper);
+                    current.Children.Add(existing);
                 }
-                current = existingWrapper;
+                
+                // Track file path for container if not set
+                if (string.IsNullOrEmpty(existing.FilePath))
+                {
+                    existing.FilePath = test.FilePath;
+                    existing.LineNumber = test.LineNumber;
+                }
+                
+                current = existing;
+            }
+
+            var methodName = parts[^1];
+            var shortDisplayName = GetShortDisplayName(test.DisplayName, fqn);
+
+            if (shortDisplayName == methodName)
+            {
+                // Simple test (Fact)
+                var testNode = new TestNode
+                {
+                    Name = methodName,
+                    Parent = current,
+                    Depth = current.Depth + 1,
+                    IsTest = true,
+                    IsContainer = false,
+                    FullName = fqn,
+                    Uid = test.Id,
+                    FilePath = test.FilePath,
+                    LineNumber = test.LineNumber
+                };
+                current.Children.Add(testNode);
+            }
+            else
+            {
+                // Theory case
+                // Find or create the Method container
+                var methodContainer = current.Children.FirstOrDefault(c => c.Name == methodName && c.IsContainer);
+                if (methodContainer == null)
+                {
+                    methodContainer = new TestNode
+                    {
+                        Name = methodName,
+                        Parent = current,
+                        Depth = current.Depth + 1,
+                        IsContainer = true,
+                        IsTheoryContainer = true,
+                        IsExpanded = false,
+                        FullName = fqn,
+                        FilePath = test.FilePath,
+                        LineNumber = test.LineNumber
+                    };
+                    current.Children.Add(methodContainer);
+                }
+
+                // Add the case as a child
+                var caseNode = new TestNode
+                {
+                    Name = shortDisplayName,
+                    Parent = methodContainer,
+                    Depth = methodContainer.Depth + 1,
+                    IsTest = true,
+                    IsContainer = false,
+                    FullName = fqn,
+                    Uid = test.Id,
+                    FilePath = test.FilePath,
+                    LineNumber = test.LineNumber
+                };
+                methodContainer.Children.Add(caseNode);
             }
         }
 
         CompactTree(root);
         SortTree(root);
-        RecalculateDepth(root, 0);
+        RecalculateMetadata(root, 0);
 
         return root;
+    }
+
+    private int RecalculateMetadata(TestNode node, int depth)
+    {
+        node.Depth = depth;
+        if (node.IsTest)
+        {
+            node.TestCount = 1;
+        }
+        else
+        {
+            node.TestCount = 0;
+            foreach (var child in node.Children)
+            {
+                node.TestCount += RecalculateMetadata(child, depth + 1);
+            }
+        }
+        return node.TestCount;
+    }
+
+    private static string GetShortDisplayName(string displayName, string fqn)
+    {
+        if (string.IsNullOrEmpty(displayName))
+            return fqn;
+
+        var methodName = fqn.Split('.').Last();
+
+        // If displayName is exactly the FQN or exactly the methodName, it's a Fact
+        if (displayName == fqn || displayName == methodName)
+        {
+            return methodName;
+        }
+
+        // If it's a Theory case, it usually looks like "MethodName(args)" or "Namespace.Class.MethodName(args)"
+        if (displayName.StartsWith(fqn))
+        {
+            // Case: "Namespace.Class.MethodName(args)"
+            var suffix = displayName[fqn.Length..];
+            if (suffix.StartsWith('(')) return suffix;
+        }
+        
+        if (displayName.StartsWith(methodName))
+        {
+            // Case: "MethodName(args)"
+            var suffix = displayName[methodName.Length..];
+            if (suffix.StartsWith('(')) return suffix;
+        }
+
+        // If DisplayName is already just the method name or something short, keep it
+        if (!displayName.Contains('.'))
+            return displayName;
+
+        return displayName;
     }
 
     private void CompactTree(TestNode node)
@@ -142,7 +222,8 @@ public class TestService
             if (node.Children.Count == 1)
             {
                 var child = node.Children[0];
-                if (child.IsContainer && !child.IsTest)
+                // Only compact namespaces/containers that aren't tests or theories
+                if (child.IsContainer && !child.IsTest && !child.IsTheoryContainer && !node.IsTheoryContainer)
                 {
                     if (node.Depth > 0)
                     {
@@ -160,112 +241,16 @@ public class TestService
         }
     }
 
-    private void RecalculateDepth(TestNode node, int depth)
-    {
-        node.Depth = depth;
-        foreach (var c in node.Children) RecalculateDepth(c, depth + 1);
-    }
-
     private void SortTree(TestNode node)
     {
-        node.Children.Sort((a, b) => string.Compare(a.Name, b.Name));
+        node.Children.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.Ordinal));
         foreach(var child in node.Children) SortTree(child);
     }
 
-    public async Task<List<TestResult>> RunTestAsync(string projectOrPath, string filterExpression)
+    public async Task<IAsyncEnumerable<TestRunResult>> RunTestsAsync(string projectPath, RunRequestNode[] filter)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(tempDir);
-
-        try
-        {
-             var command = Cli.Wrap("dotnet")
-                .WithArguments(args => args
-                    .Add("test")
-                    .Add(projectOrPath)
-                    .Add("--filter")
-                    .Add(filterExpression)
-                    .Add("--results-directory")
-                    .Add(tempDir)
-                    .Add("--logger")
-                    .Add("trx"))
-                .WithValidation(CommandResultValidation.None);
-
-             await AppCli.RunAsync(command).ConfigureAwait(false);
-
-             var trxFiles = Directory.GetFiles(tempDir, "*.trx");
-             var allResults = new List<TestResult>();
-
-             foreach (var trxFile in trxFiles)
-             {
-                 allResults.AddRange(ParseTrx(trxFile));
-             }
-
-             return allResults;
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
-        }
+        // We need a configuration. Default to "Debug" or similar?
+        // easy-dotnet-server might expect it.
+        return await easyDotnetService.RunTestsAsync(projectPath, "Debug", filter);
     }
-
-    private List<TestResult> ParseTrx(string trxPath)
-    {
-        var resultsList = new List<TestResult>();
-        try
-        {
-            var doc = XDocument.Load(trxPath);
-            var ns = doc.Root?.GetDefaultNamespace() ?? XNamespace.None;
-
-            var results = doc.Descendants(ns + "UnitTestResult").ToList();
-
-            foreach (var r in results)
-            {
-                var testName = r.Attribute("testName")?.Value;
-                var cleanedName = testName;
-                if (cleanedName != null)
-                {
-                    cleanedName = Regex.Replace(cleanedName, @"\(.*$", "");
-                }
-
-                var tr = new TestResult { FullyQualifiedName = cleanedName };
-
-                var outcomeAttr = r.Attribute("outcome")?.Value;
-                var durationAttr = r.Attribute("duration")?.Value;
-
-                if (TimeSpan.TryParse(durationAttr, out var ts))
-                {
-                    tr.Duration = ts.TotalMilliseconds;
-                }
-
-                tr.Outcome = outcomeAttr?.ToLower() == "passed" ? TestStatus.Passed : TestStatus.Failed;
-
-                if (tr.Outcome == TestStatus.Failed)
-                {
-                    var output = r.Element(ns + "Output");
-                    var errorInfo = output?.Element(ns + "ErrorInfo");
-                    if (errorInfo != null)
-                    {
-                        tr.ErrorMessage = errorInfo.Element(ns + "Message")?.Value;
-                        tr.StackTrace = errorInfo.Element(ns + "StackTrace")?.Value;
-                    }
-                }
-
-                resultsList.Add(tr);
-            }
-        }
-        catch (Exception)
-        {
-        }
-        return resultsList;
-    }
-}
-
-public class TestResult
-{
-    public string? FullyQualifiedName { get; set; }
-    public TestStatus Outcome { get; set; }
-    public string? ErrorMessage { get; set; }
-    public string? StackTrace { get; set; }
-    public double Duration { get; set; }
 }

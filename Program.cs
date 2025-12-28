@@ -13,6 +13,7 @@ services.AddSingleton<SolutionService>();
 services.AddSingleton<CommandService>();
 services.AddSingleton<TestService>();
 services.AddSingleton<NuGetService>();
+services.AddSingleton<IEditorService, EditorService>();
 services.AddSingleton<ProjectDetailsPane>();
 services.AddSingleton<AppLayout>();
 
@@ -43,7 +44,7 @@ if (solution == null)
     return;
 }
 
-var explorer = new SolutionExplorer(solution);
+var explorer = new SolutionExplorer(solution, serviceProvider.GetRequiredService<IEditorService>());
 var detailsPane = serviceProvider.GetRequiredService<ProjectDetailsPane>();
 var layout = serviceProvider.GetRequiredService<AppLayout>();
 var commandService = serviceProvider.GetRequiredService<CommandService>();

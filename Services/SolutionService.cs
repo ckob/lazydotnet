@@ -52,8 +52,7 @@ public class SolutionService(EasyDotnetService easyDotnetService)
             if (!File.Exists(projectPath))
                 return [];
 
-            var references = await easyDotnetService.ListProjectReferencesAsync(projectPath);
-            return references.Select(Path.GetFileNameWithoutExtension).Where(v => v != null).Cast<string>().ToList();
+            return await easyDotnetService.ListProjectReferencesAsync(projectPath);
         }
         catch
         {

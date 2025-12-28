@@ -195,6 +195,22 @@ public class EasyDotnetService : IAsyncDisposable
             new { projectPath, targetFramework });
     }
 
+    public async Task<IAsyncEnumerable<DiscoveredTest>> DiscoverTestsAsync(string projectPath, string? targetFrameworkMoniker = null, string? configuration = null)
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<DiscoveredTest>>(
+            "test/discover",
+            new { projectPath, targetFrameworkMoniker, configuration });
+    }
+
+    public async Task<IAsyncEnumerable<TestRunResult>> RunTestsAsync(string projectPath, string configuration, RunRequestNode[] filter, string? targetFrameworkMoniker = null)
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<TestRunResult>>(
+            "test/run",
+            new { projectPath, configuration, filter, targetFrameworkMoniker });
+    }
+
     public async Task RestorePackagesAsync(string targetPath)
     {
         await EnsureInitializedAsync();

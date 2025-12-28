@@ -78,3 +78,26 @@ public record DotnetProjectV1(
     string TestCommand,
     bool IsAspireHost
 );
+
+public record DiscoveredTest(
+    string Id,
+    string? Namespace,
+    string Name,
+    string DisplayName,
+    string? FilePath,
+    int? LineNumber
+);
+
+public record RunRequestNode(
+    string Uid,
+    string DisplayName
+);
+
+public record TestRunResult(
+    string Id,
+    string Outcome,
+    long? Duration,
+    IAsyncEnumerable<string> StackTrace,
+    string[] ErrorMessage,
+    IAsyncEnumerable<string> StdOut
+);
