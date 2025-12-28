@@ -33,7 +33,7 @@ public class SolutionService
         {
 
             bool isSolutionFolder = proj.ProjectType == SolutionProjectType.SolutionFolder;
-            string extension = System.IO.Path.GetExtension(proj.AbsolutePath);
+            string extension = Path.GetExtension(proj.AbsolutePath);
             bool isProjectFile = extension.EndsWith("proj", StringComparison.OrdinalIgnoreCase); // csproj, fsproj, etc.
 
             if (!isSolutionFolder && !isProjectFile)

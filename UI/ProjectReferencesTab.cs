@@ -63,9 +63,17 @@ public class ProjectReferencesTab : IProjectTab
 
     public Task<bool> HandleKey(ConsoleKeyInfo key)
     {
-        // No specific actions for references tab yet other than scrolling which is handled by parent/layout
-        // passing MoveUp/MoveDown calls based on keys, but if we want to add specific key handling here we can.
-        // The original implementation didn't have specific keys for this tab besides navigation.
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+            case ConsoleKey.K:
+                MoveUp();
+                return Task.FromResult(true);
+            case ConsoleKey.DownArrow:
+            case ConsoleKey.J:
+                MoveDown();
+                return Task.FromResult(true);
+        }
         return Task.FromResult(false);
     }
 

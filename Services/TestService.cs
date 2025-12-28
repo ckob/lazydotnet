@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CliWrap;
-using CliWrap.EventStream;
 
 namespace lazydotnet.Services;
 

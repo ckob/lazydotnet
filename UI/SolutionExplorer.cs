@@ -144,6 +144,32 @@ public class SolutionExplorer
         }
     }
 
+    public bool HandleInput(ConsoleKeyInfo key)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+            case ConsoleKey.K:
+                MoveUp();
+                return true;
+            case ConsoleKey.DownArrow:
+            case ConsoleKey.J:
+                MoveDown();
+                return true;
+            case ConsoleKey.LeftArrow:
+                Collapse();
+                return true;
+            case ConsoleKey.RightArrow:
+                Expand();
+                return true;
+            case ConsoleKey.Enter:
+            case ConsoleKey.Spacebar:
+                ToggleExpand();
+                return true;
+        }
+        return false;
+    }
+
     public void ToggleExpand()
     {
         var node = GetSelectedNode();

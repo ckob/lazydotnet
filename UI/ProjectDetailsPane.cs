@@ -1,6 +1,4 @@
-using Spectre.Console;
 using Spectre.Console.Rendering;
-using lazydotnet.Services;
 using lazydotnet.UI.Components;
 
 namespace lazydotnet.UI;
@@ -92,8 +90,21 @@ public class ProjectDetailsPane
         }
     }
 
-    public async Task<bool> HandleKey(ConsoleKeyInfo key)
+    public async Task<bool> HandleInput(ConsoleKeyInfo key, AppLayout layout)
     {
+        if (key.Key == ConsoleKey.Tab || key.KeyChar == ']')
+        {
+            NextTab();
+            layout.SetDetailsActiveTab(ActiveTab);
+            return true;
+        }
+        if (key.KeyChar == '[')
+        {
+            PreviousTab();
+            layout.SetDetailsActiveTab(ActiveTab);
+            return true;
+        }
+
         return await _tabInstances[_tabs.ActiveTab].HandleKey(key);
     }
 

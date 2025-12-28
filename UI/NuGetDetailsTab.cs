@@ -119,37 +119,36 @@ public class NuGetDetailsTab() : IProjectTab
     {
          if (_isActionRunning) return true;
 
-        // Lock for mode switching and handling
-        // Note: Some handlers are async. We can't lock around async calls easily.
-        // But we can lock the state check and state updates.
-        // Actually, most handlers just modify state or launch tasks.
+        // Vertical navigation applies to all modes except maybe typing if we want,
+        // but J/K are usually fine if not in a text box.
+        // In SearchMode, we have a text box, so J/K might interfere with typing?
+        // Actually, the original code had J/K in the God method.
+        // If the user types 'j', it adds to search query.
+        // So J/K should ONLY navigate if NOT in SearchMode.
 
-        // We will lock only the synchronous parts.
-        // But wait, if we lock here, we might block GetContent?
-        // Yes, but that's expected.
-
-        // However, we can't 'await' inside a lock.
-        // We need to release lock before awaiting.
-        // Or we rely on lock internal to helpers for state mutation?
-
-        // Let's refactor slightly: lock inside handlers where appropriate.
-        // Or lock here for the dispatch?
-
-        // Simpler: methods like HandleNormalMode modify _appMode and navigate lists.
-        // They should lock.
-
-        switch (_appMode)
+        if (_appMode != AppMode.SearchingNuGet)
         {
-            case AppMode.Normal:
-                return await HandleNormalMode(key);
-            case AppMode.SearchingNuGet:
-                return await HandleSearchMode(key);
-            case AppMode.SelectingVersion:
-                return await HandleVersionMode(key);
-            case AppMode.ConfirmingDelete:
-                return await HandleConfirmDelete(key);
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow:
+                case ConsoleKey.K:
+                    MoveUp();
+                    return true;
+                case ConsoleKey.DownArrow:
+                case ConsoleKey.J:
+                    MoveDown();
+                    return true;
+            }
         }
-        return false;
+
+        return _appMode switch
+        {
+            AppMode.Normal => await HandleNormalMode(key),
+            AppMode.SearchingNuGet => await HandleSearchMode(key),
+            AppMode.SelectingVersion => await HandleVersionMode(key),
+            AppMode.ConfirmingDelete => await HandleConfirmDelete(key),
+            _ => false,
+        };
     }
 
     private async Task<bool> HandleNormalMode(ConsoleKeyInfo key)
@@ -363,7 +362,7 @@ public class NuGetDetailsTab() : IProjectTab
         if (_currentProjectPath == null) return;
 
         _isActionRunning = true;
-        _statusMessage = $"Installing {packageId} {(version ?? "latest")}...";
+        _statusMessage = $"Installing {packageId} {version ?? "latest"}...";
         try
         {
             await NuGetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
@@ -409,7 +408,7 @@ public class NuGetDetailsTab() : IProjectTab
         if (_currentProjectPath == null) return;
 
         var outdated = _nugetList.Items.Where(p => p.IsOutdated).ToList();
-        if (!outdated.Any()) return;
+        if (outdated.Count == 0) return;
 
         _isActionRunning = true;
         try

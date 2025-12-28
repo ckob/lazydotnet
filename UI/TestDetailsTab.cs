@@ -27,7 +27,7 @@ public class TestDetailsTab() : IProjectTab
 
     private CancellationTokenSource? _discoveryCts;
 
-    public static string Title => "Tests";
+    public string Title => "Tests";
 
     public async Task LoadAsync(string projectPath, string projectName)
     {
@@ -157,6 +157,18 @@ public class TestDetailsTab() : IProjectTab
             if (_visibleNodes.Count == 0) return false;
 
             var node = _visibleNodes[_selectedIndex];
+
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow:
+                case ConsoleKey.K:
+                    MoveUp();
+                    return true;
+                case ConsoleKey.DownArrow:
+                case ConsoleKey.J:
+                    MoveDown();
+                    return true;
+            }
 
             // Expand/Collapse
             if (key.Key == ConsoleKey.RightArrow)
@@ -417,7 +429,7 @@ public class TestDetailsTab() : IProjectTab
         }
     }
 
-    private static void ProcessTestResults(TestNode rootNode, List<TestResult> results)
+    private void ProcessTestResults(TestNode rootNode, List<TestResult> results)
     {
         // Filter out null names if any
         var resultLookup = results

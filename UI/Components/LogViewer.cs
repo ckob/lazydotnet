@@ -14,6 +14,28 @@ public class LogViewer
 
     private const int MaxLogLines = 1000;
 
+    public bool HandleInput(ConsoleKeyInfo key)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+            case ConsoleKey.K:
+                MoveUp();
+                return true;
+            case ConsoleKey.DownArrow:
+            case ConsoleKey.J:
+                MoveDown();
+                return true;
+            case ConsoleKey.PageUp:
+                PageUp(10);
+                return true;
+            case ConsoleKey.PageDown:
+                PageDown(10);
+                return true;
+        }
+        return false;
+    }
+
     public void AddLog(string message)
     {
         lock (_lock)
