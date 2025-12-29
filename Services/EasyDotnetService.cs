@@ -15,10 +15,64 @@ public class EasyDotnetService : IAsyncDisposable
     private string? RootDir { get; set; }
     private string? SolutionFile { get; set; }
 
+    public event Action<string>? OnServerOutput;
+
+    private static string GetServerInfoPath()
+    {
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "lazydotnet", "server.info");
+        return path;
+    }
+
     public void InitializeContext(string rootDir, string? solutionFile)
     {
         RootDir = rootDir;
         SolutionFile = solutionFile;
+    }
+
+    private async Task<bool> TryConnectExistingAsync(CancellationToken ct)
+    {
+        var infoPath = GetServerInfoPath();
+        if (!File.Exists(infoPath)) return false;
+
+        try
+        {
+            var pipeName = await File.ReadAllTextAsync(infoPath, ct);
+            if (string.IsNullOrWhiteSpace(pipeName)) return false;
+
+            _pipeStream = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            await _pipeStream.ConnectAsync(200, ct);
+
+            await SetupRpcAsync(ct);
+            return true;
+        }
+        catch
+        {
+            if (_pipeStream != null)
+                await _pipeStream.DisposeAsync();
+            _pipeStream = null;
+            return false;
+        }
+    }
+
+    private async Task SetupRpcAsync(CancellationToken ct)
+    {
+        var formatter = new SystemTextJsonFormatter();
+        formatter.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+
+        var messageHandler = new HeaderDelimitedMessageHandler(_pipeStream!, _pipeStream!, formatter);
+        _jsonRpc = new JsonRpc(messageHandler);
+        _jsonRpc.StartListening();
+
+        var rootDir = RootDir ?? Directory.GetCurrentDirectory();
+        var slnFile = SolutionFile ?? Directory.GetFiles(rootDir, "*.sln").FirstOrDefault();
+
+        var initRequest = new InitializeRequest(
+            new ClientInfo("lazydotnet", "2.0.0"),
+            new ProjectInitializeInfo(rootDir, slnFile),
+            new ClientOptions(new DebuggerOptions(null, true))
+        );
+
+        await _jsonRpc.InvokeWithParameterObjectAsync("initialize", new { request = initRequest }, ct);
     }
 
     private async Task EnsureInitializedAsync()
@@ -33,6 +87,14 @@ public class EasyDotnetService : IAsyncDisposable
                 return;
 
             await CleanupAsync();
+
+            using var startupCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+            if (await TryConnectExistingAsync(startupCts.Token))
+            {
+                OnServerOutput?.Invoke("[Client]: Connected to existing easydotnet server.");
+                return;
+            }
 
             var startInfo = new ProcessStartInfo
             {
@@ -52,40 +114,36 @@ public class EasyDotnetService : IAsyncDisposable
 
             _process.OutputDataReceived += (_, e) =>
             {
+                if (e.Data != null) OnServerOutput?.Invoke($"[Server StdOut]: {e.Data}");
                 if (e.Data?.StartsWith("Named pipe server started: ") == true)
                 {
-                    pipeNameTcs.TrySetResult(e.Data["Named pipe server started: ".Length..].Trim());
+                    var name = e.Data["Named pipe server started: ".Length..].Trim();
+                    pipeNameTcs.TrySetResult(name);
                 }
+            };
+            _process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data != null) OnServerOutput?.Invoke($"[Server StdErr]: {e.Data}");
             };
 
             _process.Start();
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            var pipeName = await pipeNameTcs.Task.WaitAsync(cts.Token);
+            var pipeName = await pipeNameTcs.Task.WaitAsync(startupCts.Token);
 
             _pipeStream = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            await _pipeStream.ConnectAsync(5000, cts.Token);
+            await _pipeStream.ConnectAsync(5000, startupCts.Token);
 
-            var formatter = new SystemTextJsonFormatter();
-            formatter.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+            try
+            {
+                var dir = Path.GetDirectoryName(GetServerInfoPath());
+                if (dir != null) Directory.CreateDirectory(dir);
+                await File.WriteAllTextAsync(GetServerInfoPath(), pipeName, startupCts.Token);
+            }
+            catch { }
 
-            var messageHandler = new HeaderDelimitedMessageHandler(_pipeStream, _pipeStream, formatter);
-            _jsonRpc = new JsonRpc(messageHandler);
-            _jsonRpc.StartListening();
-
-            // Initialize the server
-            var rootDir = RootDir ?? Directory.GetCurrentDirectory();
-            var slnFile = SolutionFile ?? Directory.GetFiles(rootDir, "*.sln").FirstOrDefault();
-
-            var initRequest = new InitializeRequest(
-                new ClientInfo("lazydotnet", "2.0.0"),
-                new ProjectInitializeInfo(rootDir, slnFile),
-                new ClientOptions(new DebuggerOptions(null, true))
-            );
-
-            await _jsonRpc.InvokeWithParameterObjectAsync("initialize", new { request = initRequest }, cts.Token);
+            await SetupRpcAsync(startupCts.Token);
 
             _process.EnableRaisingEvents = true;
             _process.Exited += (sender, args) =>
@@ -115,14 +173,6 @@ public class EasyDotnetService : IAsyncDisposable
 
         if (_process != null)
         {
-            if (!_process.HasExited)
-            {
-                try { _process.Kill(); }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error killing process: {ex.Message}");
-                }
-            }
             _process.Dispose();
             _process = null;
         }
@@ -137,7 +187,7 @@ public class EasyDotnetService : IAsyncDisposable
                 "solution/list-projects",
                 new { solutionFilePath });
 
-            return result ?? [];
+            return result;
         }
         catch (Exception ex)
         {
@@ -154,7 +204,7 @@ public class EasyDotnetService : IAsyncDisposable
             var result = await _jsonRpc!.InvokeWithParameterObjectAsync<List<string>>(
                 "msbuild/list-project-reference",
                 new { projectPath });
-            return result ?? [];
+            return result;
         }
         catch (Exception ex)
         {

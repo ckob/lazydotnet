@@ -18,13 +18,26 @@ public class DashboardScreen : IScreen
     private bool _needsRefresh;
 
     private readonly AppLayout _layout;
+    private readonly SolutionService _solutionService;
+    private readonly string _rootDir;
+    private readonly string? _solutionFile;
 
-    public DashboardScreen(SolutionExplorer explorer, ProjectDetailsPane detailsPane, AppLayout layout, CommandService commandService)
+    public DashboardScreen(
+        SolutionExplorer explorer, 
+        ProjectDetailsPane detailsPane, 
+        AppLayout layout, 
+        CommandService commandService,
+        SolutionService solutionService,
+        string rootDir,
+        string? solutionFile)
     {
         _explorer = explorer;
         _detailsPane = detailsPane;
         _layout = layout;
         _commandService = commandService;
+        _solutionService = solutionService;
+        _rootDir = rootDir;
+        _solutionFile = solutionFile;
         
         _detailsPane.LogAction = msg => _layout.AddLog(msg);
         _detailsPane.RequestRefresh = () => _needsRefresh = true;
@@ -33,6 +46,28 @@ public class DashboardScreen : IScreen
     public void OnEnter()
     {
         _needsRefresh = true;
+
+        // Start loading solution in the background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var solution = await _solutionService.FindAndParseSolutionAsync(_solutionFile ?? _rootDir);
+                if (solution != null)
+                {
+                    _explorer.SetSolution(solution);
+                    _needsRefresh = true;
+                }
+                else
+                {
+                    _layout.AddLog($"[red]No solution found at {_solutionFile ?? _rootDir}[/]");
+                }
+            }
+            catch (Exception ex)
+            {
+                _layout.AddLog($"[red]Error loading solution: {ex.Message}[/]");
+            }
+        });
     }
 
     public bool OnTick()
@@ -138,8 +173,10 @@ public class DashboardScreen : IScreen
             case 2:
                 if (layout.BottomActiveTab == 0)
                     layout.LogViewer.HandleInput(key);
-                else
+                else if (layout.BottomActiveTab == 1)
                     layout.TestOutputViewer.HandleInput(key);
+                else
+                    layout.EasyDotnetOutputViewer.HandleInput(key);
                 break;
         }
 

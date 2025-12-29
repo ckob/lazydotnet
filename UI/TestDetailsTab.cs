@@ -378,12 +378,18 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                             _ => TestStatus.None
                         };
                         targetNode.Duration = res.Duration ?? 0;
-                        targetNode.ErrorMessage = string.Join(Environment.NewLine, res.ErrorMessage);
+                        targetNode.ErrorMessage = res.ErrorMessage != null ? string.Join(Environment.NewLine, res.ErrorMessage) : null;
                         
+                        var stackTrace = new List<string>();
+                        await foreach (var line in res.StackTrace) stackTrace.Add(line);
+                        
+                        var stdOut = new List<string>();
+                        await foreach (var line in res.StdOut) stdOut.Add(line);
+
                         lock (targetNode.OutputLock)
                         {
                             targetNode.Output.Clear();
-                            if (res.ErrorMessage.Length > 0)
+                            if (res.ErrorMessage != null && res.ErrorMessage.Length > 0)
                             {
                                 targetNode.Output.Add(new TestOutputLine("Error:", "red"));
                                 foreach (var err in res.ErrorMessage)
@@ -392,33 +398,16 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                                 }
                                 targetNode.Output.Add(new TestOutputLine(""));
                             }
-                        }
 
-                        // Consume StackTrace and StdOut
-                        var nodeRef = targetNode;
-                        _ = Task.Run(async () => 
-                        { 
-                            await foreach (var line in res.StackTrace) 
+                            foreach (var line in stackTrace) 
                             {
-                                lock (nodeRef.OutputLock)
-                                {
-                                    nodeRef.Output.Add(new TestOutputLine(line, "dim"));
-                                }
-                                RequestRefresh?.Invoke();
+                                targetNode.Output.Add(new TestOutputLine(line, "dim"));
                             }
-                        });
-                        
-                        _ = Task.Run(async () => 
-                        { 
-                            await foreach (var line in res.StdOut) 
+                            foreach (var line in stdOut) 
                             {
-                                lock (nodeRef.OutputLock)
-                                {
-                                    nodeRef.Output.Add(new TestOutputLine(line));
-                                }
-                                RequestRefresh?.Invoke();
+                                targetNode.Output.Add(new TestOutputLine(line));
                             }
-                        });
+                        }
 
                         UpdateParentStatus(targetNode);
                         RequestRefresh?.Invoke();
@@ -427,6 +416,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             }
             catch (Exception ex)
             {
+                File.AppendAllText("debug.log", $"[TestRun Error]: {ex}\n");
                 _statusMessage = $"Run error: {ex.Message}";
                 foreach (var t in testsToRun)
                 {

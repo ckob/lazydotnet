@@ -18,16 +18,20 @@ public class ExplorerNode
 
 public class SolutionExplorer
 {
-    private readonly ExplorerNode _root;
+    private ExplorerNode? _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
     private readonly IEditorService _editorService;
     private int _selectedIndex;
     private int _scrollOffset;
 
-    public SolutionExplorer(SolutionInfo solution, IEditorService editorService)
+    public SolutionExplorer(IEditorService editorService)
+    {
+        _editorService = editorService;
+    }
+
+    public void SetSolution(SolutionInfo solution)
     {
         _root = BuildTree(solution);
-        _editorService = editorService;
         RefreshVisibleNodes();
     }
 
@@ -171,7 +175,10 @@ public class SolutionExplorer
     private void RefreshVisibleNodes()
     {
         _visibleNodes.Clear();
-        Traverse(_root);
+        if (_root != null)
+        {
+            Traverse(_root);
+        }
     }
 
     private void Traverse(ExplorerNode node)
@@ -290,11 +297,13 @@ public class SolutionExplorer
 
     private ExplorerNode GetSelectedNode()
     {
+        if (_root == null) return new ExplorerNode { Name = "Loading..." };
         return _visibleNodes.Count == 0 ? _root : _visibleNodes[_selectedIndex];
     }
 
     public ProjectInfo? GetSelectedProject()
     {
+        if (_root == null) return null;
         var node = GetSelectedNode();
 
         if ((node.IsProject || node.IsSolution) && node.ProjectPath != null)
@@ -306,6 +315,11 @@ public class SolutionExplorer
 
     public IRenderable GetContent(int availableHeight, int availableWidth)
     {
+        if (_root == null)
+        {
+            return new Markup("[yellow]Loading projects...[/]");
+        }
+
         EnsureVisible(availableHeight);
         var grid = new Grid();
         grid.AddColumn();

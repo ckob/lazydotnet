@@ -22,37 +22,46 @@ var serviceProvider = services.BuildServiceProvider();
 var easyDotnetService = serviceProvider.GetRequiredService<EasyDotnetService>();
 var solutionService = serviceProvider.GetRequiredService<SolutionService>();
 
-var targetPath = Directory.GetCurrentDirectory();
+var rootDir = Directory.GetCurrentDirectory();
+string? solutionFile = null;
 
-for (int i = 0; i < args.Length; i++)
+var i = 0;
+while (i < args.Length)
 {
     if (args[i] == "-s" || args[i] == "--solution")
     {
         if (i + 1 < args.Length)
         {
-            targetPath = args[i + 1];
-            i++;
+            var path = args[i + 1];
+            if (File.Exists(path) && path.EndsWith(".sln"))
+            {
+                solutionFile = Path.GetFullPath(path);
+                rootDir = Path.GetDirectoryName(solutionFile) ?? rootDir;
+            }
+            else if (Directory.Exists(path))
+            {
+                rootDir = Path.GetFullPath(path);
+            }
+            i += 2;
+            continue;
         }
     }
+    i++;
 }
 
-var solution = await solutionService.FindAndParseSolutionAsync(targetPath);
+// Initialize service context without blocking
+easyDotnetService.InitializeContext(rootDir, solutionFile);
 
-if (solution == null)
-{
-    AnsiConsole.MarkupLine($"[red]No .sln file found at: {targetPath}[/]");
-    return;
-}
-
-var explorer = new SolutionExplorer(solution, serviceProvider.GetRequiredService<IEditorService>());
+var explorer = new SolutionExplorer(serviceProvider.GetRequiredService<IEditorService>());
 var detailsPane = serviceProvider.GetRequiredService<ProjectDetailsPane>();
 var layout = serviceProvider.GetRequiredService<AppLayout>();
 var commandService = serviceProvider.GetRequiredService<CommandService>();
 
 // Wire up services
 AppCli.OnLog += layout.AddLog;
+easyDotnetService.OnServerOutput += layout.AddEasyDotnetLog;
 
-var dashboard = new DashboardScreen(explorer, detailsPane, layout, commandService);
+var dashboard = new DashboardScreen(explorer, detailsPane, layout, commandService, solutionService, rootDir, solutionFile);
 var host = new AppHost(layout, dashboard);
 
 try

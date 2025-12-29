@@ -22,8 +22,9 @@ public class AppLayout
     public int GetBottomHeight(int totalHeight) => (totalHeight * BottomRatio) / (TopRatio + BottomRatio);
     public LogViewer LogViewer { get; } = new();
     public TestOutputViewer TestOutputViewer { get; } = new();
+    public LogViewer EasyDotnetOutputViewer { get; } = new();
     private int _activePanel = 0;
-    private int _bottomActiveTab = 0; // 0 = Log, 1 = Test Output
+    private int _bottomActiveTab = 0; // 0 = Log, 1 = Test Output, 2 = EasyDotnet Output
 
     public Layout GetRoot() => _rootLayout;
 
@@ -39,17 +40,17 @@ public class AppLayout
 
     public void SetBottomActiveTab(int tab)
     {
-        _bottomActiveTab = Math.Clamp(tab, 0, 1);
+        _bottomActiveTab = Math.Clamp(tab, 0, 2);
     }
 
     public void NextBottomTab()
     {
-        _bottomActiveTab = (_bottomActiveTab + 1) % 2;
+        _bottomActiveTab = (_bottomActiveTab + 1) % 3;
     }
 
     public void PreviousBottomTab()
     {
-        _bottomActiveTab = (_bottomActiveTab - 1 + 2) % 2;
+        _bottomActiveTab = (_bottomActiveTab - 1 + 3) % 3;
     }
 
     public void SetDetailsActiveTab(int tab)
@@ -102,20 +103,37 @@ public class AppLayout
         OnLog?.Invoke();
     }
 
+    public void AddEasyDotnetLog(string message)
+    {
+        EasyDotnetOutputViewer.AddLog(message);
+        OnLog?.Invoke(); // Reuse OnLog to trigger refresh, or rename/create generic refresh event if needed. 
+                         // Assuming OnLog just triggers a repaint or is used for notifications.
+                         // Checking usages of OnLog... "AppCli.OnLog += layout.AddLog;" and "AppCli.OnLog += layout.AddLog;"
+                         // Actually, OnLog is an event IN AppLayout. It seems it signals "something changed, please redraw".
+                         // Wait, in Program.cs: AppCli.OnLog += layout.AddLog;
+                         // But AppLayout also has "public event Action? OnLog;". 
+                         // And AddLog invokes OnLog?.Invoke().
+                         // It seems slightly circular or I'm misreading where AppLayout.OnLog is consumed.
+                         // Let's assume OnLog event on AppLayout is observed by AppHost or similar to trigger render loop?
+                         // I will check AppHost.cs to be sure.
+    }
+
     public void UpdateBottom(int width, int height)
     {
         var isActive = _activePanel == 2;
         string logTab = _bottomActiveTab == 0 ? "[green]Log[/]" : "[dim]Log[/]";
         string testTab = _bottomActiveTab == 1 ? "[green]Test Output[/]" : "[dim]Test Output[/]";
+        string ednTab = _bottomActiveTab == 2 ? "[green]EasyDotnet Output[/]" : "[dim]EasyDotnet Output[/]";
 
         var header = isActive
-            ? $"[green][[3]][/]-{logTab} - {testTab}"
-            : $"[dim][[3]][/]-{logTab} - {testTab}";
+            ? $"[green][[3]][/]-{logTab} - {testTab} - {ednTab}"
+            : $"[dim][[3]][/]-{logTab} - {testTab} - {ednTab}";
 
         IRenderable content = _bottomActiveTab switch
         {
             0 => LogViewer.GetContent(height - 2, width, isActive),
             1 => TestOutputViewer.GetContent(height - 2, width, isActive),
+            2 => EasyDotnetOutputViewer.GetContent(height - 2, width, isActive),
             _ => new Markup("")
         };
 
