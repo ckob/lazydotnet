@@ -1,3 +1,4 @@
+using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -12,14 +13,21 @@ public class AppLayout
 
     private readonly Layout _rootLayout = new Layout("Root")
         .SplitRows(
-            new Layout("Top").SplitColumns(
-                new Layout("Left").Ratio(35),
-                new Layout("Right").Ratio(65)
-            ).Ratio(TopRatio),
-            new Layout("Bottom").Ratio(BottomRatio)
+            new Layout("Main").SplitRows(
+                new Layout("Top").SplitColumns(
+                    new Layout("Left").Ratio(35),
+                    new Layout("Right").Ratio(65)
+                ).Ratio(TopRatio),
+                new Layout("Bottom").Ratio(BottomRatio)
+            ),
+            new Layout("Footer").Size(1)
         );
 
-    public int GetBottomHeight(int totalHeight) => (totalHeight * BottomRatio) / (TopRatio + BottomRatio);
+    public int GetBottomHeight(int totalHeight)
+    {
+        int availableHeight = totalHeight - 1; // Reserved for footer
+        return (availableHeight * BottomRatio) / (TopRatio + BottomRatio);
+    }
     public LogViewer LogViewer { get; } = new();
     public TestOutputViewer TestOutputViewer { get; } = new();
     public LogViewer EasyDotnetOutputViewer { get; } = new();
@@ -145,5 +153,19 @@ public class AppLayout
             .Expand();
 
         _rootLayout["Bottom"].Update(panel);
+    }
+
+    public void UpdateFooter(IEnumerable<KeyBinding> bindings)
+    {
+        var footerBindings = bindings.Where(b => b.ShowInBottomBar).ToList();
+        if (footerBindings.Count == 0)
+        {
+            _rootLayout["Footer"].Update(new Markup(""));
+            return;
+        }
+
+        var segments = footerBindings.Select(b => $"{Markup.Escape(b.Description)}: [blue]{Markup.Escape(b.Label)}[/]");
+        var footerMarkup = " " + string.Join(" [dim]|[/] ", segments);
+        _rootLayout["Footer"].Update(new Markup(footerMarkup));
     }
 }

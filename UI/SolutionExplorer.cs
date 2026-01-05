@@ -1,3 +1,4 @@
+using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.Services;
@@ -16,7 +17,7 @@ public class ExplorerNode
     public ExplorerNode? Parent { get; set; }
 }
 
-public class SolutionExplorer
+public class SolutionExplorer : IKeyBindable
 {
     private ExplorerNode? _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
@@ -190,34 +191,39 @@ public class SolutionExplorer
             Traverse(child);
     }
 
-    public bool HandleInput(ConsoleKeyInfo key)
+    public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        switch (key.Key)
+        yield return new KeyBinding("k", "up", () =>
         {
-            case ConsoleKey.UpArrow:
-            case ConsoleKey.K:
-                MoveUp();
-                return true;
-            case ConsoleKey.DownArrow:
-            case ConsoleKey.J:
-                MoveDown();
-                return true;
-            case ConsoleKey.LeftArrow:
-                Collapse();
-                return true;
-            case ConsoleKey.RightArrow:
-                Expand();
-                return true;
-            case ConsoleKey.Enter:
-            case ConsoleKey.Spacebar:
-                ToggleExpand();
-                return true;
-            case ConsoleKey.E:
-            case ConsoleKey.O:
-                _ = OpenInEditorAsync();
-                return true;
-        }
-        return false;
+            MoveUp();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+
+        yield return new KeyBinding("j", "down", () =>
+        {
+            MoveDown();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+
+        yield return new KeyBinding("←", "collapse", () =>
+        {
+            Collapse();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.LeftArrow, false);
+
+        yield return new KeyBinding("→", "expand", () =>
+        {
+            Expand();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.RightArrow, false);
+
+        yield return new KeyBinding("Enter/Space", "toggle", () =>
+        {
+            ToggleExpand();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
+
+        yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
     }
 
     private async Task OpenInEditorAsync()
@@ -226,39 +232,6 @@ public class SolutionExplorer
         if (node.ProjectPath != null)
         {
             await _editorService.OpenFileAsync(node.ProjectPath);
-        }
-    }
-
-    private void ToggleExpand()
-    {
-        var node = GetSelectedNode();
-        if (node is { IsProject: true, Children.Count: <= 0 }) return;
-        node.IsExpanded = !node.IsExpanded;
-        RefreshVisibleNodes();
-    }
-
-    private void Expand()
-    {
-        var node = GetSelectedNode();
-
-        if (node is { IsProject: true, Children.Count: <= 0 } || node.IsExpanded) return;
-        node.IsExpanded = true;
-        RefreshVisibleNodes();
-    }
-
-    private void Collapse()
-    {
-        var node = GetSelectedNode();
-
-        if (node.IsExpanded && (!node.IsProject || node.Children.Count > 0))
-        {
-            node.IsExpanded = false;
-            RefreshVisibleNodes();
-        }
-        else if (node.Parent != null)
-        {
-             var parentIndex = _visibleNodes.IndexOf(node.Parent);
-             if (parentIndex >= 0) _selectedIndex = parentIndex;
         }
     }
 
@@ -278,6 +251,51 @@ public class SolutionExplorer
             _selectedIndex++;
         }
     }
+
+    private void Collapse()
+    {
+        var node = GetSelectedNode();
+
+        if (node.IsExpanded && (!node.IsProject || node.Children.Count > 0))
+        {
+            node.IsExpanded = false;
+            RefreshVisibleNodes();
+        }
+        else if (node.Parent != null)
+        {
+            var parentIndex = _visibleNodes.IndexOf(node.Parent);
+            if (parentIndex >= 0) _selectedIndex = parentIndex;
+        }
+    }
+
+    private void Expand()
+    {
+        var node = GetSelectedNode();
+
+        if (node is { IsProject: true, Children.Count: <= 0 } || node.IsExpanded) return;
+        node.IsExpanded = true;
+        RefreshVisibleNodes();
+    }
+
+    private void ToggleExpand()
+    {
+        var node = GetSelectedNode();
+        if (node is { IsProject: true, Children.Count: <= 0 }) return;
+        node.IsExpanded = !node.IsExpanded;
+        RefreshVisibleNodes();
+    }
+
+    public bool HandleInput(ConsoleKeyInfo key)
+    {
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
+        {
+            _ = binding.Action();
+            return true;
+        }
+        return false;
+    }
+
 
     private void EnsureVisible(int height)
     {

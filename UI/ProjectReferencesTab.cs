@@ -1,3 +1,4 @@
+using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.Services;
@@ -15,9 +16,40 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
     public string Title => "Project References";
 
+    public IEnumerable<KeyBinding> GetKeyBindings()
+    {
+        yield return new KeyBinding("k", "up", () =>
+        {
+            MoveUp();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+
+        yield return new KeyBinding("j", "down", () =>
+        {
+            MoveDown();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+
+        if (_refsList.SelectedItem != null)
+        {
+            yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
+        }
+    }
+
     public void MoveUp() => _refsList.MoveUp();
 
     public void MoveDown() => _refsList.MoveDown();
+
+    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
+    {
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
+        {
+            await binding.Action();
+            return true;
+        }
+        return false;
+    }
 
     public string? GetScrollIndicator()
     {
@@ -58,26 +90,6 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
                 _isLoading = false;
             }
         }
-    }
-
-    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
-    {
-        switch (key.Key)
-        {
-            case ConsoleKey.UpArrow:
-            case ConsoleKey.K:
-                MoveUp();
-                return true;
-            case ConsoleKey.DownArrow:
-            case ConsoleKey.J:
-                MoveDown();
-                return true;
-            case ConsoleKey.E:
-            case ConsoleKey.O:
-                await OpenInEditorAsync();
-                return true;
-        }
-        return false;
     }
 
     private async Task OpenInEditorAsync()

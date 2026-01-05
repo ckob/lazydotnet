@@ -1,3 +1,4 @@
+using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.Services;
@@ -127,182 +128,138 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         }
     }
 
-    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
+    public IEnumerable<KeyBinding> GetKeyBindings()
     {
-         if (_isActionRunning) return true;
+        if (_isActionRunning) yield break;
 
-        if (_appMode != AppMode.SearchingNuGet)
+        // Navigation (hidden)
+        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown), k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+
+        if (_appMode == AppMode.Normal)
         {
-            switch (key.Key)
+            yield return new KeyBinding("a", "add", () =>
             {
-                case ConsoleKey.UpArrow:
-                case ConsoleKey.K:
-                    MoveUp();
-                    return true;
-                case ConsoleKey.DownArrow:
-                case ConsoleKey.J:
-                    MoveDown();
-                    return true;
-            }
-        }
-
-        return _appMode switch
-        {
-            AppMode.Normal => await HandleNormalModeAsync(key),
-            AppMode.SearchingNuGet => await HandleSearchModeAsync(key),
-            AppMode.SelectingVersion => await HandleVersionModeAsync(key),
-            AppMode.ConfirmingDelete => await HandleConfirmDeleteAsync(key),
-            _ => false,
-        };
-    }
-
-    private async Task<bool> HandleNormalModeAsync(ConsoleKeyInfo key)
-    {
-        switch (key.KeyChar)
-        {
-            case 'a':
                 _appMode = AppMode.SearchingNuGet;
                 _searchQuery = "";
                 _lastSearchQuery = null;
                 _searchList.Clear();
-                return true;
-            case 'u':
-                if (_nugetList.SelectedItem != null && _nugetList.SelectedItem.IsOutdated)
-                {
-                    _ = InstallPackageAsync(_nugetList.SelectedItem.Id, _nugetList.SelectedItem.LatestVersion);
-                }
-                return true;
-            case 'd':
-                if (_nugetList.SelectedItem != null)
-                {
-                    _appMode = AppMode.ConfirmingDelete;
-                }
-                return true;
-            case 'U':
-                _ = UpdateAllOutdatedAsync();
-                return true;
-        }
+                return Task.CompletedTask;
+            }, k => k.KeyChar == 'a');
 
-        if (key.Key == ConsoleKey.Enter)
-        {
             if (_nugetList.SelectedItem != null)
             {
-                _ = ShowVersionsForPackageAsync(_nugetList.SelectedItem.Id);
-            }
-            return true;
-        }
-
-        return false;
-    }
-
-     private async Task<bool> HandleSearchModeAsync(ConsoleKeyInfo key)
-    {
-        if (key.Key == ConsoleKey.Escape)
-        {
-            _appMode = AppMode.Normal;
-            _statusMessage = null;
-            return true;
-        }
-
-        if (key.Key == ConsoleKey.Enter)
-        {
-
-            if (_searchQuery != _lastSearchQuery && !string.IsNullOrWhiteSpace(_searchQuery))
-            {
-                 _ = PerformSearchAsync(_searchQuery);
-                 return true;
-            }
-
-            if (_searchList.Count > 0)
-            {
-
-                var selected = _searchList.SelectedItem;
-                if (selected != null)
+                if (_nugetList.SelectedItem.IsOutdated)
                 {
-                    _ = InstallPackageAsync(selected.Id, null);
+                    yield return new KeyBinding("u", "update", () =>
+                        InstallPackageAsync(_nugetList.SelectedItem.Id, _nugetList.SelectedItem.LatestVersion),
+                        k => k.KeyChar == 'u');
+                }
+
+                yield return new KeyBinding("d", "delete", () =>
+                {
+                    _appMode = AppMode.ConfirmingDelete;
+                    return Task.CompletedTask;
+                }, k => k.KeyChar == 'd');
+
+                yield return new KeyBinding("Enter", "versions", () =>
+                    ShowVersionsForPackageAsync(_nugetList.SelectedItem.Id),
+                    k => k.Key == ConsoleKey.Enter);
+            }
+
+            if (_nugetList.Items.Any(p => p.IsOutdated))
+            {
+                yield return new KeyBinding("U", "update all", UpdateAllOutdatedAsync, k => k.KeyChar == 'U');
+            }
+        }
+        else if (_appMode == AppMode.SearchingNuGet)
+        {
+            yield return new KeyBinding("Esc", "cancel", () =>
+            {
+                _appMode = AppMode.Normal;
+                _statusMessage = null;
+                return Task.CompletedTask;
+            }, k => k.Key == ConsoleKey.Escape);
+
+            yield return new KeyBinding("Enter", "search/install", async () =>
+            {
+                if (_searchQuery != _lastSearchQuery && !string.IsNullOrWhiteSpace(_searchQuery))
+                {
+                    await PerformSearchAsync(_searchQuery);
+                    return;
+                }
+
+                if (_searchList.Count > 0 && _searchList.SelectedItem != null)
+                {
+                    await InstallPackageAsync(_searchList.SelectedItem.Id, null);
                     _appMode = AppMode.Normal;
                     _statusMessage = null;
                 }
-            }
-            else if (!string.IsNullOrWhiteSpace(_searchQuery))
+                else if (!string.IsNullOrWhiteSpace(_searchQuery))
+                {
+                    await PerformSearchAsync(_searchQuery);
+                }
+            }, k => k.Key == ConsoleKey.Enter);
+        }
+        else if (_appMode == AppMode.SelectingVersion)
+        {
+            yield return new KeyBinding("Esc", "cancel", () =>
             {
-                _ = PerformSearchAsync(_searchQuery);
-            }
-            return true;
-        }
-
-        if (key.Key == ConsoleKey.UpArrow || (key.Key == ConsoleKey.P && (key.Modifiers & ConsoleModifiers.Control) != 0))
-        {
-            _searchList.MoveUp();
-            return true;
-        }
-        if (key.Key == ConsoleKey.DownArrow || (key.Key == ConsoleKey.N && (key.Modifiers & ConsoleModifiers.Control) != 0))
-        {
-            _searchList.MoveDown();
-            return true;
-        }
-
-        // Typing logic
-        if (key.Key == ConsoleKey.Backspace && _searchQuery.Length > 0)
-        {
-            _searchQuery = _searchQuery[..^1];
-            return true;
-        }
-        if (!char.IsControl(key.KeyChar))
-        {
-            _searchQuery += key.KeyChar;
-            return true;
-        }
-
-        return true;
-    }
-
-    private async Task<bool> HandleVersionModeAsync(ConsoleKeyInfo key)
-    {
-        if (key.Key == ConsoleKey.Escape)
-        {
-            _appMode = AppMode.Normal;
-            return true;
-        }
-
-        if (key.Key == ConsoleKey.UpArrow)
-        {
-            _versionList.MoveUp();
-            return true;
-        }
-        if (key.Key == ConsoleKey.DownArrow)
-        {
-            _versionList.MoveDown();
-            return true;
-        }
-
-        if (key.Key == ConsoleKey.Enter)
-        {
-            var selectedVersion = _versionList.SelectedItem;
-            var selectedPackage = _nugetList.SelectedItem;
-
-            if (selectedVersion != null && selectedPackage != null)
-            {
-                _ = InstallPackageAsync(selectedPackage.Id, selectedVersion);
                 _appMode = AppMode.Normal;
+                return Task.CompletedTask;
+            }, k => k.Key == ConsoleKey.Escape);
+
+            if (_versionList.SelectedItem != null && _nugetList.SelectedItem != null)
+            {
+                yield return new KeyBinding("Enter", "install version", () =>
+                {
+                    var v = _versionList.SelectedItem;
+                    var p = _nugetList.SelectedItem;
+                    _appMode = AppMode.Normal;
+                    return InstallPackageAsync(p.Id, v);
+                }, k => k.Key == ConsoleKey.Enter);
             }
+        }
+        else if (_appMode == AppMode.ConfirmingDelete)
+        {
+            yield return new KeyBinding("y", "confirm delete", () =>
+            {
+                var p = _nugetList.SelectedItem;
+                _appMode = AppMode.Normal;
+                return p != null ? RemovePackageAsync(p.Id) : Task.CompletedTask;
+            }, k => k.Key == ConsoleKey.Y);
+
+            yield return new KeyBinding("any", "cancel", () =>
+            {
+                _appMode = AppMode.Normal;
+                return Task.CompletedTask;
+            }, k => !char.IsControl(k.KeyChar) && k.Key != ConsoleKey.Y);
+        }
+    }
+
+    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
+    {
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
+        {
+            await binding.Action();
             return true;
         }
 
-        return true;
-    }
-
-    private Task<bool> HandleConfirmDeleteAsync(ConsoleKeyInfo key)
-    {
-        if (key.Key == ConsoleKey.Y)
+        if (_appMode == AppMode.SearchingNuGet && !char.IsControl(key.KeyChar))
         {
-             _ = RemovePackageAsync(_nugetList.SelectedItem!.Id);
-             _appMode = AppMode.Normal;
-             return Task.FromResult(true);
+             if (key.Key == ConsoleKey.Backspace && _searchQuery.Length > 0)
+             {
+                 _searchQuery = _searchQuery[..^1];
+             }
+             else if (!char.IsControl(key.KeyChar))
+             {
+                 _searchQuery += key.KeyChar;
+             }
+             return true;
         }
 
-        _appMode = AppMode.Normal;
-        return Task.FromResult(true);
+        return false;
     }
 
     // Actions

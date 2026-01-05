@@ -36,6 +36,8 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                         {
                             int h = _layout.GetBottomHeight(Console.WindowHeight);
                             _layout.UpdateBottom(Console.WindowWidth, h);
+                            if (_currentScreen != null)
+                                _layout.UpdateFooter(_currentScreen.GetKeyBindings());
                             ctx.Refresh();
                         }
                     };
@@ -88,6 +90,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                                     _currentScreen.Render(_layout, width, height);
                                     int bottomH = _layout.GetBottomHeight(height);
                                     _layout.UpdateBottom(width, bottomH);
+                                    _layout.UpdateFooter(_currentScreen.GetKeyBindings());
                                     ctx.Refresh();
                                 }
                             }

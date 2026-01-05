@@ -1,10 +1,11 @@
 using System.Text.RegularExpressions;
+using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
 namespace lazydotnet.UI.Components;
 
-public class LogViewer
+public class LogViewer : IKeyBindable
 {
     private readonly List<string> _logs = [];
     private readonly Lock _lock = new();
@@ -14,24 +15,21 @@ public class LogViewer
 
     private const int MaxLogLines = 1000;
 
+    public IEnumerable<KeyBinding> GetKeyBindings()
+    {
+        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown), k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+        yield return new KeyBinding("PgUp", "page up", () => Task.Run(() => PageUp(10)), k => k.Key == ConsoleKey.PageUp, false);
+        yield return new KeyBinding("PgDn", "page down", () => Task.Run(() => PageDown(10)), k => k.Key == ConsoleKey.PageDown, false);
+    }
+
     public bool HandleInput(ConsoleKeyInfo key)
     {
-        switch (key.Key)
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
         {
-            case ConsoleKey.UpArrow:
-            case ConsoleKey.K:
-                MoveUp();
-                return true;
-            case ConsoleKey.DownArrow:
-            case ConsoleKey.J:
-                MoveDown();
-                return true;
-            case ConsoleKey.PageUp:
-                PageUp(10);
-                return true;
-            case ConsoleKey.PageDown:
-                PageDown(10);
-                return true;
+            _ = binding.Action();
+            return true;
         }
         return false;
     }

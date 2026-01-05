@@ -1,15 +1,22 @@
+using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.Services;
 
 namespace lazydotnet.UI.Components;
 
-public class TestOutputViewer
+public class TestOutputViewer : IKeyBindable
 {
     private List<TestOutputLine> _lines = [];
     private int _scrollOffset = 0;
     private int _selectedLogicalIndex = 0; 
     private readonly Lock _lock = new();
+
+    public IEnumerable<KeyBinding> GetKeyBindings()
+    {
+        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown), k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+    }
 
     public void SetOutput(List<TestOutputLine> lines)
     {
@@ -21,16 +28,11 @@ public class TestOutputViewer
 
     public bool HandleInput(ConsoleKeyInfo key)
     {
-        switch (key.Key)
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
         {
-            case ConsoleKey.UpArrow:
-            case ConsoleKey.K:
-                MoveUp();
-                return true;
-            case ConsoleKey.DownArrow:
-            case ConsoleKey.J:
-                MoveDown();
-                return true;
+            _ = binding.Action();
+            return true;
         }
         return false;
     }

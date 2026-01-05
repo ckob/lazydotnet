@@ -1,10 +1,11 @@
+using lazydotnet.Core;
 using Spectre.Console.Rendering;
 using lazydotnet.UI.Components;
 using lazydotnet.Services;
 
 namespace lazydotnet.UI;
 
-public class ProjectDetailsPane
+public class ProjectDetailsPane : IKeyBindable
 {
     private readonly TabbedPane _tabs;
     private readonly NuGetDetailsTab _nugetTab;
@@ -101,22 +102,37 @@ public class ProjectDetailsPane
         }
     }
 
-    public async Task<bool> HandleInputAsync(ConsoleKeyInfo key, AppLayout layout)
+    public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        if (key.Key == ConsoleKey.Tab || key.KeyChar == ']')
-        {
-            NextTab();
-            layout.SetDetailsActiveTab(ActiveTab);
-            return true;
-        }
-        if (key.KeyChar == '[')
+        yield return new KeyBinding("[", "prev tab", () =>
         {
             PreviousTab();
+            return Task.CompletedTask;
+        }, k => k.KeyChar == '[');
+
+        yield return new KeyBinding("]", "next tab", () =>
+        {
+            NextTab();
+            return Task.CompletedTask;
+        }, k => k.KeyChar == ']' || k.Key == ConsoleKey.Tab);
+
+        var activeTab = _tabInstances[_tabs.ActiveTab];
+        foreach (var b in activeTab.GetKeyBindings())
+        {
+            yield return b;
+        }
+    }
+
+    public async Task<bool> HandleInputAsync(ConsoleKeyInfo key, AppLayout layout)
+    {
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
+        {
+            await binding.Action();
             layout.SetDetailsActiveTab(ActiveTab);
             return true;
         }
-
-        return await _tabInstances[_tabs.ActiveTab].HandleKeyAsync(key);
+        return false;
     }
 
     public IRenderable GetContent(int availableHeight, int availableWidth)

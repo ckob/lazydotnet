@@ -122,62 +122,77 @@ public class DashboardScreen : IScreen
         return result;
     }
 
+    public IEnumerable<KeyBinding> GetKeyBindings()
+    {
+        yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null), k => k.Key == ConsoleKey.Q);
+        yield return new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.D1 || k.Key == ConsoleKey.D2 || k.Key == ConsoleKey.D3);
+        yield return new KeyBinding("b", "build", () => HandleBuildAsync(_layout), k => k.Key == ConsoleKey.B);
+
+        switch (_layout.ActivePanel)
+        {
+            case 0:
+                foreach (var b in _explorer.GetKeyBindings())
+                {
+                    yield return b;
+                }
+                break;
+            case 1:
+                foreach (var b in _detailsPane.GetKeyBindings())
+                {
+                    yield return b;
+                }
+                break;
+            case 2:
+                IEnumerable<KeyBinding>? subBindings = _layout.BottomActiveTab switch
+                {
+                    0 => _layout.LogViewer.GetKeyBindings(),
+                    1 => _layout.TestOutputViewer.GetKeyBindings(),
+                    2 => _layout.EasyDotnetOutputViewer.GetKeyBindings(),
+                    _ => null
+                };
+
+                if (subBindings != null)
+                {
+                    yield return new KeyBinding("[", "prev tab", () =>
+                    {
+                        _layout.PreviousBottomTab();
+                        return Task.CompletedTask;
+                    }, k => k.KeyChar == '[');
+
+                    yield return new KeyBinding("]", "next tab", () =>
+                    {
+                        _layout.NextBottomTab();
+                        return Task.CompletedTask;
+                    }, k => k.KeyChar == ']');
+
+                    foreach (var b in subBindings)
+                    {
+                        yield return b;
+                    }
+                }
+                break;
+        }
+    }
+
     public async Task<IScreen?> HandleInputAsync(ConsoleKeyInfo key, AppLayout layout)
     {
         _needsRefresh = true;
 
-        // 1. Handle Global Keys first
-        switch (key.Key)
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
         {
-            case ConsoleKey.Q:
-                return null;
-            case ConsoleKey.D1:
-                layout.SetActivePanel(0);
-                return this;
-            case ConsoleKey.D2:
-                layout.SetActivePanel(1);
-                return this;
-            case ConsoleKey.D3:
-                layout.SetActivePanel(2);
-                return this;
-            case ConsoleKey.B:
-                await HandleBuildAsync(layout);
-                return this;
-        }
-
-        // Handle Tab switching for panels
-        if (key.KeyChar == '[' || key.KeyChar == ']')
-        {
-            if (layout.ActivePanel == 1)
+            if (binding.Label == "1-3")
             {
-                await _detailsPane.HandleInputAsync(key, layout);
+                if (key.Key == ConsoleKey.D1) layout.SetActivePanel(0);
+                else if (key.Key == ConsoleKey.D2) layout.SetActivePanel(1);
+                else if (key.Key == ConsoleKey.D3) layout.SetActivePanel(2);
                 return this;
             }
-            if (layout.ActivePanel == 2)
-            {
-                if (key.KeyChar == '[') layout.PreviousBottomTab();
-                else layout.NextBottomTab();
-                return this;
-            }
-        }
+            
+            if (binding.Label == "q") return null;
 
-        // 2. Delegate to active panel
-        switch (layout.ActivePanel)
-        {
-            case 0:
-                _explorer.HandleInput(key);
-                break;
-            case 1:
-                await _detailsPane.HandleInputAsync(key, layout);
-                break;
-            case 2:
-                if (layout.BottomActiveTab == 0)
-                    layout.LogViewer.HandleInput(key);
-                else if (layout.BottomActiveTab == 1)
-                    layout.TestOutputViewer.HandleInput(key);
-                else
-                    layout.EasyDotnetOutputViewer.HandleInput(key);
-                break;
+            await binding.Action();
+            return this;
         }
 
         return this;
@@ -226,6 +241,8 @@ public class DashboardScreen : IScreen
     {
         _lastWidth = width;
         _lastHeight = height;
+
+        layout.SetDetailsActiveTab(_detailsPane.ActiveTab);
 
         int bottomH = layout.GetBottomHeight(height);
         int topH = height - bottomH;

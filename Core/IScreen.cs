@@ -3,7 +3,7 @@ using lazydotnet.UI;
 
 namespace lazydotnet.Core;
 
-public interface IScreen
+public interface IScreen : IKeyBindable
 {
     void OnEnter();
     bool OnTick();

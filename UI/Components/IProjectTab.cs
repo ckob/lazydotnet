@@ -1,8 +1,9 @@
+using lazydotnet.Core;
 using Spectre.Console.Rendering;
 
 namespace lazydotnet.UI.Components;
 
-public interface IProjectTab
+public interface IProjectTab : IKeyBindable
 {
     Action? RequestRefresh { get; set; }
     string Title { get; }

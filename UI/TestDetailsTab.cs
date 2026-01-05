@@ -1,3 +1,4 @@
+using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.Services;
@@ -105,12 +106,85 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         }
     }
 
+    public IEnumerable<KeyBinding> GetKeyBindings()
+    {
+        if (_isLoading || _isRunningTests) yield break;
+
+        yield return new KeyBinding("k", "up", () =>
+        {
+            MoveUp();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+
+        yield return new KeyBinding("j", "down", () =>
+        {
+            MoveDown();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+
+        if (_visibleNodes.Count == 0) yield break;
+
+        var node = _visibleNodes[_selectedIndex];
+
+        yield return new KeyBinding("→", "expand", () =>
+        {
+            if (node.IsContainer && !node.IsExpanded)
+            {
+                node.IsExpanded = true;
+                RefreshVisibleNodes();
+            }
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.RightArrow, false);
+
+        yield return new KeyBinding("←", "collapse", () =>
+        {
+            if (node.IsContainer && node.IsExpanded)
+            {
+                node.IsExpanded = false;
+                RefreshVisibleNodes();
+            }
+            else if (node.Parent != null)
+            {
+                var idx = _visibleNodes.IndexOf(node.Parent);
+                if (idx != -1)
+                {
+                    _selectedIndex = idx;
+                    if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
+                }
+            }
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.LeftArrow, false);
+
+        yield return new KeyBinding("Enter/Space", "toggle", () =>
+        {
+            if (node.IsContainer)
+            {
+                node.IsExpanded = !node.IsExpanded;
+                RefreshVisibleNodes();
+            }
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar);
+
+        yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.KeyChar == 'r' || k.KeyChar == 'R');
+        yield return new KeyBinding("e/o", "open", () => OpenInEditorAsync(node), k => k.KeyChar == 'e' || k.KeyChar == 'o');
+    }
+
+    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
+    {
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
+        {
+            await binding.Action();
+            return true;
+        }
+        return false;
+    }
+
     public void MoveUp()
     {
         if (_selectedIndex > 0)
         {
             _selectedIndex--;
-             // Ensure visible logic is usually in GetContent but let's sync offset
             if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
         }
     }
@@ -120,13 +194,8 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         if (_selectedIndex < _visibleNodes.Count - 1)
         {
             _selectedIndex++;
-            // detailed visibility logic depends on height, so we defer to GetContent
-            // or we assume a safe check if we knew height.
-            // For now, GetContent handles the "into view" logic well enough for down.
         }
     }
-
-    // ...
 
     public string? GetScrollIndicator()
     {
@@ -134,84 +203,6 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         return $"{_selectedIndex + 1} of {_visibleNodes.Count}";
     }
 
-    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
-    {
-        if (_isLoading || _isRunningTests) return true;
-
-        lock (_lock)
-        {
-            if (_visibleNodes.Count == 0) return false;
-
-            var node = _visibleNodes[_selectedIndex];
-
-            switch (key.Key)
-            {
-                case ConsoleKey.UpArrow:
-                case ConsoleKey.K:
-                    MoveUp();
-                    return true;
-                case ConsoleKey.DownArrow:
-                case ConsoleKey.J:
-                    MoveDown();
-                    return true;
-            }
-
-            // Expand/Collapse
-            if (key.Key == ConsoleKey.RightArrow)
-            {
-                 if (node.IsContainer && !node.IsExpanded)
-                 {
-                     node.IsExpanded = true;
-                     RefreshVisibleNodes();
-                 }
-                 return true;
-            }
-            if (key.Key == ConsoleKey.LeftArrow)
-            {
-                 if (node.IsContainer && node.IsExpanded)
-                 {
-                     node.IsExpanded = false;
-                     RefreshVisibleNodes();
-                 }
-                 else if (node.Parent != null)
-                 {
-                     // Jump to parent
-                     var idx = _visibleNodes.IndexOf(node.Parent);
-                     if (idx != -1)
-                     {
-                         _selectedIndex = idx;
-                         if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
-                     }
-                 }
-                 return true;
-            }
-
-            if (key.Key == ConsoleKey.Spacebar || key.Key == ConsoleKey.Enter)
-            {
-                 if (node.IsContainer)
-                 {
-                     node.IsExpanded = !node.IsExpanded;
-                     RefreshVisibleNodes();
-                 }
-                 return true;
-            }
-
-            if (key.KeyChar == 'r' || key.KeyChar == 'R')
-            {
-                 // Run leaf or container
-                 _ = RunSelectedTestAsync(node);
-                 return true;
-            }
-
-            if (key.KeyChar == 'e' || key.KeyChar == 'o')
-            {
-                _ = OpenInEditorAsync(node);
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     private async Task OpenInEditorAsync(TestNode node)
     {
