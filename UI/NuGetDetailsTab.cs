@@ -39,6 +39,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
     public Action<string>? LogAction { get; set; }
     public Action? RequestRefresh { get; set; }
     public Action<Modal>? RequestModal { get; set; }
+    public Action<string>? RequestSelectProject { get; set; }
 
     public string Title => "NuGets";
 
@@ -492,7 +493,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
              table.AddColumn("Id");
              table.AddColumn("Latest");
 
-             int visibleRows = Math.Max(1, height - 3);
+             int visibleRows = Math.Max(1, height - 1);
              var (start, end) = _searchList.GetVisibleRange(visibleRows);
 
              for(int i = start; i < end; i++)

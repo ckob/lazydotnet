@@ -46,7 +46,8 @@ public class AppLayout
     public int GetBottomHeight(int totalHeight)
     {
         int availableHeight = totalHeight - 1; // Reserved for footer
-        return (availableHeight * BottomRatio) / (TopRatio + BottomRatio);
+        int topHeight = (availableHeight * TopRatio) / (TopRatio + BottomRatio);
+        return availableHeight - topHeight;
     }
     public LogViewer LogViewer { get; } = new();
     public TestOutputViewer TestOutputViewer { get; } = new();

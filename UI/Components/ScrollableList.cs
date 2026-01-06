@@ -3,7 +3,7 @@ namespace lazydotnet.UI.Components;
 public class ScrollableList<T>
 {
     private List<T> _items = [];
-    private int _selectedIndex = 0;
+    private int _selectedIndex = -1;
     private int _scrollOffset = 0;
 
     public IReadOnlyList<T> Items => _items;
@@ -15,12 +15,13 @@ public class ScrollableList<T>
     public void SetItems(List<T> items)
     {
         _items = items;
-        Reset();
+        if (_selectedIndex >= _items.Count)
+            _selectedIndex = _items.Count > 0 ? 0 : -1;
     }
 
     public void Reset()
     {
-        _selectedIndex = 0;
+        _selectedIndex = -1;
         _scrollOffset = 0;
     }
 
@@ -32,6 +33,11 @@ public class ScrollableList<T>
 
     public bool MoveUp()
     {
+        if (_selectedIndex == -1 && _items.Count > 0)
+        {
+            _selectedIndex = _items.Count - 1;
+            return true;
+        }
         if (_selectedIndex > 0)
         {
             _selectedIndex--;
@@ -54,6 +60,11 @@ public class ScrollableList<T>
     {
         if (visibleRows <= 0) return;
 
+        if (_selectedIndex == -1)
+        {
+            _scrollOffset = 0;
+            return;
+        }
 
         if (_selectedIndex < _scrollOffset)
             _scrollOffset = _selectedIndex;

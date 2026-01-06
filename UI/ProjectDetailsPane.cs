@@ -24,6 +24,7 @@ public class ProjectDetailsPane : IKeyBindable
 
     public Action? RequestRefresh { get; set; }
     public Action<Modal>? RequestModal { get; set; }
+    public Action<string>? RequestSelectProject { get; set; }
 
     public ProjectDetailsPane(SolutionService solutionService, NuGetService nuGetService, TestService testService, IEditorService editorService)
     {
@@ -39,6 +40,7 @@ public class ProjectDetailsPane : IKeyBindable
         {
             tab.RequestRefresh = () => RequestRefresh?.Invoke();
             tab.RequestModal = m => RequestModal?.Invoke(m);
+            tab.RequestSelectProject = p => RequestSelectProject?.Invoke(p);
         }
 
         _tabs = new TabbedPane(_refsTab.Title, _nugetTab.Title, _testsTab.Title);

@@ -53,7 +53,13 @@ public class LogViewer : IKeyBindable
         {
             if (_logs.Count == 0) return;
             
-            var index = _selectedLogicalIndex == -1 ? _logs.Count - 1 : _selectedLogicalIndex;
+            if (_selectedLogicalIndex == -1)
+            {
+                _selectedLogicalIndex = _logs.Count - 1;
+                return;
+            }
+
+            var index = _selectedLogicalIndex;
             while (index > 0)
             {
                 index--;
@@ -63,8 +69,6 @@ public class LogViewer : IKeyBindable
                     return;
                 }
             }
-            
-            _selectedLogicalIndex = 0;
         }
     }
 

@@ -48,6 +48,12 @@ public class DashboardScreen : IScreen
             _activeModal = m;
             _needsRefresh = true;
         };
+        _detailsPane.RequestSelectProject = p =>
+        {
+            _explorer.SelectProjectByPath(p);
+            _layout.SetActivePanel(0);
+            _needsRefresh = true;
+        };
     }
 
     public void OnEnter()
@@ -360,7 +366,8 @@ public class DashboardScreen : IScreen
             layout.UpdateModal(null);
 
             int bottomH = layout.GetBottomHeight(height);
-            int topH = height - bottomH;
+            int mainHeight = height - 1; // Subtract footer
+            int topH = mainHeight - bottomH;
 
             // Subtract 2 for panel borders
             int contentTopH = Math.Max(1, topH - 2);

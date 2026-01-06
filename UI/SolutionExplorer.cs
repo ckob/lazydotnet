@@ -22,7 +22,7 @@ public class SolutionExplorer : IKeyBindable
     private ExplorerNode? _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
     private readonly IEditorService _editorService;
-    private int _selectedIndex;
+    private int _selectedIndex = -1;
     private int _scrollOffset;
 
     public SolutionExplorer(IEditorService editorService)
@@ -237,6 +237,11 @@ public class SolutionExplorer : IKeyBindable
 
     private void MoveUp()
     {
+        if (_selectedIndex == -1 && _visibleNodes.Count > 0)
+        {
+            _selectedIndex = _visibleNodes.Count - 1;
+            return;
+        }
         if (_selectedIndex <= 0)
             return;
         _selectedIndex--;
@@ -246,6 +251,11 @@ public class SolutionExplorer : IKeyBindable
 
     private void MoveDown()
     {
+        if (_selectedIndex == -1 && _visibleNodes.Count > 0)
+        {
+            _selectedIndex = 0;
+            return;
+        }
         if (_selectedIndex < _visibleNodes.Count - 1)
         {
             _selectedIndex++;
@@ -300,6 +310,14 @@ public class SolutionExplorer : IKeyBindable
     private void EnsureVisible(int height)
     {
         var contentHeight = Math.Max(1, height);
+        
+        // Handle unselected state
+        if (_selectedIndex == -1)
+        {
+            _scrollOffset = 0;
+            return;
+        }
+
         if (_selectedIndex < _scrollOffset)
         {
             _scrollOffset = _selectedIndex;
@@ -311,12 +329,52 @@ public class SolutionExplorer : IKeyBindable
 
         if (_scrollOffset > _visibleNodes.Count - contentHeight)
             _scrollOffset = Math.Max(0, _visibleNodes.Count - contentHeight);
+        
+        if (_scrollOffset < 0) _scrollOffset = 0;
     }
 
     private ExplorerNode GetSelectedNode()
     {
         if (_root == null) return new ExplorerNode { Name = "Loading..." };
-        return _visibleNodes.Count == 0 ? _root : _visibleNodes[_selectedIndex];
+        if (_visibleNodes.Count == 0) return _root;
+        if (_selectedIndex == -1) return _visibleNodes[0];
+        return _visibleNodes[_selectedIndex];
+    }
+
+    public void SelectProjectByPath(string path)
+    {
+        if (_root == null) return;
+
+        // Flatten the tree to search all nodes, including collapsed ones
+        var allNodes = new List<ExplorerNode>();
+        void CollectAll(ExplorerNode node)
+        {
+            allNodes.Add(node);
+            foreach (var child in node.Children) CollectAll(child);
+        }
+        CollectAll(_root);
+
+        var targetNode = allNodes.FirstOrDefault(n => n.IsProject && n.ProjectPath != null &&
+            Path.GetFullPath(n.ProjectPath).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+
+        if (targetNode != null)
+        {
+            // Expand all parents
+            var current = targetNode.Parent;
+            while (current != null)
+            {
+                current.IsExpanded = true;
+                current = current.Parent;
+            }
+
+            RefreshVisibleNodes();
+
+            var index = _visibleNodes.IndexOf(targetNode);
+            if (index >= 0)
+            {
+                _selectedIndex = index;
+            }
+        }
     }
 
     public ProjectInfo? GetSelectedProject()

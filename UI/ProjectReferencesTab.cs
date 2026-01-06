@@ -14,6 +14,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
     public Action? RequestRefresh { get; set; }
     public Action<Modal>? RequestModal { get; set; }
+    public Action<string>? RequestSelectProject { get; set; }
 
     public string Title => "Project References";
 
@@ -35,6 +36,11 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
         if (_refsList.SelectedItem != null)
         {
+            yield return new KeyBinding("Enter", "select in explorer", () =>
+            {
+                RequestSelectProject?.Invoke(_refsList.SelectedItem);
+                return Task.CompletedTask;
+            }, k => k.Key == ConsoleKey.Enter);
             yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
             yield return new KeyBinding("d", "delete", RemoveReferenceAsync, k => k.KeyChar == 'd');
         }

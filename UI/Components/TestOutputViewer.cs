@@ -9,7 +9,7 @@ public class TestOutputViewer : IKeyBindable
 {
     private List<TestOutputLine> _lines = [];
     private int _scrollOffset = 0;
-    private int _selectedLogicalIndex = 0; 
+    private int _selectedLogicalIndex = -1; 
     private readonly Lock _lock = new();
 
     public IEnumerable<KeyBinding> GetKeyBindings()
@@ -23,6 +23,8 @@ public class TestOutputViewer : IKeyBindable
         lock (_lock)
         {
             _lines = lines;
+            if (_selectedLogicalIndex >= _lines.Count)
+                _selectedLogicalIndex = _lines.Count > 0 ? _lines.Count - 1 : -1;
         }
     }
 
@@ -42,6 +44,12 @@ public class TestOutputViewer : IKeyBindable
         lock (_lock)
         {
             if (_lines.Count == 0) return;
+
+            if (_selectedLogicalIndex == -1)
+            {
+                _selectedLogicalIndex = _lines.Count - 1;
+                return;
+            }
             
             var index = _selectedLogicalIndex;
             while (index > 0)
@@ -62,8 +70,8 @@ public class TestOutputViewer : IKeyBindable
     {
         lock (_lock)
         {
-            if (_lines.Count == 0) return;
-            
+            if (_lines.Count == 0 || _selectedLogicalIndex == -1) return;
+
             var index = _selectedLogicalIndex;
             while (index < _lines.Count - 1)
             {
@@ -74,6 +82,8 @@ public class TestOutputViewer : IKeyBindable
                     return;
                 }
             }
+
+            _selectedLogicalIndex = -1;
         }
     }
 

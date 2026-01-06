@@ -10,7 +10,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 {
     private TestNode? _root;
     private readonly List<TestNode> _visibleNodes = [];
-    private int _selectedIndex = 0;
+    private int _selectedIndex = -1;
     private int _scrollOffset = 0;
     private string? _currentPath;
 
@@ -28,6 +28,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
     public Action? RequestRefresh { get; set; }
     public Action<Modal>? RequestModal { get; set; }
+    public Action<string>? RequestSelectProject { get; set; }
 
     public string Title => "Tests";
 
@@ -125,7 +126,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
         if (_visibleNodes.Count == 0) yield break;
 
-        var node = _visibleNodes[_selectedIndex];
+        var node = _selectedIndex == -1 ? _visibleNodes[0] : _visibleNodes[_selectedIndex];
 
         yield return new KeyBinding("→", "expand", () =>
         {
@@ -183,6 +184,11 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
     public void MoveUp()
     {
+        if (_selectedIndex == -1 && _visibleNodes.Count > 0)
+        {
+            _selectedIndex = _visibleNodes.Count - 1;
+            return;
+        }
         if (_selectedIndex > 0)
         {
             _selectedIndex--;
@@ -192,6 +198,11 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
     public void MoveDown()
     {
+        if (_selectedIndex == -1 && _visibleNodes.Count > 0)
+        {
+            _selectedIndex = 0;
+            return;
+        }
         if (_selectedIndex < _visibleNodes.Count - 1)
         {
             _selectedIndex++;
@@ -225,6 +236,21 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         }
     }
 
+    private void EnsureVisible(int height)
+    {
+        int contentHeight = Math.Max(1, height);
+        if (_selectedIndex == -1)
+        {
+            _scrollOffset = 0;
+            return;
+        }
+
+        if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
+        if (_selectedIndex >= _scrollOffset + contentHeight) _scrollOffset = _selectedIndex - contentHeight + 1;
+        
+        if (_scrollOffset < 0) _scrollOffset = 0;
+    }
+
     public IRenderable GetContent(int availableHeight, int availableWidth)
     {
         if (_isLoading)
@@ -244,13 +270,12 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             treeGrid.AddColumn(new GridColumn().NoWrap());
 
             // Handle scrolling
-            int contentHeight = Math.Max(1, availableHeight);
-            if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
-            if (_selectedIndex >= _scrollOffset + contentHeight) _scrollOffset = _selectedIndex - contentHeight + 1;
+            EnsureVisible(availableHeight);
 
-            int end = Math.Min(_scrollOffset + contentHeight, _visibleNodes.Count);
+            int end = Math.Min(_scrollOffset + availableHeight, _visibleNodes.Count);
 
             for (int i = _scrollOffset; i < end; i++)
+
             {
                 var node = _visibleNodes[i];
                 bool isSelected = i == _selectedIndex;
