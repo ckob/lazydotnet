@@ -17,3 +17,8 @@
 - **Nullability:** Enable nullable reference types (`<Nullable>enable</Nullable>`).
 - **UI:** Use `Spectre.Console` for TUI components. 
 - **Error Handling:** Use `try/catch` blocks for external ops (file I/O, build).
+
+# References
+Only use these references readonly, don't modify them.
+- The project uses the easy-dotnet-server. The project is available in @References/easy-dotnet-server. @References/easy-dotnet-server/rpcDoc.md contains the RPC entry point.
+- The reference of `easy-dotnet` (nvim plugin written in lua) in @References/easy-dotnet is as an example of how us `easy-dotnet-server` used.
