@@ -43,6 +43,11 @@ public class DashboardScreen : IScreen
         
         _detailsPane.LogAction = msg => _layout.AddLog(msg);
         _detailsPane.RequestRefresh = () => _needsRefresh = true;
+        _detailsPane.RequestModal = m =>
+        {
+            _activeModal = m;
+            _needsRefresh = true;
+        };
     }
 
     public void OnEnter()

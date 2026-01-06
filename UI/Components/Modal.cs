@@ -28,7 +28,7 @@ public class Modal : IKeyBindable
 
     public int? Width { get; set; }
 
-    public IRenderable GetRenderable(int width, int height)
+    public virtual IRenderable GetRenderable(int width, int height)
     {
         var panel = new Panel(new Padder(Content, new Padding(2, 1, 2, 1)))
             {

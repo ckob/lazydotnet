@@ -27,6 +27,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
     private CancellationTokenSource? _discoveryCts;
 
     public Action? RequestRefresh { get; set; }
+    public Action<Modal>? RequestModal { get; set; }
 
     public string Title => "Tests";
 

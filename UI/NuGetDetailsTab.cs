@@ -38,6 +38,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 
     public Action<string>? LogAction { get; set; }
     public Action? RequestRefresh { get; set; }
+    public Action<Modal>? RequestModal { get; set; }
 
     public string Title => "NuGets";
 

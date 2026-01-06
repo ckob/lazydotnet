@@ -13,6 +13,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
     private string? _currentProjectPath;
 
     public Action? RequestRefresh { get; set; }
+    public Action<Modal>? RequestModal { get; set; }
 
     public string Title => "Project References";
 
@@ -30,9 +31,12 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
 
+        yield return new KeyBinding("a", "add", AddReferenceAsync, k => k.KeyChar == 'a');
+
         if (_refsList.SelectedItem != null)
         {
             yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
+            yield return new KeyBinding("d", "delete", RemoveReferenceAsync, k => k.KeyChar == 'd');
         }
     }
 
@@ -100,6 +104,76 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         }
     }
 
+    private async Task AddReferenceAsync()
+    {
+        if (_currentProjectPath == null || solutionService.CurrentSolution == null) return;
+
+        var currentRefs = _refsList.Items.Select(Path.GetFullPath).ToList();
+        var projects = solutionService.CurrentSolution.Projects
+            .Where(p => Path.GetFullPath(p.Path) != Path.GetFullPath(_currentProjectPath)
+                     && !currentRefs.Contains(Path.GetFullPath(p.Path)))
+            .OrderBy(p => p.Name)
+            .ToList();
+
+        var slnDir = Path.GetDirectoryName(solutionService.CurrentSolution.Path);
+        var picker = new ProjectPickerModal(
+            "Add Project Reference",
+            projects,
+            slnDir,
+            async selected =>
+            {
+                RequestModal?.Invoke(null!);
+                _isLoading = true;
+                RequestRefresh?.Invoke();
+                try
+                {
+                    await solutionService.AddProjectReferenceAsync(_currentProjectPath, selected.Path);
+                    await LoadAsync(_currentProjectPath, "", force: true);
+                }
+                finally
+                {
+                    _isLoading = false;
+                    RequestRefresh?.Invoke();
+                }
+            },
+            () => RequestModal?.Invoke(null!)
+        );
+
+        RequestModal?.Invoke(picker);
+    }
+
+    private async Task RemoveReferenceAsync()
+    {
+        if (_currentProjectPath == null || _refsList.SelectedItem == null) return;
+
+        var targetPath = _refsList.SelectedItem;
+        var refName = Path.GetFileNameWithoutExtension(targetPath);
+
+        var confirm = new ConfirmationModal(
+            "Remove Reference",
+            $"Are you sure you want to remove reference to [bold]{Markup.Escape(refName)}[/]?",
+            async () =>
+            {
+                _isLoading = true;
+                RequestRefresh?.Invoke();
+
+                try
+                {
+                    await solutionService.RemoveProjectReferenceAsync(_currentProjectPath, targetPath);
+                    await LoadAsync(_currentProjectPath, "", force: true);
+                }
+                finally
+                {
+                    _isLoading = false;
+                    RequestRefresh?.Invoke();
+                }
+            },
+            () => RequestModal?.Invoke(null!)
+        );
+
+        RequestModal?.Invoke(confirm);
+    }
+
     public IRenderable GetContent(int availableHeight, int availableWidth)
     {
         var grid = new Grid();
@@ -131,13 +205,36 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
             var refName = Path.GetFileNameWithoutExtension(refPath);
             bool isSelected = i == _refsList.SelectedIndex;
 
+            string displayPath = refPath;
+            if (solutionService.CurrentSolution != null)
+            {
+                var slnDir = Path.GetDirectoryName(solutionService.CurrentSolution.Path);
+                if (slnDir != null)
+                {
+                    displayPath = Path.GetRelativePath(slnDir, refPath);
+                }
+            }
+
+            string pathMarkup = $"({displayPath})";
+            // Allow more space and avoid truncation unless strictly necessary
+            int availableTextWidth = availableWidth - 6; 
+            if (refName.Length + pathMarkup.Length + 4 > availableTextWidth)
+            {
+                int maxPathLen = availableTextWidth - refName.Length - 8;
+                if (maxPathLen > 15)
+                {
+                    // Middle truncation for paths to preserve both ends
+                    pathMarkup = $"({displayPath[..(maxPathLen / 2)]}...{displayPath[^(maxPathLen / 2)..]})";
+                }
+            }
+
             if (isSelected)
             {
-                grid.AddRow(new Markup($"[black on blue]  → {Markup.Escape(refName)}[/]"));
+                grid.AddRow(new Markup($"[black on blue]  → {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
             }
             else
             {
-                grid.AddRow(new Markup($"  [green]→[/] {Markup.Escape(refName)}"));
+                grid.AddRow(new Markup($"  [green]→[/] {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/]"));
             }
         }
 

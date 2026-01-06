@@ -213,6 +213,22 @@ public class EasyDotnetService : IAsyncDisposable
         }
     }
 
+    public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath)
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<bool>(
+            "msbuild/add-project-reference",
+            new { projectPath, targetPath });
+    }
+
+    public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath)
+    {
+        await EnsureInitializedAsync();
+        return await _jsonRpc!.InvokeWithParameterObjectAsync<bool>(
+            "msbuild/remove-project-reference",
+            new { projectPath, targetPath });
+    }
+
     public async Task<IAsyncEnumerable<NugetPackageMetadata>> SearchPackagesAsync(string searchTerm, List<string>? sources = null)
     {
         await EnsureInitializedAsync();

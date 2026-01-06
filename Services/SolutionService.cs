@@ -11,6 +11,8 @@ public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects)
 
 public class SolutionService(EasyDotnetService easyDotnetService)
 {
+    public SolutionInfo? CurrentSolution { get; private set; }
+
     public async Task<SolutionInfo?> FindAndParseSolutionAsync(string path)
     {
         string? slnFile = null;
@@ -42,7 +44,8 @@ public class SolutionService(EasyDotnetService easyDotnetService)
             Id = proj.AbsolutePath
         }).ToList();
 
-        return new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects);
+        CurrentSolution = new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects);
+        return CurrentSolution;
     }
 
     public async Task<List<string>> GetProjectReferencesAsync(string projectPath)
@@ -58,5 +61,15 @@ public class SolutionService(EasyDotnetService easyDotnetService)
         {
             return [];
         }
+    }
+
+    public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath)
+    {
+        return await easyDotnetService.AddProjectReferenceAsync(projectPath, targetPath);
+    }
+
+    public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath)
+    {
+        return await easyDotnetService.RemoveProjectReferenceAsync(projectPath, targetPath);
     }
 }
