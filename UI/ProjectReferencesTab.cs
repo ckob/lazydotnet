@@ -20,6 +20,8 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
+        if (_isLoading) yield break;
+
         yield return new KeyBinding("k", "up", () =>
         {
             MoveUp();

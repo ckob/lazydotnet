@@ -141,7 +141,6 @@ public class DashboardScreen : IScreen
     {
         if (_activeModal != null)
         {
-            yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null), k => k.Key == ConsoleKey.Q);
             foreach (var b in _activeModal.GetKeyBindings())
             {
                 yield return b;
@@ -275,20 +274,18 @@ public class DashboardScreen : IScreen
     {
         _needsRefresh = true;
 
+        if (_activeModal != null)
+        {
+            if (await _activeModal.HandleInputAsync(key))
+            {
+                _needsRefresh = true;
+                return this;
+            }
+        }
+
         if (key.Key == ConsoleKey.Q)
         {
             return null;
-        }
-
-        if (_activeModal != null)
-        {
-            var modalBinding = _activeModal.GetKeyBindings().FirstOrDefault(b => b.Match(key));
-            if (modalBinding != null)
-            {
-                await modalBinding.Action();
-                _needsRefresh = true;
-            }
-            return this;
         }
 
         var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));

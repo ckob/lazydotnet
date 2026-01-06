@@ -41,4 +41,14 @@ public class Modal : IKeyBindable
             
         return panel;
     }
+
+    public virtual Task<bool> HandleInputAsync(ConsoleKeyInfo key)
+    {
+        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
+        if (binding != null)
+        {
+            return binding.Action().ContinueWith(_ => true);
+        }
+        return Task.FromResult(false);
+    }
 }

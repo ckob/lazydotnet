@@ -10,9 +10,7 @@ namespace lazydotnet.UI;
 public enum AppMode
 {
     Normal,
-    SearchingNuGet,
     SelectingVersion,
-    ConfirmingDelete,
     Busy // Showing spinner/progress
 }
 
@@ -20,15 +18,12 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 {
     // Lists
     private readonly ScrollableList<NuGetPackageInfo> _nugetList = new();
-    private readonly ScrollableList<SearchResult> _searchList = new();
     private readonly ScrollableList<string> _versionList = new();
 
     private readonly Lock _lock = new(); // UI Synchronization
 
     // State
     private AppMode _appMode = AppMode.Normal;
-    private string _searchQuery = "";
-    private string? _lastSearchQuery;
     private string? _statusMessage;
     private bool _isActionRunning;
     private bool _isLoading;
@@ -47,8 +42,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
     {
         lock (_lock)
         {
-            if (_appMode == AppMode.SearchingNuGet) _searchList.MoveUp();
-            else if (_appMode == AppMode.SelectingVersion) _versionList.MoveUp();
+            if (_appMode == AppMode.SelectingVersion) _versionList.MoveUp();
             else _nugetList.MoveUp();
         }
     }
@@ -57,8 +51,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
     {
         lock (_lock)
         {
-            if (_appMode == AppMode.SearchingNuGet) _searchList.MoveDown();
-            else if (_appMode == AppMode.SelectingVersion) _versionList.MoveDown();
+            if (_appMode == AppMode.SelectingVersion) _versionList.MoveDown();
             else _nugetList.MoveDown();
         }
     }
@@ -132,7 +125,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        if (_isActionRunning) yield break;
+        if (_isActionRunning || _isLoading) yield break;
 
         // Navigation (hidden)
         yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
@@ -142,10 +135,17 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         {
             yield return new KeyBinding("a", "add", () =>
             {
-                _appMode = AppMode.SearchingNuGet;
-                _searchQuery = "";
-                _lastSearchQuery = null;
-                _searchList.Clear();
+                var modal = new NuGetSearchModal(
+                    nuGetService,
+                    async selected =>
+                    {
+                        await InstallPackageAsync(selected.Id, null);
+                    },
+                    () => RequestModal?.Invoke(null!),
+                    LogAction,
+                    () => RequestRefresh?.Invoke()
+                );
+                RequestModal?.Invoke(modal);
                 return Task.CompletedTask;
             }, k => k.KeyChar == 'a');
 
@@ -160,7 +160,20 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 
                 yield return new KeyBinding("d", "delete", () =>
                 {
-                    _appMode = AppMode.ConfirmingDelete;
+                    var p = _nugetList.SelectedItem;
+                    if (p == null) return Task.CompletedTask;
+
+                    var confirm = new ConfirmationModal(
+                        "Remove Package",
+                        $"Are you sure you want to remove package [bold]{Markup.Escape(p.Id)}[/]?",
+                        async () =>
+                        {
+                            await RemovePackageAsync(p.Id);
+                        },
+                        () => RequestModal?.Invoke(null!)
+                    );
+
+                    RequestModal?.Invoke(confirm);
                     return Task.CompletedTask;
                 }, k => k.KeyChar == 'd');
 
@@ -173,35 +186,6 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             {
                 yield return new KeyBinding("U", "update all", UpdateAllOutdatedAsync, k => k.KeyChar == 'U');
             }
-        }
-        else if (_appMode == AppMode.SearchingNuGet)
-        {
-            yield return new KeyBinding("Esc", "cancel", () =>
-            {
-                _appMode = AppMode.Normal;
-                _statusMessage = null;
-                return Task.CompletedTask;
-            }, k => k.Key == ConsoleKey.Escape);
-
-            yield return new KeyBinding("Enter", "search/install", async () =>
-            {
-                if (_searchQuery != _lastSearchQuery && !string.IsNullOrWhiteSpace(_searchQuery))
-                {
-                    await PerformSearchAsync(_searchQuery);
-                    return;
-                }
-
-                if (_searchList.Count > 0 && _searchList.SelectedItem != null)
-                {
-                    await InstallPackageAsync(_searchList.SelectedItem.Id, null);
-                    _appMode = AppMode.Normal;
-                    _statusMessage = null;
-                }
-                else if (!string.IsNullOrWhiteSpace(_searchQuery))
-                {
-                    await PerformSearchAsync(_searchQuery);
-                }
-            }, k => k.Key == ConsoleKey.Enter);
         }
         else if (_appMode == AppMode.SelectingVersion)
         {
@@ -222,21 +206,6 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                 }, k => k.Key == ConsoleKey.Enter);
             }
         }
-        else if (_appMode == AppMode.ConfirmingDelete)
-        {
-            yield return new KeyBinding("y", "confirm delete", () =>
-            {
-                var p = _nugetList.SelectedItem;
-                _appMode = AppMode.Normal;
-                return p != null ? RemovePackageAsync(p.Id) : Task.CompletedTask;
-            }, k => k.Key == ConsoleKey.Y);
-
-            yield return new KeyBinding("any", "cancel", () =>
-            {
-                _appMode = AppMode.Normal;
-                return Task.CompletedTask;
-            }, k => !char.IsControl(k.KeyChar) && k.Key != ConsoleKey.Y);
-        }
     }
 
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
@@ -248,51 +217,10 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             return true;
         }
 
-        if (_appMode == AppMode.SearchingNuGet && !char.IsControl(key.KeyChar))
-        {
-             if (key.Key == ConsoleKey.Backspace && _searchQuery.Length > 0)
-             {
-                 _searchQuery = _searchQuery[..^1];
-             }
-             else if (!char.IsControl(key.KeyChar))
-             {
-                 _searchQuery += key.KeyChar;
-             }
-             return true;
-        }
-
         return false;
     }
 
     // Actions
-
-    private async Task PerformSearchAsync(string query)
-    {
-        _lastSearchQuery = query;
-        _isActionRunning = true;
-        _statusMessage = "Searching...";
-
-        // Fire and forget
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                 var results = await nuGetService.SearchPackagesAsync(query, LogAction);
-                 _searchList.SetItems(results);
-                 _statusMessage = results.Count == 0 ? "No results." : $"Found {results.Count} packages.";
-            }
-            catch (Exception ex)
-            {
-                _statusMessage = $"Search failed: {ex.Message}";
-                await Task.Delay(3000);
-            }
-            finally
-            {
-                _isActionRunning = false;
-                RequestRefresh?.Invoke();
-            }
-        });
-    }
 
     private async Task ShowVersionsForPackageAsync(string packageId)
     {
@@ -433,12 +361,6 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                 return grid;
             }
 
-            if (_appMode == AppMode.SearchingNuGet)
-            {
-                RenderSearchOverlay(grid, availableHeight, availableWidth);
-                return grid;
-            }
-
             if (_isLoading || _isActionRunning)
             {
                 // Only show list if we have data (e.g. background update)
@@ -457,12 +379,6 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                 return grid;
             }
 
-            if (_appMode == AppMode.ConfirmingDelete)
-            {
-                grid.AddRow(new Markup($"[red bold]Are you sure you want to remove {_nugetList.SelectedItem?.Id}? (y/n)[/]"));
-                grid.AddRow(new Markup($"[dim]Press Y to confirm, any other key to cancel[/]"));
-            }
-
             RenderNuGetTab(grid, availableHeight, availableWidth);
 
             if (_statusMessage != null)
@@ -475,46 +391,6 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
     }
 
     // Rendering Helpers (Copied and adapted)
-
-     private void RenderSearchOverlay(Grid grid, int height, int width)
-    {
-        grid.AddRow(new Markup($"[blue]Search NuGet: [/] {Markup.Escape(_searchQuery)}_"));
-
-        if (_isActionRunning)
-        {
-             var msg = _statusMessage ?? "Searching...";
-             grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(msg)}[/]"));
-             return;
-        }
-
-        if (_searchList.Count > 0)
-        {
-             var table = new Table().Border(TableBorder.Rounded).Expand();
-             table.AddColumn("Id");
-             table.AddColumn("Latest");
-
-             int visibleRows = Math.Max(1, height - 1);
-             var (start, end) = _searchList.GetVisibleRange(visibleRows);
-
-             for(int i = start; i < end; i++)
-             {
-                 var item = _searchList.Items[i];
-                 bool selected = i == _searchList.SelectedIndex;
-                 string style = selected ? "[black on blue]" : "";
-                 string closeStyle = selected ? "[/]" : "";
-
-                 table.AddRow(
-                     new Markup($"{style}{Markup.Escape(item.Id)}{closeStyle}"),
-                     new Markup($"{style}{Markup.Escape(item.LatestVersion)}{closeStyle}")
-                 );
-             }
-             grid.AddRow(table);
-        }
-        else
-        {
-            grid.AddRow(new Markup("[dim]Type and press Enter to search...[/]"));
-        }
-    }
 
     private void RenderVersionOverlay(Grid grid, int height, int width)
     {

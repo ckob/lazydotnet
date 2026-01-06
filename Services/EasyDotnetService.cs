@@ -229,44 +229,49 @@ public class EasyDotnetService : IAsyncDisposable
             new { projectPath, targetPath });
     }
 
-    public async Task<IAsyncEnumerable<NugetPackageMetadata>> SearchPackagesAsync(string searchTerm, List<string>? sources = null)
+    public async Task<IAsyncEnumerable<NugetPackageMetadata>> SearchPackagesAsync(string searchTerm, List<string>? sources = null, CancellationToken ct = default)
     {
         await EnsureInitializedAsync();
         return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<NugetPackageMetadata>>(
             "nuget/search-packages",
-            new { searchTerm, sources });
+            new { searchTerm, sources },
+            ct);
     }
 
-    public async Task<IAsyncEnumerable<string>> GetPackageVersionsAsync(string packageId, List<string>? sources = null, bool includePrerelease = false)
+    public async Task<IAsyncEnumerable<string>> GetPackageVersionsAsync(string packageId, List<string>? sources = null, bool includePrerelease = false, CancellationToken ct = default)
     {
         await EnsureInitializedAsync();
         return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<string>>(
             "nuget/get-package-versions",
-            new { packageId, sources, includePrerelease });
+            new { packageId, sources, includePrerelease },
+            ct);
     }
 
-    public async Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>> GetOutdatedPackagesAsync(string targetPath, bool? includeTransitive = null)
+    public async Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>> GetOutdatedPackagesAsync(string targetPath, bool? includeTransitive = null, CancellationToken ct = default)
     {
         await EnsureInitializedAsync();
         return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<OutdatedDependencyInfoResponse>>(
             "outdated/packages",
-            new { targetPath, includeTransitive });
+            new { targetPath, includeTransitive },
+            ct);
     }
 
-    public async Task<IAsyncEnumerable<PackageReference>> ListPackageReferencesAsync(string projectPath, string targetFramework = "")
+    public async Task<IAsyncEnumerable<PackageReference>> ListPackageReferencesAsync(string projectPath, string targetFramework = "", CancellationToken ct = default)
     {
         await EnsureInitializedAsync();
         return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<PackageReference>>(
             "msbuild/list-package-reference",
-            new { projectPath, targetFramework });
+            new { projectPath, targetFramework },
+            ct);
     }
 
-    public async Task<IAsyncEnumerable<DiscoveredTest>> DiscoverTestsAsync(string projectPath, string? targetFrameworkMoniker = null, string? configuration = null)
+    public async Task<IAsyncEnumerable<DiscoveredTest>> DiscoverTestsAsync(string projectPath, string? targetFrameworkMoniker = null, string? configuration = null, CancellationToken ct = default)
     {
         await EnsureInitializedAsync();
         return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<DiscoveredTest>>(
             "test/discover",
-            new { projectPath, targetFrameworkMoniker, configuration });
+            new { projectPath, targetFrameworkMoniker, configuration },
+            ct);
     }
 
     public async Task<IAsyncEnumerable<TestRunResult>> RunTestsAsync(string projectPath, string configuration, RunRequestNode[] filter, string? targetFrameworkMoniker = null)

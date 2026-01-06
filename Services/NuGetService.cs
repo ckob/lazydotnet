@@ -64,7 +64,7 @@ public class NuGetService(EasyDotnetService easyDotnetService)
     {
         try
         {
-            var results = await easyDotnetService.SearchPackagesAsync(query);
+            var results = await easyDotnetService.SearchPackagesAsync(query, ct: ct);
             var list = new List<SearchResult>();
             await foreach (var item in results.WithCancellation(ct))
             {
@@ -80,7 +80,8 @@ public class NuGetService(EasyDotnetService easyDotnetService)
         }
         catch (Exception ex)
         {
-            logger?.Invoke($"[red]Search error: {Markup.Escape(ex.Message)}[/]");
+            if (ex is not OperationCanceledException)
+                logger?.Invoke($"[red]Search error: {Markup.Escape(ex.Message)}[/]");
             return [];
         }
     }
@@ -89,7 +90,7 @@ public class NuGetService(EasyDotnetService easyDotnetService)
     {
         try
         {
-            var versions = await easyDotnetService.GetPackageVersionsAsync(packageId);
+            var versions = await easyDotnetService.GetPackageVersionsAsync(packageId, ct: ct);
             var list = new List<string>();
             await foreach (var v in versions.WithCancellation(ct))
             {
@@ -99,7 +100,8 @@ public class NuGetService(EasyDotnetService easyDotnetService)
         }
         catch (Exception ex)
         {
-            logger?.Invoke($"[red]Version search error: {Markup.Escape(ex.Message)}[/]");
+            if (ex is not OperationCanceledException)
+                logger?.Invoke($"[red]Version search error: {Markup.Escape(ex.Message)}[/]");
             return [];
         }
     }
@@ -111,8 +113,8 @@ public class NuGetService(EasyDotnetService easyDotnetService)
             var properties = await easyDotnetService.GetProjectPropertiesAsync(projectPath);
             var tfm = properties.TargetFramework ?? "";
 
-            var packagesTask = await easyDotnetService.ListPackageReferencesAsync(projectPath, tfm);
-            var outdatedTask = await easyDotnetService.GetOutdatedPackagesAsync(projectPath);
+            var packagesTask = await easyDotnetService.ListPackageReferencesAsync(projectPath, tfm, ct: ct);
+            var outdatedTask = await easyDotnetService.GetOutdatedPackagesAsync(projectPath, ct: ct);
 
             var packages = new List<PackageReference>();
             await foreach (var p in packagesTask.WithCancellation(ct))
