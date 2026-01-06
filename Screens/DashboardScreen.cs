@@ -1,6 +1,8 @@
 using Spectre.Console;
+using Spectre.Console.Rendering;
 using lazydotnet.Core;
 using lazydotnet.UI;
+using lazydotnet.UI.Components;
 using lazydotnet.Services;
 
 namespace lazydotnet.Screens;
@@ -108,7 +110,7 @@ public class DashboardScreen : IScreen
         }
 
         // Synchronize test output if the test tab is active
-        if (_layout.ActivePanel == 1 && _layout.GetRoot()["Right"].Name == "Right" && _detailsPane.ActiveTab == 2)
+        if (_layout.ActivePanel == 1 && _detailsPane.ActiveTab == 2)
         {
             var selectedTest = _detailsPane.GetSelectedTestNode();
             if (selectedTest != null)
@@ -122,11 +124,24 @@ public class DashboardScreen : IScreen
         return result;
     }
 
+    private Modal? _activeModal;
+
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
+        if (_activeModal != null)
+        {
+            yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null), k => k.Key == ConsoleKey.Q);
+            foreach (var b in _activeModal.GetKeyBindings())
+            {
+                yield return b;
+            }
+            yield break;
+        }
+
         yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null), k => k.Key == ConsoleKey.Q);
         yield return new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.D1 || k.Key == ConsoleKey.D2 || k.Key == ConsoleKey.D3);
         yield return new KeyBinding("b", "build", () => HandleBuildAsync(_layout), k => k.Key == ConsoleKey.B);
+        yield return new KeyBinding("?", "help", () => { ShowHelpModal(); return Task.CompletedTask; }, k => k.KeyChar == '?');
 
         switch (_layout.ActivePanel)
         {
@@ -174,9 +189,96 @@ public class DashboardScreen : IScreen
         }
     }
 
+    private void ShowHelpModal()
+    {
+        string panelName = _layout.ActivePanel switch
+        {
+            0 => "Explorer",
+            1 => "Details",
+            2 => _layout.BottomActiveTab switch
+            {
+                0 => "Log",
+                1 => "Test Output",
+                2 => "EasyDotnet Output",
+                _ => "Bottom"
+            },
+            _ => "Local"
+        };
+
+        var localBindings = (_layout.ActivePanel switch
+        {
+            0 => _explorer.GetKeyBindings(),
+            1 => _detailsPane.GetKeyBindings(),
+            2 => _layout.BottomActiveTab switch
+            {
+                0 => _layout.LogViewer.GetKeyBindings(),
+                1 => _layout.TestOutputViewer.GetKeyBindings(),
+                2 => _layout.EasyDotnetOutputViewer.GetKeyBindings(),
+                _ => Enumerable.Empty<KeyBinding>()
+            },
+            _ => Enumerable.Empty<KeyBinding>()
+        }).ToList();
+
+        var globalBindings = new List<KeyBinding>
+        {
+            new KeyBinding("q", "quit", () => Task.CompletedTask, _ => false),
+            new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, _ => false),
+            new KeyBinding("b", "build", () => Task.CompletedTask, _ => false),
+            new KeyBinding("?", "help", () => Task.CompletedTask, _ => false)
+        };
+
+        var allBindings = localBindings.Concat(globalBindings).ToList();
+        int maxLabelWidth = allBindings.Select(b => b.Label.Length).DefaultIfEmpty(0).Max();
+        int maxDescWidth = allBindings.Select(b => b.Description.Length).DefaultIfEmpty(0).Max();
+        
+        // Ensure headers also fit in the description column if needed
+        int maxHeaderWidth = Math.Max(panelName.Length, "Global".Length) + 8; // --- Title ---
+        maxDescWidth = Math.Max(maxDescWidth, maxHeaderWidth);
+        maxDescWidth = Math.Max(maxDescWidth, 40); // Give it some space even if descriptions are short
+        
+        var grid = new Grid();
+        grid.Expand = false;
+        grid.AddColumn(new GridColumn().Width(maxLabelWidth).Padding(0, 0, 4, 0).NoWrap().RightAligned());
+        grid.AddColumn(new GridColumn().Width(maxDescWidth).NoWrap());
+
+        void AddSection(string title, IEnumerable<KeyBinding> bindings)
+        {
+            grid.AddRow(Text.Empty, new Markup($"[bold yellow]--- {Markup.Escape(title)} ---[/]"));
+            grid.AddRow(Text.Empty, Text.Empty);
+
+            foreach (var b in bindings)
+            {
+                grid.AddRow(new Markup($"[blue]{Markup.Escape(b.Label)}[/]"), new Markup(Markup.Escape(b.Description)));
+            }
+            grid.AddRow(Text.Empty, Text.Empty);
+        }
+
+        AddSection(panelName, localBindings);
+        AddSection("Global", globalBindings);
+
+        _activeModal = new Modal("Keybindings", grid, () => _activeModal = null);
+        _needsRefresh = true;
+    }
+
     public async Task<IScreen?> HandleInputAsync(ConsoleKeyInfo key, AppLayout layout)
     {
         _needsRefresh = true;
+
+        if (key.Key == ConsoleKey.Q)
+        {
+            return null;
+        }
+
+        if (_activeModal != null)
+        {
+            var modalBinding = _activeModal.GetKeyBindings().FirstOrDefault(b => b.Match(key));
+            if (modalBinding != null)
+            {
+                await modalBinding.Action();
+                _needsRefresh = true;
+            }
+            return this;
+        }
 
         var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
         if (binding != null)
@@ -244,16 +346,25 @@ public class DashboardScreen : IScreen
 
         layout.SetDetailsActiveTab(_detailsPane.ActiveTab);
 
-        int bottomH = layout.GetBottomHeight(height);
-        int topH = height - bottomH;
-        
-        // Subtract 2 for panel borders
-        int contentTopH = Math.Max(1, topH - 2);
-        
-        int w = width / 3;
-        int dw = width * 6 / 10;
+        if (_activeModal != null)
+        {
+            layout.UpdateModal(_activeModal.GetRenderable(width, height));
+        }
+        else
+        {
+            layout.UpdateModal(null);
 
-        layout.UpdateLeft(_explorer.GetContent(contentTopH, w - 2));
-        layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2));
+            int bottomH = layout.GetBottomHeight(height);
+            int topH = height - bottomH;
+
+            // Subtract 2 for panel borders
+            int contentTopH = Math.Max(1, topH - 2);
+
+            int w = width / 3;
+            int dw = width * 6 / 10;
+
+            layout.UpdateLeft(_explorer.GetContent(contentTopH, w - 2));
+            layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2));
+        }
     }
 }

@@ -221,7 +221,7 @@ public class SolutionExplorer : IKeyBindable
         {
             ToggleExpand();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
+        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar);
 
         yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
     }

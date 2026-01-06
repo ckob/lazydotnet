@@ -11,17 +11,37 @@ public class AppLayout
     private const int TopRatio = 70;
     private const int BottomRatio = 30;
 
-    private readonly Layout _rootLayout = new Layout("Root")
-        .SplitRows(
-            new Layout("Main").SplitRows(
-                new Layout("Top").SplitColumns(
-                    new Layout("Left").Ratio(35),
-                    new Layout("Right").Ratio(65)
-                ).Ratio(TopRatio),
-                new Layout("Bottom").Ratio(BottomRatio)
-            ),
-            new Layout("Footer").Size(1)
-        );
+    private readonly Layout _mainLayout = new Layout("MainContainer").SplitRows(
+        new Layout("Top").SplitColumns(
+            new Layout("Left").Ratio(35),
+            new Layout("Right").Ratio(65)
+        ).Ratio(TopRatio),
+        new Layout("Bottom").Ratio(BottomRatio)
+    );
+
+    private readonly Layout _rootLayout;
+
+    public AppLayout()
+    {
+        _rootLayout = new Layout("Root")
+            .SplitRows(
+                new Layout("Main").Update(_mainLayout),
+                new Layout("Footer").Size(1)
+            );
+    }
+
+    public void UpdateModal(IRenderable? modalContent)
+    {
+        if (modalContent != null)
+        {
+            // Create an overlay that places the modal over the main layout
+            _rootLayout["Main"].Update(new Overlay(_mainLayout, modalContent));
+        }
+        else
+        {
+            _rootLayout["Main"].Update(_mainLayout);
+        }
+    }
 
     public int GetBottomHeight(int totalHeight)
     {
@@ -79,7 +99,7 @@ public class AppLayout
             .Padding(0, 0, 0, 0)
             .Expand();
 
-        _rootLayout["Left"].Update(panel);
+        _mainLayout["Left"].Update(panel);
     }
 
     public void UpdateRight(IRenderable renderable)
@@ -100,7 +120,7 @@ public class AppLayout
             .Padding(0, 0, 0, 0)
             .Expand();
 
-        _rootLayout["Right"].Update(panel);
+        _mainLayout["Right"].Update(panel);
     }
 
     public event Action? OnLog;
@@ -152,7 +172,7 @@ public class AppLayout
             .Padding(0, 0, 0, 0)
             .Expand();
 
-        _rootLayout["Bottom"].Update(panel);
+        _mainLayout["Bottom"].Update(panel);
     }
 
     public void UpdateFooter(IEnumerable<KeyBinding> bindings)
