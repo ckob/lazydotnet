@@ -114,29 +114,42 @@ public class NuGetService(EasyDotnetService easyDotnetService)
             var tfm = properties.TargetFramework ?? "";
 
             var packagesTask = await easyDotnetService.ListPackageReferencesAsync(projectPath, tfm, ct: ct);
-            var outdatedTask = await easyDotnetService.GetOutdatedPackagesAsync(projectPath, ct: ct);
-
             var packages = new List<PackageReference>();
             await foreach (var p in packagesTask.WithCancellation(ct))
             {
                 packages.Add(p);
             }
 
+            return packages.Select(p => new NuGetPackageInfo(
+                p.Id,
+                p.ResolvedVersion,
+                null
+            )).OrderBy(p => p.Id).ToList();
+        }
+        catch (Exception ex)
+        {
+            if (ex is not OperationCanceledException)
+                logger?.Invoke($"[red]Error loading packages: {Markup.Escape(ex.Message)}[/]");
+            return [];
+        }
+    }
+
+    public async Task<Dictionary<string, string>> GetLatestVersionsAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var outdatedTask = await easyDotnetService.GetOutdatedPackagesAsync(projectPath, ct: ct);
             var outdated = new Dictionary<string, string>();
             await foreach (var o in outdatedTask.WithCancellation(ct))
             {
                 outdated[o.Name] = o.LatestVersion;
             }
-
-            return packages.Select(p => new NuGetPackageInfo(
-                p.Id,
-                p.ResolvedVersion,
-                outdated.TryGetValue(p.Id, out var latest) ? latest : null
-            )).ToList();
+            return outdated;
         }
         catch (Exception ex)
         {
-            logger?.Invoke($"[red]Error loading packages: {Markup.Escape(ex.Message)}[/]");
+            if (ex is not OperationCanceledException)
+                logger?.Invoke($"[yellow]Warning: Could not fetch latest versions: {ex.Message}[/]");
             return [];
         }
     }

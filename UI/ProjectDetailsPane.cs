@@ -71,6 +71,8 @@ public class ProjectDetailsPane : IKeyBindable
 
     public string? GetScrollIndicator() => _tabInstances[_tabs.ActiveTab].GetScrollIndicator();
 
+    public bool OnTick() => _tabInstances[_tabs.ActiveTab].OnTick();
+
     public void ClearData()
     {
         foreach (var tab in _tabInstances) tab.ClearData();

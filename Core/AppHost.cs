@@ -95,7 +95,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                                 }
                             }
 
-                            await Task.Delay(15);
+                            await Task.Delay(33);
                         }
                         catch (Exception ex)
                         {

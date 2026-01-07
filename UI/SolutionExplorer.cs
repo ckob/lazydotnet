@@ -22,7 +22,7 @@ public class SolutionExplorer : IKeyBindable
     private ExplorerNode? _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
     private readonly IEditorService _editorService;
-    private int _selectedIndex = -1;
+    private int _selectedIndex = 0;
     private int _scrollOffset;
 
     public SolutionExplorer(IEditorService editorService)

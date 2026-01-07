@@ -16,4 +16,5 @@ public interface IProjectTab : IKeyBindable
     void MoveDown();
     string? GetScrollIndicator();
     void ClearData();
+    bool OnTick() => false;
 }

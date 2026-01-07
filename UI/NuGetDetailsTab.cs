@@ -27,6 +27,8 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
     private string? _statusMessage;
     private bool _isActionRunning;
     private bool _isLoading;
+    private bool _isFetchingLatest;
+    private int _lastFrameIndex = -1;
     private string? _currentProjectPath;
     private string? _currentProjectName;
     private CancellationTokenSource? _loadCts;
@@ -76,7 +78,22 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             _isLoading = false;
             _appMode = AppMode.Normal;
             _statusMessage = null;
+            _isFetchingLatest = false;
         }
+    }
+
+    public bool OnTick()
+    {
+        if (_isFetchingLatest || _isLoading || _isActionRunning)
+        {
+            int currentFrame = SpinnerHelper.GetCurrentFrameIndex();
+            if (currentFrame != _lastFrameIndex)
+            {
+                _lastFrameIndex = currentFrame;
+                return true;
+            }
+        }
+        return false;
     }
 
     public async Task LoadAsync(string projectPath, string projectName, bool force = false)
@@ -93,15 +110,62 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         _currentProjectPath = projectPath;
         _currentProjectName = projectName;
         _isLoading = true;
+        _isFetchingLatest = false;
         _nugetList.Clear();
+
+        if (projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            _isLoading = false;
+            _statusMessage = "Select a project to see packages.";
+            RequestRefresh?.Invoke();
+            return;
+        }
 
         try
         {
+            // Step 1: Load installed packages (local, fast)
             var packages = await nuGetService.GetPackagesAsync(projectPath, LogAction, ct);
              if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
                 return;
 
-            _nugetList.SetItems(packages);
+            lock (_lock)
+            {
+                _nugetList.SetItems(packages);
+            }
+            RequestRefresh?.Invoke();
+
+            // Step 2: Fetch latest versions in background
+            _isFetchingLatest = true;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var latestVersions = await nuGetService.GetLatestVersionsAsync(projectPath, LogAction, ct);
+                    if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
+                        return;
+
+                    lock (_lock)
+                    {
+                        var currentList = _nugetList.Items.ToList();
+                        var updatedList = currentList.Select(p => 
+                            latestVersions.TryGetValue(p.Id, out var latest) 
+                                ? p with { LatestVersion = latest } 
+                                : p with { LatestVersion = p.ResolvedVersion } // If not in outdated, it's up to date
+                        ).ToList();
+
+                        _nugetList.SetItems(updatedList);
+                        _isFetchingLatest = false;
+                    }
+                    RequestRefresh?.Invoke();
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _statusMessage = $"Error fetching latest versions: {ex.Message}";
+                    _isFetchingLatest = false;
+                    RequestRefresh?.Invoke();
+                }
+            }, ct);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -369,7 +433,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                     RenderNuGetTab(grid, availableHeight, availableWidth);
                 }
                  var msg = _statusMessage ?? "Loading...";
-                 grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(msg)}[/]"));
+                 grid.AddRow(new Markup($"[yellow bold]{SpinnerHelper.GetFrame()} {Markup.Escape(msg)}[/]"));
                  return grid;
             }
 
@@ -449,7 +513,11 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             bool isSelected = i == _nugetList.SelectedIndex;
 
             string latestText;
-            if (!pkg.IsOutdated)
+            if (pkg.LatestVersion == null && _isFetchingLatest)
+            {
+                latestText = $"[yellow]{SpinnerHelper.GetFrame()}[/]";
+            }
+            else if (!pkg.IsOutdated)
             {
                 latestText = $"[dim]{Markup.Escape(pkg.ResolvedVersion)}[/]";
             }

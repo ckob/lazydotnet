@@ -10,6 +10,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 {
     private readonly ScrollableList<string> _refsList = new();
     private bool _isLoading;
+    private int _lastFrameIndex = -1;
     private string? _currentProjectPath;
 
     public Action? RequestRefresh { get; set; }
@@ -74,6 +75,21 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         _refsList.Clear();
         _currentProjectPath = null;
         _isLoading = false;
+        _lastFrameIndex = -1;
+    }
+
+    public bool OnTick()
+    {
+        if (_isLoading)
+        {
+            int currentFrame = SpinnerHelper.GetCurrentFrameIndex();
+            if (currentFrame != _lastFrameIndex)
+            {
+                _lastFrameIndex = currentFrame;
+                return true;
+            }
+        }
+        return false;
     }
 
     public async Task LoadAsync(string projectPath, string projectName, bool force = false)
@@ -194,7 +210,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
         if (_isLoading)
         {
-             grid.AddRow(new Markup("[yellow]Loading references...[/]"));
+             grid.AddRow(new Markup($"[yellow]{SpinnerHelper.GetFrame()} Loading references...[/]"));
              return grid;
         }
 

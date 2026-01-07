@@ -51,4 +51,6 @@ public class Modal : IKeyBindable
         }
         return Task.FromResult(false);
     }
+
+    public virtual bool OnTick() => false;
 }

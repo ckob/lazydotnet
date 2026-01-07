@@ -85,6 +85,14 @@ public class DashboardScreen : IScreen
 
     public bool OnTick()
     {
+        if (_activeModal != null)
+        {
+            if (_activeModal.OnTick())
+            {
+                _needsRefresh = true;
+            }
+        }
+
         var currentProject = _explorer.GetSelectedProject();
         var currentPath = currentProject?.Path;
 
@@ -128,6 +136,11 @@ public class DashboardScreen : IScreen
             {
                 _layout.TestOutputViewer.SetOutput(selectedTest.GetOutputSnapshot());
             }
+        }
+
+        if (_detailsPane.OnTick())
+        {
+            _needsRefresh = true;
         }
 
         bool result = _needsRefresh;

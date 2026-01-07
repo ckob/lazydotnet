@@ -10,8 +10,9 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 {
     private TestNode? _root;
     private readonly List<TestNode> _visibleNodes = [];
-    private int _selectedIndex = -1;
+    private int _selectedIndex = 0;
     private int _scrollOffset = 0;
+    private int _lastFrameIndex = -1;
     private string? _currentPath;
 
     private readonly Lock _lock = new(); // Synchronization lock
@@ -92,6 +93,21 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                 RequestRefresh?.Invoke();
             }
         }
+    }
+
+    public bool OnTick()
+    {
+        if (_isLoading || _runningTestCount > 0)
+        {
+            var spinner = _runningTestCount > 0 ? Spinner.Known.CircleHalves : null;
+            int currentFrame = SpinnerHelper.GetCurrentFrameIndex(spinner);
+            if (currentFrame != _lastFrameIndex)
+            {
+                _lastFrameIndex = currentFrame;
+                return true;
+            }
+        }
+        return false;
     }
 
     public void ClearData()
@@ -255,7 +271,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
     {
         if (_isLoading)
         {
-             return new Markup("[yellow]Loading tests...[/]");
+             return new Markup($"[yellow]{SpinnerHelper.GetFrame()} Discovering tests...[/]");
         }
 
         lock (_lock)
@@ -285,10 +301,10 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                 string expandIcon = node.IsContainer ? (node.IsExpanded ? "v" : ">") : " ";
                 string statusIcon = node.Status switch
                 {
-                    TestStatus.Passed => "ok",
-                    TestStatus.Failed => "XX",
-                    TestStatus.Running => "..",
-                    _ => "()"
+                    TestStatus.Passed => "✓",
+                    TestStatus.Failed => "✗",
+                    TestStatus.Running => SpinnerHelper.GetFrame(Spinner.Known.CircleHalves),
+                    _ => "○"
                 };
                 string statusColor = node.Status switch
                 {
@@ -362,14 +378,11 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             return;
         }
 
-        // Update status for all involved tests
-        foreach (var t in testsToRun)
-        {
-            t.Status = TestStatus.Running;
-            UpdateParentStatus(t);
-        }
-
+        // Update status for the targeted node and its subtree
+        SetStatusRecursive(node, TestStatus.Running);
+        
         _statusMessage = $"Running tests ({_runningTestCount} active)...";
+
         RequestRefresh?.Invoke();
 
         _ = Task.Run(async () =>
@@ -488,8 +501,17 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             }
 
             if (anyFailed) parent.Status = TestStatus.Failed;
-            else if (anyRunning) parent.Status = TestStatus.Running;
             else if (allPassed && !anyNone) parent.Status = TestStatus.Passed;
+            else if (anyRunning) 
+            {
+                // Only keep Running if it was already Running (set by SetStatusRecursive)
+                // or if we want to show progress. User said "only see spinner on node executing and children".
+                // So if a parent was NOT part of the execution, it shouldn't become "Running".
+                if (parent.Status != TestStatus.Running)
+                {
+                    parent.Status = TestStatus.None;
+                }
+            }
             else parent.Status = TestStatus.None;
 
             parent = parent.Parent;

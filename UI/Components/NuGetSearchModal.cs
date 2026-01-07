@@ -16,6 +16,7 @@ public class NuGetSearchModal : Modal
     private readonly ScrollableList<SearchResult> _searchList = new();
     private bool _isSearching;
     private string? _statusMessage;
+    private int _lastFrameIndex = -1;
     private CancellationTokenSource? _searchCts;
 
     public NuGetSearchModal(
@@ -159,6 +160,20 @@ public class NuGetSearchModal : Modal
         await Task.CompletedTask;
     }
 
+    public override bool OnTick()
+    {
+        if (_isSearching)
+        {
+            int currentFrame = SpinnerHelper.GetCurrentFrameIndex();
+            if (currentFrame != _lastFrameIndex)
+            {
+                _lastFrameIndex = currentFrame;
+                return true;
+            }
+        }
+        return false;
+    }
+
     public override IRenderable GetRenderable(int width, int height)
     {
         var grid = new Grid();
@@ -169,7 +184,7 @@ public class NuGetSearchModal : Modal
 
         if (_isSearching)
         {
-            grid.AddRow(new Markup("[yellow]Searching...[/]"));
+            grid.AddRow(new Markup($"[yellow]{SpinnerHelper.GetFrame()} Searching...[/]"));
         }
         else if (_searchList.Count > 0)
         {
