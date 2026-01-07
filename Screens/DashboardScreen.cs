@@ -163,7 +163,8 @@ public class DashboardScreen : IScreen
 
         yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null), k => k.Key == ConsoleKey.Q);
         yield return new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.D1 || k.Key == ConsoleKey.D2 || k.Key == ConsoleKey.D3);
-        yield return new KeyBinding("b", "build", () => HandleBuildAsync(_layout), k => k.Key == ConsoleKey.B);
+        yield return new KeyBinding("b", "build project", () => HandleBuildAsync(_layout), k => k.KeyChar == 'b');
+        yield return new KeyBinding("B", "build solution", () => HandleBuildAsync(_layout, true), k => k.KeyChar == 'B');
         yield return new KeyBinding("?", "help", () => { ShowHelpModal(); return Task.CompletedTask; }, k => k.KeyChar == '?');
 
         switch (_layout.ActivePanel)
@@ -246,7 +247,8 @@ public class DashboardScreen : IScreen
         {
             new KeyBinding("q", "quit", () => Task.CompletedTask, _ => false),
             new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, _ => false),
-            new KeyBinding("b", "build", () => Task.CompletedTask, _ => false),
+            new KeyBinding("b", "build project", () => Task.CompletedTask, _ => false),
+            new KeyBinding("B", "build solution", () => Task.CompletedTask, _ => false),
             new KeyBinding("?", "help", () => Task.CompletedTask, _ => false)
         };
 
@@ -321,16 +323,30 @@ public class DashboardScreen : IScreen
         return this;
     }
 
-    private async Task HandleBuildAsync(AppLayout layout)
+    private async Task HandleBuildAsync(AppLayout layout, bool buildSolution = false)
     {
-        var project = _explorer.GetSelectedProject();
-        if (project == null)
+        string? targetPath;
+        string? targetName;
+
+        if (buildSolution)
         {
-            layout.AddLog("[yellow]Cannot build this item (not a project or solution).[/]");
+            targetPath = _solutionService.CurrentSolution?.Path;
+            targetName = _solutionService.CurrentSolution?.Name;
+        }
+        else
+        {
+            var project = _explorer.GetSelectedProject();
+            targetPath = project?.Path;
+            targetName = project?.Name;
+        }
+
+        if (targetPath == null)
+        {
+            layout.AddLog("[yellow]Cannot build: No target (project or solution) selected.[/]");
             return;
         }
 
-        layout.AddLog($"[blue]Starting build for {project.Name}...[/]");
+        layout.AddLog($"[blue]Starting build for {Markup.Escape(targetName ?? "Unknown")}...[/]");
         _ = Task.Run(async () =>
         {
             try
@@ -340,15 +356,15 @@ public class DashboardScreen : IScreen
                     await _buildCts.CancelAsync();
                 }
                 _buildCts = new CancellationTokenSource();
-                var result = await _commandService.BuildProjectAsync(project.Path, msg =>
+                var result = await _commandService.BuildProjectAsync(targetPath, msg =>
                 {
                     layout.AddLog(Markup.Escape(msg));
                 }, _buildCts.Token);
 
                 if (result.ExitCode == 0)
-                    layout.AddLog($"[green]Build Succeeded: {Markup.Escape(project.Name)}[/]");
+                    layout.AddLog($"[green]Build Succeeded: {Markup.Escape(targetName ?? "Unknown")}[/]");
                 else
-                    layout.AddLog($"[red]Build Failed: {Markup.Escape(project.Name)}[/]");
+                    layout.AddLog($"[red]Build Failed: {Markup.Escape(targetName ?? "Unknown")}[/]");
 
                 _needsRefresh = true;
             }
