@@ -162,6 +162,8 @@ public class DashboardScreen : IScreen
         }
 
         yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null), k => k.Key == ConsoleKey.Q);
+        yield return new KeyBinding("Tab", "next panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) == 0);
+        yield return new KeyBinding("Shift+Tab", "prev panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) != 0);
         yield return new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.D1 || k.Key == ConsoleKey.D2 || k.Key == ConsoleKey.D3);
         yield return new KeyBinding("b", "build project", () => HandleBuildAsync(_layout), k => k.KeyChar == 'b');
         yield return new KeyBinding("B", "build solution", () => HandleBuildAsync(_layout, true), k => k.KeyChar == 'B');
@@ -246,6 +248,8 @@ public class DashboardScreen : IScreen
         var globalBindings = new List<KeyBinding>
         {
             new KeyBinding("q", "quit", () => Task.CompletedTask, _ => false),
+            new KeyBinding("Tab", "next panel", () => Task.CompletedTask, _ => false),
+            new KeyBinding("Shift+Tab", "prev panel", () => Task.CompletedTask, _ => false),
             new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, _ => false),
             new KeyBinding("b", "build project", () => Task.CompletedTask, _ => false),
             new KeyBinding("B", "build solution", () => Task.CompletedTask, _ => false),
@@ -311,6 +315,20 @@ public class DashboardScreen : IScreen
                 if (key.Key == ConsoleKey.D1) layout.SetActivePanel(0);
                 else if (key.Key == ConsoleKey.D2) layout.SetActivePanel(1);
                 else if (key.Key == ConsoleKey.D3) layout.SetActivePanel(2);
+                return this;
+            }
+
+            if (binding.Label == "Tab")
+            {
+                int next = (layout.ActivePanel + 1) % 3;
+                layout.SetActivePanel(next);
+                return this;
+            }
+
+            if (binding.Label == "Shift+Tab")
+            {
+                int next = (layout.ActivePanel - 1 + 3) % 3;
+                layout.SetActivePanel(next);
                 return this;
             }
             
