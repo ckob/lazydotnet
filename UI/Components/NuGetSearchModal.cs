@@ -38,7 +38,7 @@ public class NuGetSearchModal : Modal
     {
         foreach (var b in base.GetKeyBindings()) yield return b;
 
-        yield return new KeyBinding("Enter", "install", () =>
+        yield return new KeyBinding("enter", "install", () =>
         {
             if (_searchList.SelectedItem != null)
             {
@@ -48,13 +48,13 @@ public class NuGetSearchModal : Modal
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter);
 
-        yield return new KeyBinding("Up", "up", () =>
+        yield return new KeyBinding("up", "up", () =>
         {
             _searchList.MoveUp();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.UpArrow || (k.Modifiers == ConsoleModifiers.Control && (k.Key == ConsoleKey.P || k.Key == ConsoleKey.K)), false);
 
-        yield return new KeyBinding("Down", "down", () =>
+        yield return new KeyBinding("down", "down", () =>
         {
             _searchList.MoveDown();
             return Task.CompletedTask;

@@ -162,12 +162,13 @@ public class DashboardScreen : IScreen
         }
 
         yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null), k => k.Key == ConsoleKey.Q);
-        yield return new KeyBinding("Tab", "next panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) == 0);
-        yield return new KeyBinding("Shift+Tab", "prev panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) != 0);
-        yield return new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.D1 || k.Key == ConsoleKey.D2 || k.Key == ConsoleKey.D3);
+        yield return new KeyBinding("tab", "next panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) == 0, false);
+        yield return new KeyBinding("shift+tab", "prev panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) != 0, false);
+        yield return new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, k => k.Key == ConsoleKey.D1 || k.Key == ConsoleKey.D2 || k.Key == ConsoleKey.D3, false);
         yield return new KeyBinding("b", "build project", () => HandleBuildAsync(_layout), k => k.KeyChar == 'b');
         yield return new KeyBinding("B", "build solution", () => HandleBuildAsync(_layout, true), k => k.KeyChar == 'B');
-        yield return new KeyBinding("?", "help", () => { ShowHelpModal(); return Task.CompletedTask; }, k => k.KeyChar == '?');
+        yield return new KeyBinding("ctrl+r", "reload", HandleReloadAsync, k => k.Key == ConsoleKey.R && k.Modifiers == ConsoleModifiers.Control);
+        yield return new KeyBinding("?", "keybindings", () => { ShowHelpModal(); return Task.CompletedTask; }, k => k.KeyChar == '?');
 
         switch (_layout.ActivePanel)
         {
@@ -198,13 +199,13 @@ public class DashboardScreen : IScreen
                     {
                         _layout.PreviousBottomTab();
                         return Task.CompletedTask;
-                    }, k => k.KeyChar == '[');
+                    }, k => k.KeyChar == '[', false);
 
                     yield return new KeyBinding("]", "next tab", () =>
                     {
                         _layout.NextBottomTab();
                         return Task.CompletedTask;
-                    }, k => k.KeyChar == ']');
+                    }, k => k.KeyChar == ']', false);
 
                     foreach (var b in subBindings)
                     {
@@ -248,12 +249,13 @@ public class DashboardScreen : IScreen
         var globalBindings = new List<KeyBinding>
         {
             new KeyBinding("q", "quit", () => Task.CompletedTask, _ => false),
-            new KeyBinding("Tab", "next panel", () => Task.CompletedTask, _ => false),
-            new KeyBinding("Shift+Tab", "prev panel", () => Task.CompletedTask, _ => false),
+            new KeyBinding("tab", "next panel", () => Task.CompletedTask, _ => false),
+            new KeyBinding("shift+tab", "prev panel", () => Task.CompletedTask, _ => false),
             new KeyBinding("1-3", "switch panel", () => Task.CompletedTask, _ => false),
             new KeyBinding("b", "build project", () => Task.CompletedTask, _ => false),
             new KeyBinding("B", "build solution", () => Task.CompletedTask, _ => false),
-            new KeyBinding("?", "help", () => Task.CompletedTask, _ => false)
+            new KeyBinding("ctrl+r", "reload", () => Task.CompletedTask, _ => false),
+            new KeyBinding("?", "keybindings", () => Task.CompletedTask, _ => false)
         };
 
         var allBindings = localBindings.Concat(globalBindings).ToList();
@@ -318,14 +320,14 @@ public class DashboardScreen : IScreen
                 return this;
             }
 
-            if (binding.Label == "Tab")
+            if (binding.Label == "tab")
             {
                 int next = (layout.ActivePanel + 1) % 3;
                 layout.SetActivePanel(next);
                 return this;
             }
 
-            if (binding.Label == "Shift+Tab")
+            if (binding.Label == "shift+tab")
             {
                 int next = (layout.ActivePanel - 1 + 3) % 3;
                 layout.SetActivePanel(next);
@@ -339,6 +341,39 @@ public class DashboardScreen : IScreen
         }
 
         return this;
+    }
+
+    private async Task HandleReloadAsync()
+    {
+        var project = _explorer.GetSelectedProject();
+        if (project == null) return;
+
+        bool isSolution = project.Path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase);
+
+        if (isSolution)
+        {
+            _layout.AddLog("[blue]Reloading solution...[/]");
+            try
+            {
+                var solution = await _solutionService.FindAndParseSolutionAsync(project.Path);
+                if (solution != null)
+                {
+                    _explorer.SetSolution(solution);
+                    _needsRefresh = true;
+                    _layout.AddLog("[green]Solution reloaded.[/]");
+                }
+            }
+            catch (Exception ex)
+            {
+                _layout.AddLog($"[red]Error reloading solution: {ex.Message}[/]");
+            }
+        }
+        else
+        {
+            _layout.AddLog($"[blue]Reloading project {Markup.Escape(project.Name)}...[/]");
+            await _detailsPane.ReloadCurrentTabDataAsync();
+            _layout.AddLog($"[green]Project {Markup.Escape(project.Name)} reloaded.[/]");
+        }
     }
 
     private async Task HandleBuildAsync(AppLayout layout, bool buildSolution = false)
@@ -418,9 +453,9 @@ public class DashboardScreen : IScreen
 
             int w = width / 3;
             int dw = width * 6 / 10;
-
-            layout.UpdateLeft(_explorer.GetContent(contentTopH, w - 2));
-            layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2));
+            
+            layout.UpdateLeft(_explorer.GetContent(contentTopH, w - 2, layout.ActivePanel == 0));
+            layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2, layout.ActivePanel == 1));
         }
     }
 }

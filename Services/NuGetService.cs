@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using CliWrap;
+using CliWrap.Buffered;
 using Spectre.Console;
 
 namespace lazydotnet.Services;
@@ -10,6 +12,13 @@ public enum VersionUpdateType
     Patch,
     Minor,
     Major
+}
+
+public enum VersionLock
+{
+    None,   // Allow Major updates
+    Major,  // Lock Major (allow Minor/Patch)
+    Minor   // Lock Minor (allow Patch)
 }
 
 public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string? LatestVersion)
@@ -90,13 +99,34 @@ public class NuGetService(EasyDotnetService easyDotnetService)
     {
         try
         {
-            var versions = await easyDotnetService.GetPackageVersionsAsync(packageId, ct: ct);
-            var list = new List<string>();
-            await foreach (var v in versions.WithCancellation(ct))
+            var command = Cli.Wrap("dotnet")
+                .WithArguments(["package", "search", packageId, "--exact-match", "--format", "json", "--prerelease"])
+                .WithValidation(CommandResultValidation.None);
+
+            var result = await AppCli.RunBufferedAsync(command, ct);
+            if (result.ExitCode != 0)
             {
-                list.Add(v);
+                if (string.IsNullOrWhiteSpace(result.StandardOutput))
+                {
+                    logger?.Invoke($"[red]Error searching for versions: {Markup.Escape(result.StandardError)}[/]");
+                    return [];
+                }
             }
-            return list;
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var output = JsonSerializer.Deserialize<DotnetPackageSearchOutput>(result.StandardOutput, options);
+
+            if (output?.SearchResult == null) return [];
+
+            var versions = output.SearchResult
+                .SelectMany(s => s.Packages ?? [])
+                .Where(p => p.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase))
+                .Select(p => p.Version)
+                .Distinct()
+                .OrderByDescending(v => v, new VersionComparer())
+                .ToList();
+
+            return versions;
         }
         catch (Exception ex)
         {
@@ -106,25 +136,42 @@ public class NuGetService(EasyDotnetService easyDotnetService)
         }
     }
 
-    public async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
+    private record DotnetPackageSearchOutput(List<DotnetPackageSearchSource> SearchResult);
+    private record DotnetPackageSearchSource(string SourceName, List<DotnetPackageSearchPackage>? Packages);
+    private record DotnetPackageSearchPackage(string Id, string Version);
+
+        public async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
-            var properties = await easyDotnetService.GetProjectPropertiesAsync(projectPath);
-            var tfm = properties.TargetFramework ?? "";
+            var command = Cli.Wrap("dotnet")
+                .WithArguments($"list \"{projectPath}\" package --format json")
+                .WithValidation(CommandResultValidation.None);
 
-            var packagesTask = await easyDotnetService.ListPackageReferencesAsync(projectPath, tfm, ct: ct);
-            var packages = new List<PackageReference>();
-            await foreach (var p in packagesTask.WithCancellation(ct))
+            var result = await AppCli.RunBufferedAsync(command, ct);
+            
+            if (result.ExitCode != 0)
             {
-                packages.Add(p);
+                // Some projects might fail to list but we might still get some results or just an error
+                // If it's a total failure, result.StandardOutput might be empty or invalid JSON
+                if (string.IsNullOrWhiteSpace(result.StandardOutput))
+                {
+                    logger?.Invoke($"[red]Error listing packages: {Markup.Escape(result.StandardError)}[/]");
+                    return [];
+                }
             }
 
-            return packages.Select(p => new NuGetPackageInfo(
-                p.Id,
-                p.ResolvedVersion,
-                null
-            )).OrderBy(p => p.Id).ToList();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var output = JsonSerializer.Deserialize<DotnetListPackageOutput>(result.StandardOutput, options);
+
+            if (output?.Projects == null) return [];
+
+            return output.Projects
+                .SelectMany(p => (p.Frameworks ?? []).SelectMany(f => f.TopLevelPackages ?? []))
+                .GroupBy(p => new { p.Id, p.ResolvedVersion })
+                .Select(g => new NuGetPackageInfo(g.Key.Id, g.Key.ResolvedVersion, null))
+                .OrderBy(p => p.Id)
+                .ToList();
         }
         catch (Exception ex)
         {
@@ -138,11 +185,35 @@ public class NuGetService(EasyDotnetService easyDotnetService)
     {
         try
         {
-            var outdatedTask = await easyDotnetService.GetOutdatedPackagesAsync(projectPath, ct: ct);
-            var outdated = new Dictionary<string, string>();
-            await foreach (var o in outdatedTask.WithCancellation(ct))
+            var command = Cli.Wrap("dotnet")
+                .WithArguments($"list \"{projectPath}\" package --outdated --format json")
+                .WithValidation(CommandResultValidation.None);
+
+            var result = await AppCli.RunBufferedAsync(command, ct);
+            
+            if (result.ExitCode != 0 && string.IsNullOrWhiteSpace(result.StandardOutput))
             {
-                outdated[o.Name] = o.LatestVersion;
+                logger?.Invoke($"[red]Error fetching latest versions: {Markup.Escape(result.StandardError)}[/]");
+                return [];
+            }
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var output = JsonSerializer.Deserialize<DotnetListOutdatedOutput>(result.StandardOutput, options);
+
+            if (output?.Projects == null) return [];
+
+            var outdated = new Dictionary<string, string>();
+            foreach (var p in output.Projects)
+            {
+                if (p.Frameworks == null) continue;
+                foreach (var f in p.Frameworks)
+                {
+                    if (f.TopLevelPackages == null) continue;
+                    foreach (var pkg in f.TopLevelPackages)
+                    {
+                        outdated[pkg.Id] = pkg.LatestVersion;
+                    }
+                }
             }
             return outdated;
         }
@@ -154,7 +225,16 @@ public class NuGetService(EasyDotnetService easyDotnetService)
         }
     }
 
-    public async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
+    private record DotnetListPackageOutput(List<DotnetListPackageProject> Projects);
+    private record DotnetListPackageProject(string Path, List<DotnetListPackageFramework> Frameworks);
+    private record DotnetListPackageFramework(string Framework, List<PackageReference>? TopLevelPackages);
+
+    private record DotnetListOutdatedOutput(List<DotnetListOutdatedProject> Projects);
+    private record DotnetListOutdatedProject(string Path, List<DotnetListOutdatedFramework> Frameworks);
+    private record DotnetListOutdatedFramework(string Framework, List<DotnetListOutdatedPackage>? TopLevelPackages);
+    private record DotnetListOutdatedPackage(string Id, string ResolvedVersion, string LatestVersion);
+
+        public async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
     {
         var args = new List<string> { "add", projectPath, "package", packageId };
 
@@ -178,7 +258,80 @@ public class NuGetService(EasyDotnetService easyDotnetService)
         await AppCli.RunAsync(command);
     }
 
-    public async Task RemovePackageAsync(string projectPath, string packageId, Action<string>? logger = null)
+    public async Task UpdatePackageAsync(string projectPath, string packageId, string version, bool noRestore = false, Action<string>? logger = null)
+    {
+        // Use dotnet outdated for safe updates (handling CPM)
+        // Try to update using dotnet outdated first
+        var args = new List<string> { "outdated", projectPath, "-u:Auto", "--include", packageId };
+
+        if (!string.IsNullOrEmpty(version))
+        {
+            // If version is specified, we try to use --maximum-version. 
+            // Note: This only works if 'version' is higher than current. 
+            // If downgrading, this won't work, but dotnet outdated is the requested tool.
+            args.Add("--maximum-version");
+            args.Add(version);
+        }
+
+        // If version is a pre-release (contains '-'), we must allow pre-release
+        if (!string.IsNullOrEmpty(version) && version.Contains('-'))
+        {
+            args.Add("--pre-release");
+            args.Add("Always");
+        }
+        else
+        {
+            // Default to Auto to respect project settings, or Always if users generally want latest pre-release?
+            // "Auto" is safer.
+            args.Add("--pre-release");
+            args.Add("Auto");
+        }
+
+        if (noRestore)
+        {
+            args.Add("--no-restore");
+        }
+
+        var command = Cli.Wrap("dotnet")
+            .WithArguments(args)
+            .WithValidation(CommandResultValidation.None)
+            .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
+            .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")));
+
+        await AppCli.RunAsync(command);
+    }
+
+    public async Task UpdateAllPackagesAsync(string projectPath, VersionLock versionLock, bool noRestore = false, Action<string>? logger = null)
+    {
+        var args = new List<string> { "outdated", projectPath, "-u:Auto" };
+
+        if (noRestore)
+        {
+            args.Add("--no-restore");
+        }
+        
+        // Use Auto for pre-release (default)
+        args.Add("--pre-release");
+        args.Add("Auto");
+
+        // Apply version lock
+        if (versionLock != VersionLock.None)
+        {
+            args.Add("--version-lock");
+            args.Add(versionLock.ToString());
+        }
+
+        var command = Cli.Wrap("dotnet")
+            .WithArguments(args)
+            .WithValidation(CommandResultValidation.None)
+            .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
+            .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")));
+
+        await AppCli.RunAsync(command);
+    }
+
+    public async Task RemovePackageAsync
+(string projectPath, string packageId, Action<string>? logger = null)
     {
         var command = Cli.Wrap("dotnet")
             .WithArguments($"remove \"{projectPath}\" package \"{packageId}\"")

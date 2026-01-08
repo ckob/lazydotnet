@@ -27,19 +27,19 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         {
             MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
 
         yield return new KeyBinding("j", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
         yield return new KeyBinding("a", "add", AddReferenceAsync, k => k.KeyChar == 'a');
 
         if (_refsList.SelectedItem != null)
         {
-            yield return new KeyBinding("Enter", "select in explorer", () =>
+            yield return new KeyBinding("enter", "select in explorer", () =>
             {
                 RequestSelectProject?.Invoke(_refsList.SelectedItem);
                 return Task.CompletedTask;
@@ -198,7 +198,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         RequestModal?.Invoke(confirm);
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth)
+    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
     {
         var grid = new Grid();
         grid.AddColumn();
@@ -254,7 +254,14 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
             if (isSelected)
             {
-                grid.AddRow(new Markup($"[black on blue]  → {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
+                if (isActive)
+                {
+                    grid.AddRow(new Markup($"  [black on blue]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
+                }
+                else
+                {
+                    grid.AddRow(new Markup($"  [bold white]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
+                }
             }
             else
             {

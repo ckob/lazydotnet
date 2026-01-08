@@ -197,13 +197,13 @@ public class SolutionExplorer : IKeyBindable
         {
             MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
 
         yield return new KeyBinding("j", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
         yield return new KeyBinding("←", "collapse", () =>
         {
@@ -217,11 +217,11 @@ public class SolutionExplorer : IKeyBindable
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.RightArrow, false);
 
-        yield return new KeyBinding("Enter/Space", "toggle", () =>
+        yield return new KeyBinding("enter/space", "toggle", () =>
         {
             ToggleExpand();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar);
+        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
 
         yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
     }
@@ -389,7 +389,7 @@ public class SolutionExplorer : IKeyBindable
         return null;
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth)
+    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
     {
         if (_root == null)
         {
@@ -406,28 +406,30 @@ public class SolutionExplorer : IKeyBindable
         {
             var node = _visibleNodes[i];
             var isSelected = i == _selectedIndex;
-            grid.AddRow(RenderNode(node, isSelected, availableWidth));
+            grid.AddRow(RenderNode(node, isSelected, isActive, availableWidth));
         }
         return grid;
     }
 
-    private static Markup RenderNode(ExplorerNode node, bool isSelected, int availableWidth)
+    private static Markup RenderNode(ExplorerNode node, bool isSelected, bool isActive, int availableWidth)
     {
         var indent = new string(' ', node.Depth * 2);
         var icon = GetNodeIcon(node);
         var name = GetTruncatedName(node.Name, node.Depth, availableWidth);
 
-        var text = $"{indent} {icon} {Markup.Escape(name)}";
-
         if (!isSelected)
-            return new Markup($"[white]{text}[/]");
+            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}[/]");
 
-        var iconWidth = GetIconWidth(node);
-        var visibleLength = (node.Depth * 2) + iconWidth + name.Length + 2;
-        var paddingNeeded = Math.Max(0, availableWidth - visibleLength);
-        var padding = new string(' ', paddingNeeded);
-
-        return new Markup($"[black on blue]{text}{padding}[/]");
+        if (isActive)
+        {
+            // Active selection in explorer: Black on blue
+            return new Markup($"{indent} [black on blue]{icon} {Markup.Escape(name)}[/]");
+        }
+        else
+        {
+            // Inactive selection: Bold yellow
+            return new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]");
+        }
     }
 
     private static string GetNodeIcon(ExplorerNode node)

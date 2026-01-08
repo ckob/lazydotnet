@@ -19,7 +19,7 @@ public class Modal : IKeyBindable
 
     public virtual IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("Esc", "close", () =>
+        yield return new KeyBinding("esc", "close", () =>
         {
             OnClose();
             return Task.CompletedTask;

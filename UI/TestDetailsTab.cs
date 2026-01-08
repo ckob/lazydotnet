@@ -132,13 +132,13 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         {
             MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
 
         yield return new KeyBinding("j", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
         if (_visibleNodes.Count == 0) yield break;
 
@@ -173,7 +173,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.LeftArrow, false);
 
-        yield return new KeyBinding("Enter/Space", "toggle", () =>
+        yield return new KeyBinding("enter/space", "toggle", () =>
         {
             if (node.IsContainer)
             {
@@ -181,7 +181,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                 RefreshVisibleNodes();
             }
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar);
+        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
 
         yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.KeyChar == 'r' || k.KeyChar == 'R');
         yield return new KeyBinding("e/o", "open", () => OpenInEditorAsync(node), k => k.KeyChar == 'e' || k.KeyChar == 'o');
@@ -267,7 +267,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         if (_scrollOffset < 0) _scrollOffset = 0;
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth)
+    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
     {
         if (_isLoading)
         {
@@ -321,34 +321,43 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                 int width = Math.Max(10, availableWidth);
                 int prefixLen = indent.Length + 1 + visibleIconLen + 1;
                 
-                string dispName = node.Name;
-                if (node.IsContainer && node.TestCount > 0)
-                {
-                    dispName += $" [dim]({node.TestCount} tests)[/]";
-                }
-
-                // Calculate max name length without markup
-                int cleanNameLen = node.Name.Length + (node.IsContainer && node.TestCount > 0 ? $" ({node.TestCount} tests)".Length : 0);
+                string rawName = node.Name;
+                string testCountSuffix = (node.IsContainer && node.TestCount > 0) ? $" ({node.TestCount} tests)" : "";
+                
+                int cleanNameLen = rawName.Length + testCountSuffix.Length;
                 int maxNameLen = width - prefixLen - 1;
 
                 if (cleanNameLen > maxNameLen && maxNameLen > 0)
                 {
-                    // Very rough truncation for names with markup
-                    dispName = node.Name;
-                    if (dispName.Length > maxNameLen - 10)
+                    // Truncate raw name before escaping
+                    int allowedNameLen = maxNameLen - testCountSuffix.Length - 1;
+                    if (allowedNameLen > 0 && rawName.Length > allowedNameLen)
                     {
-                         dispName = string.Concat(dispName.AsSpan(0, Math.Max(0, maxNameLen - 13)), "…");
-                    }
-                    if (node.IsContainer && node.TestCount > 0)
-                    {
-                        dispName += $" [dim]({node.TestCount})[/]";
+                        rawName = string.Concat(rawName.AsSpan(0, allowedNameLen), "…");
                     }
                 }
 
-                string style = isSelected ? "[black on blue]" : "";
-                string closeStyle = isSelected ? "[/]" : "";
+                string dispName = Markup.Escape(rawName);
+                if (testCountSuffix.Length > 0)
+                {
+                    dispName += $" [dim]{Markup.Escape(testCountSuffix)}[/]";
+                }
 
-                treeGrid.AddRow(new Markup($"{style}{indent} {lineIcon} {dispName}{closeStyle}"));
+                if (isSelected)
+                {
+                    if (isActive)
+                    {
+                        treeGrid.AddRow(new Markup($"{indent} [black on blue]{lineIcon} {dispName}[/]"));
+                    }
+                    else
+                    {
+                        treeGrid.AddRow(new Markup($"{indent} [bold white]{lineIcon} {dispName}[/]"));
+                    }
+                }
+                else
+                {
+                    treeGrid.AddRow(new Markup($"{indent} {lineIcon} {dispName}"));
+                }
             }
 
             return treeGrid;

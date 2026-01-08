@@ -1,4 +1,5 @@
 using lazydotnet.Core;
+using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.UI.Components;
 using lazydotnet.Services;
@@ -95,6 +96,15 @@ public class ProjectDetailsPane : IKeyBindable
         return Task.CompletedTask;
     }
 
+    public async Task ReloadCurrentTabDataAsync()
+    {
+        if (_currentProjectPath != null && _currentProjectName != null)
+        {
+            await _tabInstances[_tabs.ActiveTab].LoadAsync(_currentProjectPath, _currentProjectName, force: true);
+            RequestRefresh?.Invoke();
+        }
+    }
+
     private void TriggerLoad()
     {
         if (_currentProjectPath != null && _currentProjectName != null)
@@ -114,13 +124,13 @@ public class ProjectDetailsPane : IKeyBindable
         {
             PreviousTab();
             return Task.CompletedTask;
-        }, k => k.KeyChar == '[');
+        }, k => k.KeyChar == '[', false);
 
         yield return new KeyBinding("]", "next tab", () =>
         {
             NextTab();
             return Task.CompletedTask;
-        }, k => k.KeyChar == ']' || k.Key == ConsoleKey.Tab);
+        }, k => k.KeyChar == ']' || k.Key == ConsoleKey.Tab, false);
 
         var activeTab = _tabInstances[_tabs.ActiveTab];
         foreach (var b in activeTab.GetKeyBindings())
@@ -141,9 +151,9 @@ public class ProjectDetailsPane : IKeyBindable
         return false;
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth)
+    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
     {
          var activeInstance = _tabInstances[_tabs.ActiveTab];
-         return activeInstance.GetContent(availableHeight, availableWidth);
+         return activeInstance.GetContent(availableHeight, availableWidth, isActive);
     }
 }

@@ -57,6 +57,14 @@ public class ScrollableList<T>
         return false;
     }
 
+    public void Select(int index)
+    {
+        if (index >= 0 && index < _items.Count)
+        {
+            _selectedIndex = index;
+        }
+    }
+
     public void EnsureVisible(int visibleRows)
     {
         if (visibleRows <= 0) return;

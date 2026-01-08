@@ -124,6 +124,7 @@ public class AppLayout
         _mainLayout["Right"].Update(panel);
     }
 
+
     public event Action? OnLog;
 
     public void AddLog(string message)
@@ -135,12 +136,12 @@ public class AppLayout
     public void AddEasyDotnetLog(string message)
     {
         EasyDotnetOutputViewer.AddLog(message);
-        OnLog?.Invoke(); // Reuse OnLog to trigger refresh, or rename/create generic refresh event if needed. 
+        OnLog?.Invoke(); // Reuse OnLog to trigger refresh, or rename/create generic refresh event if needed.
                          // Assuming OnLog just triggers a repaint or is used for notifications.
                          // Checking usages of OnLog... "AppCli.OnLog += layout.AddLog;" and "AppCli.OnLog += layout.AddLog;"
                          // Actually, OnLog is an event IN AppLayout. It seems it signals "something changed, please redraw".
                          // Wait, in Program.cs: AppCli.OnLog += layout.AddLog;
-                         // But AppLayout also has "public event Action? OnLog;". 
+                         // But AppLayout also has "public event Action? OnLog;".
                          // And AddLog invokes OnLog?.Invoke().
                          // It seems slightly circular or I'm misreading where AppLayout.OnLog is consumed.
                          // Let's assume OnLog event on AppLayout is observed by AppHost or similar to trigger render loop?

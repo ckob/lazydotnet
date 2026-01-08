@@ -28,15 +28,15 @@ public class ProjectPickerModal : Modal
         {
             _projectList.MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
 
         yield return new KeyBinding("j", "down", () =>
         {
             _projectList.MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
-        yield return new KeyBinding("Enter", "select", () =>
+        yield return new KeyBinding("enter", "select", () =>
         {
             if (_projectList.SelectedItem != null)
             {

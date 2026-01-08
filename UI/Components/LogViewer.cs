@@ -17,10 +17,10 @@ public class LogViewer : IKeyBindable
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
-        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown), k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
-        yield return new KeyBinding("PgUp", "page up", () => Task.Run(() => PageUp(10)), k => k.Key == ConsoleKey.PageUp, false);
-        yield return new KeyBinding("PgDn", "page down", () => Task.Run(() => PageDown(10)), k => k.Key == ConsoleKey.PageDown, false);
+        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
+        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown), k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+        yield return new KeyBinding("pgup", "page up", () => Task.Run(() => PageUp(10)), k => k.Key == ConsoleKey.PageUp, false);
+        yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => PageDown(10)), k => k.Key == ConsoleKey.PageDown, false);
     }
 
     public bool HandleInput(ConsoleKeyInfo key)
