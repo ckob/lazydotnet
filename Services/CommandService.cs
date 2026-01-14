@@ -3,18 +3,18 @@ using Spectre.Console;
 
 namespace lazydotnet.Services;
 
-public class CommandService
+public static class CommandService
 {
-    public async Task<CommandResult> BuildProjectAsync(string projectPath, Action<string> onOutput, CancellationToken ct)
+    private const string DotnetExecutable = "dotnet";
+
+    public static async Task<CommandResult> BuildProjectAsync(string projectPath, Action<string> onOutput, CancellationToken ct)
     {
-        var cmd = Cli.Wrap("dotnet")
+        var cmd = Cli.Wrap(DotnetExecutable)
             .WithArguments($"build \"{projectPath}\" /v:n /nologo")
             .WithValidation(CommandResultValidation.None)
-            .WithStandardOutputPipe(PipeTarget.ToDelegate(onOutput))
+            .WithStandardOutputPipe(PipeTarget.ToDelegate(s => onOutput(Markup.Escape(s))))
             .WithStandardErrorPipe(PipeTarget.ToDelegate(err => onOutput($"[red]{Markup.Escape(err)}[/]")));
 
-        var result = await AppCli.RunAsync(cmd, ct);
-
-        return new CommandResult(result.ExitCode, result.StartTime, result.ExitTime);
+        return await AppCli.RunAsync(cmd, ct);
     }
 }

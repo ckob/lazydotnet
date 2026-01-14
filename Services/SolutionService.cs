@@ -38,11 +38,11 @@ public class SolutionService(EasyDotnetService easyDotnetService)
         var projects = projectsResponse
             .DistinctBy(p => p.AbsolutePath)
             .Select(proj => new ProjectInfo
-        {
-            Name = proj.ProjectName,
-            Path = proj.AbsolutePath,
-            Id = proj.AbsolutePath
-        }).ToList();
+            {
+                Name = proj.ProjectName,
+                Path = proj.AbsolutePath,
+                Id = proj.AbsolutePath
+            }).ToList();
 
         CurrentSolution = new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects);
         return CurrentSolution;

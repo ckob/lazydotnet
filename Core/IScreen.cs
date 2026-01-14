@@ -1,4 +1,3 @@
-using Spectre.Console;
 using lazydotnet.UI;
 
 namespace lazydotnet.Core;

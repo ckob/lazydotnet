@@ -3,102 +3,91 @@ namespace lazydotnet.UI.Components;
 public class ScrollableList<T>
 {
     private List<T> _items = [];
-    private int _selectedIndex = 0;
-    private int _scrollOffset = 0;
 
     public IReadOnlyList<T> Items => _items;
-    public int SelectedIndex => _selectedIndex;
-    public int ScrollOffset => _scrollOffset;
+    public int SelectedIndex { get; private set; }
+
+    private int ScrollOffset { get; set; }
+
     public int Count => _items.Count;
-    public T? SelectedItem => _selectedIndex >= 0 && _selectedIndex < _items.Count ? _items[_selectedIndex] : default;
+    public T? SelectedItem => SelectedIndex >= 0 && SelectedIndex < _items.Count ? _items[SelectedIndex] : default;
 
     public void SetItems(List<T> items)
     {
         _items = items;
-        if (_selectedIndex == -1 || _selectedIndex >= _items.Count)
-            _selectedIndex = _items.Count > 0 ? 0 : -1;
-    }
-
-    public void Reset()
-    {
-        _selectedIndex = _items.Count > 0 ? 0 : -1;
-        _scrollOffset = 0;
+        if (SelectedIndex == -1 || SelectedIndex >= _items.Count)
+            SelectedIndex = _items.Count > 0 ? 0 : -1;
     }
 
     public void Clear()
     {
         _items.Clear();
-        _selectedIndex = -1;
-        _scrollOffset = 0;
+        SelectedIndex = -1;
+        ScrollOffset = 0;
     }
 
-    public bool MoveUp()
+    public void MoveUp()
     {
-        if (_selectedIndex == -1 && _items.Count > 0)
+        switch (SelectedIndex)
         {
-            _selectedIndex = _items.Count - 1;
-            return true;
+            case -1 when _items.Count > 0:
+                SelectedIndex = _items.Count - 1;
+                return;
+            case > 0:
+                SelectedIndex--;
+                break;
         }
-        if (_selectedIndex > 0)
-        {
-            _selectedIndex--;
-            return true;
-        }
-        return false;
     }
 
-    public bool MoveDown()
+    public void MoveDown()
     {
-        if (_selectedIndex < _items.Count - 1)
+        if (SelectedIndex < _items.Count - 1)
         {
-            _selectedIndex++;
-            return true;
+            SelectedIndex++;
         }
-        return false;
     }
 
     public void Select(int index)
     {
         if (index >= 0 && index < _items.Count)
         {
-            _selectedIndex = index;
+            SelectedIndex = index;
         }
     }
 
-    public void EnsureVisible(int visibleRows)
+    private void EnsureVisible(int visibleRows)
     {
         if (visibleRows <= 0) return;
 
-        if (_selectedIndex == -1)
+        if (SelectedIndex == -1)
         {
-            _scrollOffset = 0;
+            ScrollOffset = 0;
             return;
         }
 
-        if (_selectedIndex < _scrollOffset)
-            _scrollOffset = _selectedIndex;
+        if (SelectedIndex < ScrollOffset)
+            ScrollOffset = SelectedIndex;
 
 
-        if (_selectedIndex >= _scrollOffset + visibleRows)
-            _scrollOffset = _selectedIndex - visibleRows + 1;
+        if (SelectedIndex >= ScrollOffset + visibleRows)
+            ScrollOffset = SelectedIndex - visibleRows + 1;
 
 
-        if (_scrollOffset < 0) _scrollOffset = 0;
-        int maxOffset = Math.Max(0, _items.Count - visibleRows);
-        if (_scrollOffset > maxOffset) _scrollOffset = maxOffset;
+        if (ScrollOffset < 0) ScrollOffset = 0;
+        var maxOffset = Math.Max(0, _items.Count - visibleRows);
+        if (ScrollOffset > maxOffset) ScrollOffset = maxOffset;
     }
 
     public (int start, int end) GetVisibleRange(int visibleRows)
     {
         EnsureVisible(visibleRows);
-        int start = _scrollOffset;
-        int end = Math.Min(_scrollOffset + visibleRows, _items.Count);
+        var start = ScrollOffset;
+        var end = Math.Min(ScrollOffset + visibleRows, _items.Count);
         return (start, end);
     }
 
     public string? GetScrollIndicator(int visibleRows)
     {
-        if (_items.Count <= visibleRows) return null;
-        return $"{_selectedIndex + 1} of {_items.Count}";
+        return _items.Count <= visibleRows ? null : $"{SelectedIndex + 1} of {_items.Count}";
     }
 }

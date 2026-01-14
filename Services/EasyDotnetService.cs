@@ -141,7 +141,10 @@ public class EasyDotnetService : IAsyncDisposable
                 if (dir != null) Directory.CreateDirectory(dir);
                 await File.WriteAllTextAsync(GetServerInfoPath(), pipeName, startupCts.Token);
             }
-            catch { }
+            catch
+            {
+                // Ignore
+            }
 
             await SetupRpcAsync(startupCts.Token);
 

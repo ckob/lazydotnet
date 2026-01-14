@@ -74,7 +74,7 @@ public class TestService(EasyDotnetService easyDotnetService)
             var current = root;
 
             // Build hierarchy up to the class (all parts except the last one which is the method)
-            for (int i = 0; i < parts.Length - 1; i++)
+            for (var i = 0; i < parts.Length - 1; i++)
             {
                 var part = parts[i];
                 var existing = current.Children.FirstOrDefault(c => c.Name == part && c.IsContainer);
@@ -222,11 +222,11 @@ public class TestService(EasyDotnetService easyDotnetService)
 
     private void CompactTree(TestNode node)
     {
-        bool changed = true;
+        var changed = true;
         while (changed)
         {
             changed = false;
-            for (int i = node.Children.Count - 1; i >= 0; i--)
+            for (var i = node.Children.Count - 1; i >= 0; i--)
             {
                 CompactTree(node.Children[i]);
             }

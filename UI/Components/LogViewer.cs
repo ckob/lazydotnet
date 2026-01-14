@@ -5,22 +5,29 @@ using Spectre.Console.Rendering;
 
 namespace lazydotnet.UI.Components;
 
-public class LogViewer : IKeyBindable
+public partial class LogViewer : IKeyBindable
 {
     private readonly List<string> _logs = [];
     private readonly Lock _lock = new();
+    private static readonly Regex StyleRegex = GetStyleRegex();
 
-    private int _scrollOffset = 0;
+    private int _scrollOffset;
     private int _selectedLogicalIndex = -1; // -1 means auto-scroll
 
     private const int MaxLogLines = 1000;
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
-        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown), k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
-        yield return new KeyBinding("pgup", "page up", () => Task.Run(() => PageUp(10)), k => k.Key == ConsoleKey.PageUp, false);
-        yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => PageDown(10)), k => k.Key == ConsoleKey.PageDown, false);
+        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp),
+            k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
+                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
+        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown),
+            k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
+                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+        yield return new KeyBinding("pgup", "page up", () => Task.Run(() => PageUp(10)),
+            k => k.Key == ConsoleKey.PageUp, false);
+        yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => PageDown(10)),
+            k => k.Key == ConsoleKey.PageDown, false);
     }
 
     public bool HandleInput(ConsoleKeyInfo key)
@@ -31,6 +38,7 @@ public class LogViewer : IKeyBindable
             _ = binding.Action();
             return true;
         }
+
         return false;
     }
 
@@ -52,7 +60,7 @@ public class LogViewer : IKeyBindable
         lock (_lock)
         {
             if (_logs.Count == 0) return;
-            
+
             if (_selectedLogicalIndex == -1)
             {
                 _selectedLogicalIndex = _logs.Count - 1;
@@ -88,7 +96,7 @@ public class LogViewer : IKeyBindable
                     return;
                 }
             }
-            
+
             _selectedLogicalIndex = -1; // Resume auto-scroll
         }
     }
@@ -128,26 +136,19 @@ public class LogViewer : IKeyBindable
         {
             if (_logs.Count == 0) return new Markup("");
 
-            var visibleRows = Math.Max(1, height); 
+            var visibleRows = Math.Max(1, height);
             var renderWidth = Math.Max(1, width - 4);
 
             // 1. Flatten to physical lines
             var physicalLines = new List<PhysicalLine>();
-            for (int i = 0; i < _logs.Count; i++)
+            for (var i = 0; i < _logs.Count; i++)
             {
                 var logical = _logs[i];
                 var (cleanText, style) = ExtractStyle(logical);
                 var wrapped = WrapText(cleanText, renderWidth);
-                
-                foreach (var w in wrapped)
-                {
-                    physicalLines.Add(new PhysicalLine 
-                    { 
-                        Text = w, 
-                        LogicalIndex = i, 
-                        Style = style 
-                    });
-                }
+
+                physicalLines.AddRange(wrapped.Select(w =>
+                    new PhysicalLine { Text = w, LogicalIndex = i, Style = style }));
             }
 
             // 2. Scrolling logic on physical lines
@@ -157,15 +158,15 @@ public class LogViewer : IKeyBindable
             }
             else
             {
-                int first = -1;
-                int last = -1;
-                for (int i = 0; i < physicalLines.Count; i++)
+                var first = -1;
+                var last = -1;
+                for (var i = 0; i < physicalLines.Count; i++)
                 {
-                    if (physicalLines[i].LogicalIndex == _selectedLogicalIndex)
-                    {
-                        if (first == -1) first = i;
-                        last = i;
-                    }
+                    if (physicalLines[i].LogicalIndex != _selectedLogicalIndex)
+                        continue;
+
+                    if (first == -1) first = i;
+                    last = i;
                 }
 
                 if (first != -1)
@@ -185,29 +186,31 @@ public class LogViewer : IKeyBindable
                 .Expand()
                 .AddColumn(new TableColumn("Log").NoWrap().Width(renderWidth));
 
-            int start = _scrollOffset;
-            int renderedCount = 0;
+            var start = _scrollOffset;
+            var renderedCount = 0;
 
-            for (int i = start; i < physicalLines.Count && renderedCount < visibleRows; i++)
+            for (var i = start; i < physicalLines.Count && renderedCount < visibleRows; i++)
             {
                 var line = physicalLines[i];
-                var isSelected = (line.LogicalIndex == _selectedLogicalIndex);
+                var isSelected = line.LogicalIndex == _selectedLogicalIndex;
 
                 var escapedText = Markup.Escape(line.Text);
                 if (isSelected)
                 {
-                    string selectionStyle = isActive ? "black on white" : "black on silver";
+                    var selectionStyle = isActive ? "black on white" : "black on silver";
                     table.AddRow(new Markup($"[{selectionStyle}]{escapedText}[/]"));
                 }
                 else
                 {
-                    string contentMarkup = escapedText;
+                    var contentMarkup = escapedText;
                     if (!string.IsNullOrEmpty(line.Style))
                     {
                         contentMarkup = $"[{line.Style}]{escapedText}[/]";
                     }
+
                     table.AddRow(new Markup(contentMarkup));
                 }
+
                 renderedCount++;
             }
 
@@ -224,12 +227,10 @@ public class LogViewer : IKeyBindable
 
     private static (string Text, string? Style) ExtractStyle(string input)
     {
-        var match = Regex.Match(input, @"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$");
-        if (match.Success)
-        {
-            return (match.Groups["text"].Value, match.Groups["style"].Value);
-        }
-        return (input, null);
+        var match = StyleRegex.Match(input);
+        return match.Success
+            ? (match.Groups["text"].Value, match.Groups["style"].Value)
+            : (input, null);
     }
 
     private static List<string> WrapText(string text, int width)
@@ -238,16 +239,16 @@ public class LogViewer : IKeyBindable
         if (text.Length <= width) return [text];
 
         var lines = new List<string>();
-        int start = 0;
+        var start = 0;
 
         while (start < text.Length)
         {
-            int remaining = text.Length - start;
-            int length = Math.Min(width, remaining);
+            var remaining = text.Length - start;
+            var length = Math.Min(width, remaining);
 
             if (start + length < text.Length)
             {
-                int lastSpace = text.LastIndexOf(' ', start + length, length);
+                var lastSpace = text.LastIndexOf(' ', start + length, length);
                 if (lastSpace > start)
                 {
                     lines.Add(text.Substring(start, lastSpace - start));
@@ -262,4 +263,7 @@ public class LogViewer : IKeyBindable
 
         return lines;
     }
+
+    [GeneratedRegex(@"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$", RegexOptions.Compiled)]
+    private static partial Regex GetStyleRegex();
 }

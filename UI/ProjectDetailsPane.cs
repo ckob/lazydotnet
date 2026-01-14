@@ -1,5 +1,4 @@
 using lazydotnet.Core;
-using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.UI.Components;
 using lazydotnet.Services;
@@ -10,7 +9,6 @@ public class ProjectDetailsPane : IKeyBindable
 {
     private readonly TabbedPane _tabs;
     private readonly NuGetDetailsTab _nugetTab;
-    private readonly ProjectReferencesTab _refsTab;
     private readonly TestDetailsTab _testsTab;
     private readonly List<IProjectTab> _tabInstances = [];
 
@@ -30,10 +28,10 @@ public class ProjectDetailsPane : IKeyBindable
     public ProjectDetailsPane(SolutionService solutionService, NuGetService nuGetService, TestService testService, IEditorService editorService)
     {
         _nugetTab = new NuGetDetailsTab(nuGetService);
-        _refsTab = new ProjectReferencesTab(solutionService, editorService);
+        var refsTab = new ProjectReferencesTab(solutionService, editorService);
         _testsTab = new TestDetailsTab(testService, editorService);
 
-        _tabInstances.Add(_refsTab);
+        _tabInstances.Add(refsTab);
         _tabInstances.Add(_nugetTab);
         _tabInstances.Add(_testsTab);
 
@@ -44,7 +42,7 @@ public class ProjectDetailsPane : IKeyBindable
             tab.RequestSelectProject = p => RequestSelectProject?.Invoke(p);
         }
 
-        _tabs = new TabbedPane(_refsTab.Title, _nugetTab.Title, _testsTab.Title);
+        _tabs = new TabbedPane(ProjectReferencesTab.Title, _nugetTab.Title, TestDetailsTab.Title);
     }
 
     public int ActiveTab => _tabs.ActiveTab;
@@ -54,23 +52,17 @@ public class ProjectDetailsPane : IKeyBindable
         return _testsTab.GetSelectedNode();
     }
 
-    public void NextTab()
+    private void NextTab()
     {
         _tabs.NextTab();
         TriggerLoad();
     }
 
-    public void PreviousTab()
+    private void PreviousTab()
     {
         _tabs.PreviousTab();
         TriggerLoad();
     }
-
-    public void MoveUp() => _tabInstances[_tabs.ActiveTab].MoveUp();
-
-    public void MoveDown() => _tabInstances[_tabs.ActiveTab].MoveDown();
-
-    public string? GetScrollIndicator() => _tabInstances[_tabs.ActiveTab].GetScrollIndicator();
 
     public bool OnTick() => _tabInstances[_tabs.ActiveTab].OnTick();
 
@@ -107,15 +99,20 @@ public class ProjectDetailsPane : IKeyBindable
 
     private void TriggerLoad()
     {
-        if (_currentProjectPath != null && _currentProjectName != null)
+        if (_currentProjectPath == null || _currentProjectName == null)
+            return;
+
+        var task = _tabInstances[_tabs.ActiveTab].LoadAsync(_currentProjectPath, _currentProjectName);
+        _ = Task.Run(async () =>
         {
-             var task = _tabInstances[_tabs.ActiveTab].LoadAsync(_currentProjectPath, _currentProjectName);
-             _ = Task.Run(async () =>
-             {
-                 try { await task; } catch { }
-                 RequestRefresh?.Invoke();
-             });
-        }
+            try { await task; }
+            catch
+            {
+                // ignored
+            }
+
+            RequestRefresh?.Invoke();
+        });
     }
 
     public IEnumerable<KeyBinding> GetKeyBindings()
@@ -137,18 +134,6 @@ public class ProjectDetailsPane : IKeyBindable
         {
             yield return b;
         }
-    }
-
-    public async Task<bool> HandleInputAsync(ConsoleKeyInfo key, AppLayout layout)
-    {
-        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding != null)
-        {
-            await binding.Action();
-            layout.SetDetailsActiveTab(ActiveTab);
-            return true;
-        }
-        return false;
     }
 
     public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)

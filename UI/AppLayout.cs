@@ -34,7 +34,6 @@ public class AppLayout
     {
         if (modalContent != null)
         {
-            // Create an overlay that places the modal over the main layout
             _rootLayout["Main"].Update(new Overlay(_mainLayout, modalContent));
         }
         else
@@ -43,43 +42,37 @@ public class AppLayout
         }
     }
 
-    public int GetBottomHeight(int totalHeight)
+    public static int GetBottomHeight(int totalHeight)
     {
-        int availableHeight = totalHeight - 1; // Reserved for footer
-        int topHeight = (availableHeight * TopRatio) / (TopRatio + BottomRatio);
+        var availableHeight = totalHeight - 1;
+        var topHeight = availableHeight * TopRatio / (TopRatio + BottomRatio);
         return availableHeight - topHeight;
     }
     public LogViewer LogViewer { get; } = new();
     public TestOutputViewer TestOutputViewer { get; } = new();
     public LogViewer EasyDotnetOutputViewer { get; } = new();
-    private int _activePanel = 0;
-    private int _bottomActiveTab = 0; // 0 = Log, 1 = Test Output, 2 = EasyDotnet Output
 
     public Layout GetRoot() => _rootLayout;
 
-    public int ActivePanel => _activePanel;
-    public int BottomActiveTab => _bottomActiveTab;
+    public int ActivePanel { get; private set; }
 
-    private int _detailsActiveTab = 0;
+    public int BottomActiveTab { get; private set; }
+
+    private int _detailsActiveTab;
 
     public void SetActivePanel(int panel)
     {
-        _activePanel = Math.Clamp(panel, 0, 2);
-    }
-
-    public void SetBottomActiveTab(int tab)
-    {
-        _bottomActiveTab = Math.Clamp(tab, 0, 2);
+        ActivePanel = Math.Clamp(panel, 0, 2);
     }
 
     public void NextBottomTab()
     {
-        _bottomActiveTab = (_bottomActiveTab + 1) % 3;
+        BottomActiveTab = (BottomActiveTab + 1) % 3;
     }
 
     public void PreviousBottomTab()
     {
-        _bottomActiveTab = (_bottomActiveTab - 1 + 3) % 3;
+        BottomActiveTab = (BottomActiveTab - 1 + 3) % 3;
     }
 
     public void SetDetailsActiveTab(int tab)
@@ -89,7 +82,7 @@ public class AppLayout
 
     public void UpdateLeft(IRenderable renderable)
     {
-        var isActive = _activePanel == 0;
+        var isActive = ActivePanel == 0;
         var header = isActive
             ? "[green][[1]][/]-[green]Explorer[/]"
             : "[dim][[1]][/]-[green]Explorer[/]";
@@ -105,11 +98,10 @@ public class AppLayout
 
     public void UpdateRight(IRenderable renderable)
     {
-        var isActive = _activePanel == 1;
-        // Refs (0), NuGets (1), Tests (2)
-        string refsTab = _detailsActiveTab == 0 ? "[green]Project References[/]" : "[dim]Project References[/]";
-        string nugetTab = _detailsActiveTab == 1 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
-        string testsTab = _detailsActiveTab == 2 ? "[green]Tests[/]" : "[dim]Tests[/]";
+        var isActive = ActivePanel == 1;
+        var refsTab = _detailsActiveTab == 0 ? "[green]Project References[/]" : "[dim]Project References[/]";
+        var nugetTab = _detailsActiveTab == 1 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
+        var testsTab = _detailsActiveTab == 2 ? "[green]Tests[/]" : "[dim]Tests[/]";
 
         var header = isActive
             ? $"[green][[2]][/]-{refsTab} - {nugetTab} - {testsTab}"
@@ -136,30 +128,21 @@ public class AppLayout
     public void AddEasyDotnetLog(string message)
     {
         EasyDotnetOutputViewer.AddLog(message);
-        OnLog?.Invoke(); // Reuse OnLog to trigger refresh, or rename/create generic refresh event if needed.
-                         // Assuming OnLog just triggers a repaint or is used for notifications.
-                         // Checking usages of OnLog... "AppCli.OnLog += layout.AddLog;" and "AppCli.OnLog += layout.AddLog;"
-                         // Actually, OnLog is an event IN AppLayout. It seems it signals "something changed, please redraw".
-                         // Wait, in Program.cs: AppCli.OnLog += layout.AddLog;
-                         // But AppLayout also has "public event Action? OnLog;".
-                         // And AddLog invokes OnLog?.Invoke().
-                         // It seems slightly circular or I'm misreading where AppLayout.OnLog is consumed.
-                         // Let's assume OnLog event on AppLayout is observed by AppHost or similar to trigger render loop?
-                         // I will check AppHost.cs to be sure.
+        OnLog?.Invoke();
     }
 
     public void UpdateBottom(int width, int height)
     {
-        var isActive = _activePanel == 2;
-        string logTab = _bottomActiveTab == 0 ? "[green]Log[/]" : "[dim]Log[/]";
-        string testTab = _bottomActiveTab == 1 ? "[green]Test Output[/]" : "[dim]Test Output[/]";
-        string ednTab = _bottomActiveTab == 2 ? "[green]EasyDotnet Output[/]" : "[dim]EasyDotnet Output[/]";
+        var isActive = ActivePanel == 2;
+        var logTab = BottomActiveTab == 0 ? "[green]Log[/]" : "[dim]Log[/]";
+        var testTab = BottomActiveTab == 1 ? "[green]Test Output[/]" : "[dim]Test Output[/]";
+        var ednTab = BottomActiveTab == 2 ? "[green]EasyDotnet Output[/]" : "[dim]EasyDotnet Output[/]";
 
         var header = isActive
             ? $"[green][[3]][/]-{logTab} - {testTab} - {ednTab}"
             : $"[dim][[3]][/]-{logTab} - {testTab} - {ednTab}";
 
-        IRenderable content = _bottomActiveTab switch
+        var content = BottomActiveTab switch
         {
             0 => LogViewer.GetContent(height - 2, width, isActive),
             1 => TestOutputViewer.GetContent(height - 2, width, isActive),

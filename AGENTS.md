@@ -13,7 +13,7 @@
   - Local vars: `camelCase`. 
   - Private fields: `_camelCase`.
 - **Async:** Use `async/await` and append `Async` to method names.
-- **Types:** Use `record` for data objects. `var` when type is obvious.
+- **Types:** Use `record` for data objects. Use always `var` instead of explicit type.
 - **Nullability:** Enable nullable reference types (`<Nullable>enable</Nullable>`).
 - **UI:** Use `Spectre.Console` for TUI components. 
 - **Error Handling:** Use `try/catch` blocks for external ops (file I/O, build).

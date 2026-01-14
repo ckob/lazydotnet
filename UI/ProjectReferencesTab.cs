@@ -17,7 +17,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public string Title => "Project References";
+    public static string Title => "Project References";
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
@@ -82,7 +82,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
     {
         if (_isLoading)
         {
-            int currentFrame = SpinnerHelper.GetCurrentFrameIndex();
+            var currentFrame = SpinnerHelper.GetCurrentFrameIndex();
             if (currentFrame != _lastFrameIndex)
             {
                 _lastFrameIndex = currentFrame;
@@ -110,6 +110,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         }
         catch (Exception)
         {
+            // ignored
         }
         finally
         {
@@ -128,9 +129,10 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         }
     }
 
-    private async Task AddReferenceAsync()
+    private Task AddReferenceAsync()
     {
-        if (_currentProjectPath == null || solutionService.CurrentSolution == null) return;
+        if (_currentProjectPath == null || solutionService.CurrentSolution == null)
+            return Task.CompletedTask;
 
         var currentRefs = _refsList.Items.Select(Path.GetFullPath).ToList();
         var projects = solutionService.CurrentSolution.Projects
@@ -164,11 +166,12 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         );
 
         RequestModal?.Invoke(picker);
+        return Task.CompletedTask;
     }
 
-    private async Task RemoveReferenceAsync()
+    private Task RemoveReferenceAsync()
     {
-        if (_currentProjectPath == null || _refsList.SelectedItem == null) return;
+        if (_currentProjectPath == null || _refsList.SelectedItem == null) return Task.CompletedTask;
 
         var targetPath = _refsList.SelectedItem;
         var refName = Path.GetFileNameWithoutExtension(targetPath);
@@ -196,9 +199,10 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         );
 
         RequestModal?.Invoke(confirm);
+        return Task.CompletedTask;
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
+    public IRenderable GetContent(int height, int width, bool isActive)
     {
         var grid = new Grid();
         grid.AddColumn();
@@ -220,16 +224,16 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
             return grid;
         }
 
-        int visibleRows = Math.Max(1, availableHeight);
+        var visibleRows = Math.Max(1, height);
         var (start, end) = _refsList.GetVisibleRange(visibleRows);
 
-        for (int i = start; i < end; i++)
+        for (var i = start; i < end; i++)
         {
             var refPath = _refsList.Items[i];
             var refName = Path.GetFileNameWithoutExtension(refPath);
-            bool isSelected = i == _refsList.SelectedIndex;
+            var isSelected = i == _refsList.SelectedIndex;
 
-            string displayPath = refPath;
+            var displayPath = refPath;
             if (solutionService.CurrentSolution != null)
             {
                 var slnDir = Path.GetDirectoryName(solutionService.CurrentSolution.Path);
@@ -239,29 +243,24 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
                 }
             }
 
-            string pathMarkup = $"({displayPath})";
-            // Allow more space and avoid truncation unless strictly necessary
-            int availableTextWidth = availableWidth - 6; 
+            var pathMarkup = $"({displayPath})";
+            var availableTextWidth = width - 6;
             if (refName.Length + pathMarkup.Length + 4 > availableTextWidth)
             {
-                int maxPathLen = availableTextWidth - refName.Length - 8;
+                var maxPathLen = availableTextWidth - refName.Length - 8;
                 if (maxPathLen > 15)
                 {
-                    // Middle truncation for paths to preserve both ends
                     pathMarkup = $"({displayPath[..(maxPathLen / 2)]}...{displayPath[^(maxPathLen / 2)..]})";
                 }
             }
 
             if (isSelected)
             {
-                if (isActive)
-                {
-                    grid.AddRow(new Markup($"  [black on blue]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
-                }
-                else
-                {
-                    grid.AddRow(new Markup($"  [bold white]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
-                }
+                grid.AddRow(isActive
+                    ? new Markup(
+                        $"  [black on blue]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]")
+                    : new Markup(
+                        $"  [bold white]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
             }
             else
             {

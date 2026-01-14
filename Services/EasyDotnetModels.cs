@@ -11,7 +11,6 @@ public record DebuggerOptions(string? BinaryPath = null, bool ApplyValueConverte
 public record ClientOptions(DebuggerOptions? DebuggerOptions = null, bool UseVisualStudio = false);
 public record InitializeRequest(ClientInfo ClientInfo, ProjectInitializeInfo ProjectInfo, ClientOptions? Options);
 
-// NuGet Models from easy-dotnet-server
 public record NugetPackageMetadata(
     string Source,
     string Id,

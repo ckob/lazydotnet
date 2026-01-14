@@ -15,12 +15,10 @@ public enum AppMode
 
 public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 {
-    // Lists
     private readonly ScrollableList<NuGetPackageInfo> _nugetList = new();
 
-    private readonly Lock _lock = new(); // UI Synchronization
+    private readonly Lock _lock = new();
 
-    // State
     private AppMode _appMode = AppMode.Normal;
     private string? _statusMessage;
     private bool _isActionRunning;
@@ -59,8 +57,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         lock (_lock)
         {
             if (_currentProjectPath == null || _isLoading) return null;
-            if (_nugetList.Count == 0) return null;
-            return $"{_nugetList.SelectedIndex + 1} of {_nugetList.Count}";
+            return _nugetList.Count == 0 ? null : $"{_nugetList.SelectedIndex + 1} of {_nugetList.Count}";
         }
     }
 
@@ -80,16 +77,11 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 
     public bool OnTick()
     {
-        if (_isFetchingLatest || _isLoading || _isActionRunning)
-        {
-            int currentFrame = SpinnerHelper.GetCurrentFrameIndex();
-            if (currentFrame != _lastFrameIndex)
-            {
-                _lastFrameIndex = currentFrame;
-                return true;
-            }
-        }
-        return false;
+        if (!_isFetchingLatest && !_isLoading && !_isActionRunning) return false;
+        var currentFrame = SpinnerHelper.GetCurrentFrameIndex();
+        if (currentFrame == _lastFrameIndex) return false;
+        _lastFrameIndex = currentFrame;
+        return true;
     }
 
     public async Task LoadAsync(string projectPath, string projectName, bool force = false)
@@ -100,6 +92,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         {
             await _loadCts.CancelAsync();
         }
+
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
@@ -114,13 +107,14 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         {
             // Step 1: Load installed packages (local, fast)
             var packages = await nuGetService.GetPackagesAsync(projectPath, LogAction, ct);
-             if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
+            if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
                 return;
 
             lock (_lock)
             {
                 _nugetList.SetItems(packages);
             }
+
             RequestRefresh?.Invoke();
 
             // Step 2: Fetch latest versions in background
@@ -136,18 +130,25 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                     lock (_lock)
                     {
                         var currentList = _nugetList.Items.ToList();
-                        var updatedList = currentList.Select(p => 
-                            latestVersions.TryGetValue(p.Id, out var latest) 
-                                ? p with { LatestVersion = latest } 
-                                : p with { LatestVersion = p.ResolvedVersion } // If not in outdated, it's up to date
+                        var updatedList = currentList.Select(p =>
+                                latestVersions.TryGetValue(p.Id, out var latest)
+                                    ? p with { LatestVersion = latest }
+                                    : p with
+                                    {
+                                        LatestVersion = p.ResolvedVersion
+                                    } // If not in outdated, it's up to date
                         ).ToList();
 
                         _nugetList.SetItems(updatedList);
                         _isFetchingLatest = false;
                     }
+
                     RequestRefresh?.Invoke();
                 }
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException)
+                {
+                    // Ignore
+                }
                 catch (Exception ex)
                 {
                     _statusMessage = $"Error fetching latest versions: {ex.Message}";
@@ -156,7 +157,10 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                 }
             }, ct);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // Ignore
+        }
         catch (Exception ex)
         {
             _statusMessage = $"Error loading packages: {ex.Message}";
@@ -181,103 +185,98 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         if (_isActionRunning || _isLoading) yield break;
 
         // Navigation (hidden)
-        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp), k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
-        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown), k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp),
+            k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
+                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
+        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown),
+            k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
+                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
 
-        if (_appMode == AppMode.Normal)
+        if (_appMode != AppMode.Normal)
+            yield break;
+
+        var isSolution = _currentProjectPath?.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (!isSolution)
         {
-            bool isSolution = _currentProjectPath?.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) == true;
+            yield return new KeyBinding("a", "add", () =>
+            {
+                var modal = new NuGetSearchModal(
+                    nuGetService,
+                    async selected => { await InstallPackageAsync(selected.Id, null); },
+                    () => RequestModal?.Invoke(null!),
+                    LogAction,
+                    () => RequestRefresh?.Invoke()
+                );
+                RequestModal?.Invoke(modal);
+                return Task.CompletedTask;
+            }, k => k.KeyChar == 'a');
+        }
+
+        if (_nugetList.SelectedItem != null)
+        {
+            if (_nugetList.SelectedItem.IsOutdated)
+            {
+                yield return new KeyBinding("u", "update", () =>
+                        UpdatePackageAsync(_nugetList.SelectedItem.Id, _nugetList.SelectedItem.LatestVersion!),
+                    k => k.KeyChar == 'u');
+            }
 
             if (!isSolution)
             {
-                yield return new KeyBinding("a", "add", () =>
-                {
-                    var modal = new NuGetSearchModal(
-                        nuGetService,
-                        async selected =>
-                        {
-                            await InstallPackageAsync(selected.Id, null);
-                        },
-                        () => RequestModal?.Invoke(null!),
-                        LogAction,
-                        () => RequestRefresh?.Invoke()
-                    );
-                    RequestModal?.Invoke(modal);
-                    return Task.CompletedTask;
-                }, k => k.KeyChar == 'a');
-            }
-
-            if (_nugetList.SelectedItem != null)
-            {
-                if (_nugetList.SelectedItem.IsOutdated)
-                {
-                    yield return new KeyBinding("u", "update", () =>
-                        UpdatePackageAsync(_nugetList.SelectedItem.Id, _nugetList.SelectedItem.LatestVersion!),
-                        k => k.KeyChar == 'u');
-                }
-
-                if (!isSolution)
-                {
-                    yield return new KeyBinding("d", "delete", () =>
-                    {
-                        var p = _nugetList.SelectedItem;
-                        if (p == null) return Task.CompletedTask;
-
-                        var confirm = new ConfirmationModal(
-                            "Remove Package",
-                            $"Are you sure you want to remove package [bold]{Markup.Escape(p.Id)}[/]?",
-                            async () =>
-                            {
-                                await RemovePackageAsync(p.Id);
-                            },
-                            () => RequestModal?.Invoke(null!)
-                        );
-
-                        RequestModal?.Invoke(confirm);
-                        return Task.CompletedTask;
-                    }, k => k.KeyChar == 'd');
-                }
-
-                yield return new KeyBinding("enter", "versions", () =>
+                yield return new KeyBinding("d", "delete", () =>
                 {
                     var p = _nugetList.SelectedItem;
                     if (p == null) return Task.CompletedTask;
-                    
-                    var modal = new NuGetVersionSelectionModal(
-                        nuGetService,
-                        p.Id,
-                        p.ResolvedVersion,
-                        p.LatestVersion,
-                        async v => await UpdatePackageAsync(p.Id, v),
-                        () => RequestModal?.Invoke(null!),
-                        LogAction,
-                        () => RequestRefresh?.Invoke()
+
+                    var confirm = new ConfirmationModal(
+                        "Remove Package",
+                        $"Are you sure you want to remove package [bold]{Markup.Escape(p.Id)}[/]?",
+                        async () => { await RemovePackageAsync(p.Id); },
+                        () => RequestModal?.Invoke(null!)
                     );
-                    RequestModal?.Invoke(modal);
+
+                    RequestModal?.Invoke(confirm);
                     return Task.CompletedTask;
-                }, k => k.Key == ConsoleKey.Enter);
+                }, k => k.KeyChar == 'd');
             }
 
-            if (_nugetList.Items.Any(p => p.IsOutdated))
+            yield return new KeyBinding("enter", "versions", () =>
             {
-                yield return new KeyBinding("U", "update all", UpdateAllOutdatedAsync, k => k.KeyChar == 'U');
-            }
+                var p = _nugetList.SelectedItem;
+                if (p == null) return Task.CompletedTask;
+
+                var modal = new NuGetVersionSelectionModal(
+                    nuGetService,
+                    p.Id,
+                    p.ResolvedVersion,
+                    p.LatestVersion,
+                    async v => await UpdatePackageAsync(p.Id, v),
+                    () => RequestModal?.Invoke(null!),
+                    LogAction,
+                    () => RequestRefresh?.Invoke()
+                );
+                RequestModal?.Invoke(modal);
+                return Task.CompletedTask;
+            }, k => k.Key == ConsoleKey.Enter);
+        }
+
+        if (_nugetList.Items.Any(p => p.IsOutdated))
+        {
+            yield return new KeyBinding("U", "update all", UpdateAllOutdatedAsync, k => k.KeyChar == 'U');
         }
     }
 
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
     {
         var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding != null)
-        {
-            await binding.Action();
-            return true;
-        }
+        if (binding == null)
+            return false;
 
-        return false;
+        await binding.Action();
+        return true;
     }
 
-    // Actions
 
     private async Task InstallPackageAsync(string packageId, string? version)
     {
@@ -288,7 +287,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         RequestRefresh?.Invoke();
         try
         {
-            await nuGetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
+            await NuGetService.InstallPackageAsync(_currentProjectPath, packageId, version, false, LogAction);
         }
         catch (Exception ex)
         {
@@ -313,7 +312,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         RequestRefresh?.Invoke();
         try
         {
-            await nuGetService.UpdatePackageAsync(_currentProjectPath, packageId, version, false, LogAction);
+            await NuGetService.UpdatePackageAsync(_currentProjectPath, packageId, version, false, LogAction);
         }
         catch (Exception ex)
         {
@@ -338,7 +337,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         RequestRefresh?.Invoke();
         try
         {
-            await nuGetService.RemovePackageAsync(_currentProjectPath, packageId, LogAction);
+            await NuGetService.RemovePackageAsync(_currentProjectPath, packageId, LogAction);
         }
         catch (Exception ex)
         {
@@ -390,19 +389,20 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         RequestRefresh?.Invoke();
         try
         {
-            await nuGetService.UpdateAllPackagesAsync(_currentProjectPath, strategy, noRestore: true, logger: LogAction);
+            await NuGetService.UpdateAllPackagesAsync(_currentProjectPath, strategy, noRestore: true,
+                logger: LogAction);
 
             _statusMessage = "Finalizing restore...";
             RequestRefresh?.Invoke();
 
-             var pipe = LogAction != null ? PipeTarget.ToDelegate(s => LogAction(Markup.Escape(s))) : PipeTarget.Null;
+            var pipe = LogAction != null ? PipeTarget.ToDelegate(s => LogAction(Markup.Escape(s))) : PipeTarget.Null;
 
-             var command = CliWrap.Cli.Wrap("dotnet")
-                 .WithArguments($"restore \"{_currentProjectPath}\"")
-                 .WithStandardOutputPipe(pipe)
-                 .WithStandardErrorPipe(pipe);
+            var command = Cli.Wrap("dotnet")
+                .WithArguments($"restore \"{_currentProjectPath}\"")
+                .WithStandardOutputPipe(pipe)
+                .WithStandardErrorPipe(pipe);
 
-             await AppCli.RunAsync(command);
+            await AppCli.RunAsync(command);
         }
         catch (Exception ex)
         {
@@ -418,7 +418,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         }
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
+    public IRenderable GetContent(int height, int width, bool isActive)
     {
         lock (_lock)
         {
@@ -433,28 +433,26 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
 
             if (_isLoading || _isActionRunning)
             {
-                // Only show list if we have data (e.g. background update)
                 if (_nugetList.Count > 0)
                 {
-                    RenderNuGetTab(grid, availableHeight, availableWidth, isActive);
+                    RenderNuGetTab(grid, height, width, isActive);
                 }
-                 var msg = _statusMessage ?? "Loading...";
-                 grid.AddRow(new Markup($"[yellow bold]{SpinnerHelper.GetFrame()} {Markup.Escape(msg)}[/]"));
-                 return grid;
+
+                var msg = _statusMessage ?? "Loading...";
+                grid.AddRow(new Markup($"[yellow bold]{SpinnerHelper.GetFrame()} {Markup.Escape(msg)}[/]"));
+                return grid;
             }
 
-            RenderNuGetTab(grid, availableHeight, availableWidth, isActive);
+            RenderNuGetTab(grid, height, width, isActive);
 
             if (_statusMessage != null)
             {
-                 grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(_statusMessage)}[/]"));
+                grid.AddRow(new Markup($"[yellow bold]{Markup.Escape(_statusMessage)}[/]"));
             }
 
             return grid;
         }
     }
-
-    // Rendering Helpers
 
     private void RenderNuGetTab(Grid grid, int maxRows, int width, bool isActive)
     {
@@ -464,12 +462,12 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             return;
         }
 
-        int visibleRows = Math.Max(1, maxRows - 4); // Reserve space for borders/headers/status
+        var visibleRows = Math.Max(1, maxRows - 4); // Reserve space for borders/headers/status
         var (start, end) = _nugetList.GetVisibleRange(visibleRows);
 
-        int currentWidth = Math.Max(7, _nugetList.Items.Max(p => p.ResolvedVersion.Length) + 2);
-        int latestWidth = Math.Max(6, _nugetList.Items.Max(p => (p.LatestVersion ?? p.ResolvedVersion).Length) + 2);
-        int packageWidth = Math.Max(10, width - currentWidth - latestWidth - 12);
+        var currentWidth = Math.Max(7, _nugetList.Items.Max(p => p.ResolvedVersion.Length) + 2);
+        var latestWidth = Math.Max(6, _nugetList.Items.Max(p => (p.LatestVersion ?? p.ResolvedVersion).Length) + 2);
+        var packageWidth = Math.Max(10, width - currentWidth - latestWidth - 12);
 
         var table = new Table()
             .Border(TableBorder.Rounded)
@@ -478,10 +476,10 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             .AddColumn(new TableColumn("Current").Width(currentWidth).RightAligned())
             .AddColumn(new TableColumn("Latest").Width(latestWidth).RightAligned());
 
-        for (int i = start; i < end; i++)
+        for (var i = start; i < end; i++)
         {
             var pkg = _nugetList.Items[i];
-            bool isSelected = i == _nugetList.SelectedIndex;
+            var isSelected = i == _nugetList.SelectedIndex;
 
             string latestText;
             if (pkg.LatestVersion == null && _isFetchingLatest)
@@ -549,13 +547,13 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         var latestParts = latest.Split('.');
 
         var result = new System.Text.StringBuilder();
-        bool startColoring = false;
+        var startColoring = false;
 
-        bool isFirstColored = true;
-        for (int i = 0; i < latestParts.Length; i++)
+        var isFirstColored = true;
+        for (var i = 0; i < latestParts.Length; i++)
         {
-            string latestPart = latestParts[i];
-            string? currentPart = i < currentParts.Length ? currentParts[i] : null;
+            var latestPart = latestParts[i];
+            var currentPart = i < currentParts.Length ? currentParts[i] : null;
 
             if (!startColoring && currentPart != latestPart)
             {
@@ -571,6 +569,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                     else
                         result.Append($"[{color}].[/]");
                 }
+
                 result.Append($"[{color}]{Markup.Escape(latestPart)}[/]");
                 isFirstColored = false;
             }

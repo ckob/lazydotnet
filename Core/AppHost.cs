@@ -5,12 +5,9 @@ namespace lazydotnet.Core;
 
 public class AppHost(AppLayout layout, IScreen initialScreen)
 {
-    private readonly AppLayout _layout = layout;
     private IScreen? _currentScreen = initialScreen;
     private readonly Lock _uiLock = new();
     private bool _isRunning = true;
-    private int _lastWidth;
-    private int _lastHeight;
 
     public async Task RunAsync()
     {
@@ -22,22 +19,22 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
 
         AnsiConsole.AlternateScreen(() =>
         {
-            AnsiConsole.Live(_layout.GetRoot())
+            AnsiConsole.Live(layout.GetRoot())
                 .StartAsync(async ctx =>
                 {
                     _currentScreen?.OnEnter();
 
-                    _lastWidth = Console.WindowWidth;
-                    _lastHeight = Console.WindowHeight;
+                    var lastWidth = Console.WindowWidth;
+                    var lastHeight = Console.WindowHeight;
 
-                    _layout.OnLog += () =>
+                    layout.OnLog += () =>
                     {
                         lock (_uiLock)
                         {
-                            int h = _layout.GetBottomHeight(Console.WindowHeight);
-                            _layout.UpdateBottom(Console.WindowWidth, h);
+                            var h = AppLayout.GetBottomHeight(Console.WindowHeight);
+                            layout.UpdateBottom(Console.WindowWidth, h);
                             if (_currentScreen != null)
-                                _layout.UpdateFooter(_currentScreen.GetKeyBindings());
+                                layout.UpdateFooter(_currentScreen.GetKeyBindings());
                             ctx.Refresh();
                         }
                     };
@@ -46,15 +43,15 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                     {
                         try
                         {
-                            bool needsRefresh = false;
+                            var needsRefresh = false;
 
-                            int width = Console.WindowWidth;
-                            int height = Console.WindowHeight;
+                            var width = Console.WindowWidth;
+                            var height = Console.WindowHeight;
 
-                            if (width != _lastWidth || height != _lastHeight)
+                            if (width != lastWidth || height != lastHeight)
                             {
-                                _lastWidth = width;
-                                _lastHeight = height;
+                                lastWidth = width;
+                                lastHeight = height;
                                 needsRefresh = true;
                             }
 
@@ -66,7 +63,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                             while (Console.KeyAvailable)
                             {
                                 var key = Console.ReadKey(true);
-                                var nextScreen = await _currentScreen.HandleInputAsync(key, _layout);
+                                var nextScreen = await _currentScreen.HandleInputAsync(key, layout);
 
                                 if (nextScreen == null)
                                 {
@@ -87,10 +84,10 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                             {
                                 lock (_uiLock)
                                 {
-                                    _currentScreen.Render(_layout, width, height);
-                                    int bottomH = _layout.GetBottomHeight(height);
-                                    _layout.UpdateBottom(width, bottomH);
-                                    _layout.UpdateFooter(_currentScreen.GetKeyBindings());
+                                    _currentScreen.Render(layout, width, height);
+                                    var bottomH = AppLayout.GetBottomHeight(height);
+                                    layout.UpdateBottom(width, bottomH);
+                                    layout.UpdateFooter(_currentScreen.GetKeyBindings());
                                     ctx.Refresh();
                                 }
                             }
@@ -99,11 +96,11 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                         }
                         catch (Exception ex)
                         {
-                            _layout.AddLog($"[red]CRITICAL ERROR: {ex.Message}[/]");
+                            layout.AddLog($"[red]CRITICAL ERROR: {ex.Message}[/]");
                             lock (_uiLock)
                             {
-                                int bottomH = _layout.GetBottomHeight(Console.WindowHeight);
-                                _layout.UpdateBottom(Console.WindowWidth, bottomH);
+                                var bottomH = AppLayout.GetBottomHeight(Console.WindowHeight);
+                                layout.UpdateBottom(Console.WindowWidth, bottomH);
                                 ctx.Refresh();
                             }
                             await Task.Delay(1000);

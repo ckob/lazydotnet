@@ -9,7 +9,8 @@ public class SelectionModal<T> : Modal
     private readonly ScrollableList<(string Label, T Value)> _options = new();
     private readonly Action<T> _onSelected;
 
-    public SelectionModal(string title, string prompt, List<(string Label, T Value)> options, Action<T> onSelected, Action onClose)
+    public SelectionModal(string title, string prompt, List<(string Label, T Value)> options, Action<T> onSelected,
+        Action onClose)
         : base(title, new Markup(prompt), onClose)
     {
         _options.SetItems(options);
@@ -22,24 +23,33 @@ public class SelectionModal<T> : Modal
         foreach (var b in base.GetKeyBindings()) yield return b;
 
         yield return new KeyBinding("k", "up", () =>
-        {
-            _options.MoveUp();
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
+            {
+                _options.MoveUp();
+                return Task.CompletedTask;
+            },
+            k => k.Key == ConsoleKey.UpArrow ||
+                 k.Key == ConsoleKey.K ||
+                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P },
+            ShowInBottomBar: false);
 
         yield return new KeyBinding("j", "down", () =>
-        {
-            _options.MoveDown();
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+            {
+                _options.MoveDown();
+                return Task.CompletedTask;
+            },
+            k => k.Key == ConsoleKey.DownArrow ||
+                 k.Key == ConsoleKey.J ||
+                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N },
+            ShowInBottomBar: false);
 
         yield return new KeyBinding("enter", "select", () =>
         {
-            if (_options.Count > 0 && _options.SelectedIndex >= 0)
-            {
-                _onSelected(_options.SelectedItem.Value);
-                OnClose();
-            }
+            if (_options is not { Count: > 0, SelectedIndex: >= 0 })
+                return Task.CompletedTask;
+
+            _onSelected(_options.SelectedItem.Value);
+            OnClose();
+
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter);
     }
@@ -48,22 +58,23 @@ public class SelectionModal<T> : Modal
     {
         var grid = new Grid();
         grid.AddColumn();
-        
+
         grid.AddRow(Content);
         grid.AddRow(Text.Empty);
 
         var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
         table.AddColumn("Option");
 
-        for (int i = 0; i < _options.Count; i++)
+        for (var i = 0; i < _options.Count; i++)
         {
             var item = _options.Items[i];
-            bool isSelected = i == _options.SelectedIndex;
-            string style = isSelected ? "[black on blue]" : "";
-            string close = isSelected ? "[/]" : "";
-            
+            var isSelected = i == _options.SelectedIndex;
+            var style = isSelected ? "[black on blue]" : "";
+            var close = isSelected ? "[/]" : "";
+
             table.AddRow(new Markup($"{style}{Markup.Escape(item.Label)}{close}"));
         }
+
         grid.AddRow(table);
 
         var panel = new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))

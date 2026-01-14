@@ -92,20 +92,20 @@ public class EditorService : IEditorService
         }
 
         var editor = Environment.GetEnvironmentVariable("EDITOR");
-        if (!string.IsNullOrEmpty(editor))
+        if (string.IsNullOrEmpty(editor))
         {
-            if (editor.Contains("cursor", StringComparison.OrdinalIgnoreCase) ||
-                editor.Contains("code", StringComparison.OrdinalIgnoreCase))
-            {
-                return (editor, EditorType.VsCodeStyle);
-            }
-            if (editor.Contains("zed", StringComparison.OrdinalIgnoreCase))
-            {
-                return (editor, EditorType.ZedStyle);
-            }
-            return (editor, null);
+            return ("code", EditorType.VsCodeStyle);
         }
 
-        return ("code", EditorType.VsCodeStyle);
+        if (editor.Contains("cursor", StringComparison.OrdinalIgnoreCase) ||
+            editor.Contains("code", StringComparison.OrdinalIgnoreCase))
+        {
+            return (editor, EditorType.VsCodeStyle);
+        }
+        if (editor.Contains("zed", StringComparison.OrdinalIgnoreCase))
+        {
+            return (editor, EditorType.ZedStyle);
+        }
+        return (editor, null);
     }
 }

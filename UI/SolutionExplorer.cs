@@ -17,18 +17,12 @@ public class ExplorerNode
     public ExplorerNode? Parent { get; set; }
 }
 
-public class SolutionExplorer : IKeyBindable
+public class SolutionExplorer(IEditorService editorService) : IKeyBindable
 {
     private ExplorerNode? _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
-    private readonly IEditorService _editorService;
-    private int _selectedIndex = 0;
+    private int _selectedIndex;
     private int _scrollOffset;
-
-    public SolutionExplorer(IEditorService editorService)
-    {
-        _editorService = editorService;
-    }
 
     public void SetSolution(SolutionInfo solution)
     {
@@ -197,13 +191,13 @@ public class SolutionExplorer : IKeyBindable
         {
             MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
 
         yield return new KeyBinding("j", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
 
         yield return new KeyBinding("←", "collapse", () =>
         {
@@ -231,7 +225,7 @@ public class SolutionExplorer : IKeyBindable
         var node = GetSelectedNode();
         if (node.ProjectPath != null)
         {
-            await _editorService.OpenFileAsync(node.ProjectPath);
+            await editorService.OpenFileAsync(node.ProjectPath);
         }
     }
 
@@ -310,7 +304,7 @@ public class SolutionExplorer : IKeyBindable
     private void EnsureVisible(int height)
     {
         var contentHeight = Math.Max(1, height);
-        
+
         // Handle unselected state
         if (_selectedIndex == -1)
         {
@@ -329,7 +323,7 @@ public class SolutionExplorer : IKeyBindable
 
         if (_scrollOffset > _visibleNodes.Count - contentHeight)
             _scrollOffset = Math.Max(0, _visibleNodes.Count - contentHeight);
-        
+
         if (_scrollOffset < 0) _scrollOffset = 0;
     }
 
@@ -345,34 +339,40 @@ public class SolutionExplorer : IKeyBindable
     {
         if (_root == null) return;
 
-        // Flatten the tree to search all nodes, including collapsed ones
         var allNodes = new List<ExplorerNode>();
+        CollectAll(_root);
+
+        var targetNode = allNodes
+            .FirstOrDefault(n => n is { IsProject: true, ProjectPath: not null } &&
+                                 Path.GetFullPath(n.ProjectPath)
+                                     .Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+
+        if (targetNode == null)
+            return;
+
+        var current = targetNode.Parent;
+        while (current != null)
+        {
+            current.IsExpanded = true;
+            current = current.Parent;
+        }
+
+        RefreshVisibleNodes();
+
+        var index = _visibleNodes.IndexOf(targetNode);
+        if (index >= 0)
+        {
+            _selectedIndex = index;
+        }
+
+        return;
+
         void CollectAll(ExplorerNode node)
         {
             allNodes.Add(node);
-            foreach (var child in node.Children) CollectAll(child);
-        }
-        CollectAll(_root);
-
-        var targetNode = allNodes.FirstOrDefault(n => n.IsProject && n.ProjectPath != null &&
-            Path.GetFullPath(n.ProjectPath).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
-
-        if (targetNode != null)
-        {
-            // Expand all parents
-            var current = targetNode.Parent;
-            while (current != null)
+            foreach (var child in node.Children)
             {
-                current.IsExpanded = true;
-                current = current.Parent;
-            }
-
-            RefreshVisibleNodes();
-
-            var index = _visibleNodes.IndexOf(targetNode);
-            if (index >= 0)
-            {
-                _selectedIndex = index;
+                CollectAll(child);
             }
         }
     }
@@ -420,16 +420,9 @@ public class SolutionExplorer : IKeyBindable
         if (!isSelected)
             return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}[/]");
 
-        if (isActive)
-        {
-            // Active selection in explorer: Black on blue
-            return new Markup($"{indent} [black on blue]{icon} {Markup.Escape(name)}[/]");
-        }
-        else
-        {
-            // Inactive selection: Bold yellow
-            return new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]");
-        }
+        return isActive ?
+            new Markup($"{indent} [black on blue]{icon} {Markup.Escape(name)}[/]") :
+            new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]");
     }
 
     private static string GetNodeIcon(ExplorerNode node)
@@ -439,15 +432,9 @@ public class SolutionExplorer : IKeyBindable
         return node.IsExpanded ? "[yellow]v[/]" : "[yellow]>[/]";
     }
 
-    private static int GetIconWidth(ExplorerNode node)
-    {
-        if (node.IsSolution) return 4;
-        return node.IsProject ? 3 : 2;
-    }
-
     private static string GetTruncatedName(string name, int depth, int availableWidth)
     {
-        var usedWidth = (depth * 2) + 6;
+        var usedWidth = depth * 2 + 6;
         var maxNameWidth = Math.Max(5, availableWidth - usedWidth - 1);
         return name.Length > maxNameWidth
             ? string.Concat(name.AsSpan(0, maxNameWidth - 3), "...")

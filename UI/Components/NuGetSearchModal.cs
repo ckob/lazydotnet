@@ -11,7 +11,7 @@ public class NuGetSearchModal : Modal
     private readonly Action<SearchResult> _onSelected;
     private readonly Action<string>? _logAction;
     private readonly Action _requestRefresh;
-    
+
     private string _searchQuery = "";
     private readonly ScrollableList<SearchResult> _searchList = new();
     private bool _isSearching;
@@ -20,9 +20,9 @@ public class NuGetSearchModal : Modal
     private CancellationTokenSource? _searchCts;
 
     public NuGetSearchModal(
-        NuGetService nuGetService, 
-        Action<SearchResult> onSelected, 
-        Action onClose, 
+        NuGetService nuGetService,
+        Action<SearchResult> onSelected,
+        Action onClose,
         Action<string>? logAction,
         Action requestRefresh)
         : base("NuGet Search", new Markup("Type to search packages..."), onClose)
@@ -63,22 +63,17 @@ public class NuGetSearchModal : Modal
 
     public override async Task<bool> HandleInputAsync(ConsoleKeyInfo key)
     {
-        if (await base.HandleInputAsync(key)) 
+        if (await base.HandleInputAsync(key))
         {
-            _searchCts?.Cancel();
+            if (_searchCts != null)
+            {
+                await _searchCts.CancelAsync();
+            }
             return true;
         }
 
-        bool changed = false;
-        if (key.Key == ConsoleKey.Backspace)
-        {
-            if (_searchQuery.Length > 0)
-            {
-                _searchQuery = _searchQuery[..^1];
-                changed = true;
-            }
-        }
-        else if (key.Key == ConsoleKey.Delete)
+        var changed = false;
+        if (key.Key is ConsoleKey.Backspace or ConsoleKey.Delete)
         {
             if (_searchQuery.Length > 0)
             {
@@ -92,14 +87,13 @@ public class NuGetSearchModal : Modal
             changed = true;
         }
 
-        if (changed)
-        {
-            _searchList.Clear();
-            TriggerSearch();
-            return true;
-        }
+        if (!changed)
+            return false;
 
-        return false;
+        _searchList.Clear();
+        TriggerSearch();
+        return true;
+
     }
 
     private void TriggerSearch()
@@ -131,7 +125,7 @@ public class NuGetSearchModal : Modal
                 _requestRefresh();
 
                 var results = await _nuGetService.SearchPackagesAsync(_searchQuery, _logAction, token);
-                
+
                 if (token.IsCancellationRequested) return;
 
                 _searchList.SetItems(results);
@@ -153,18 +147,11 @@ public class NuGetSearchModal : Modal
         }, token);
     }
 
-    private async Task PerformSearchAsync()
-    {
-        // No longer needed but kept for interface compatibility if required elsewhere
-        TriggerSearch();
-        await Task.CompletedTask;
-    }
-
     public override bool OnTick()
     {
         if (_isSearching)
         {
-            int currentFrame = SpinnerHelper.GetCurrentFrameIndex();
+            var currentFrame = SpinnerHelper.GetCurrentFrameIndex();
             if (currentFrame != _lastFrameIndex)
             {
                 _lastFrameIndex = currentFrame;
@@ -188,26 +175,25 @@ public class NuGetSearchModal : Modal
         }
         else if (_searchList.Count > 0)
         {
-            int modalWidth = Width ?? 80;
-            int gridAvailableWidth = modalWidth - 8;
+            var modalWidth = Width ?? 80;
+            var gridAvailableWidth = modalWidth - 8;
 
-            int visibleRows = Math.Min(15, height - 10);
+            var visibleRows = Math.Min(15, height - 10);
             var (start, end) = _searchList.GetVisibleRange(visibleRows);
 
             var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
             table.AddColumn("Id");
             table.AddColumn("Version");
 
-            for (int i = start; i < end; i++)
+            for (var i = start; i < end; i++)
             {
                 var item = _searchList.Items[i];
-                bool isSelected = i == _searchList.SelectedIndex;
+                var isSelected = i == _searchList.SelectedIndex;
 
-                string id = item.Id;
-                string version = item.LatestVersion;
+                var id = item.Id;
+                var version = item.LatestVersion;
 
-                // Truncate ID if it's too long
-                int maxIdWidth = gridAvailableWidth - version.Length - 4;
+                var maxIdWidth = gridAvailableWidth - version.Length - 4;
                 if (id.Length > maxIdWidth)
                 {
                     id = id[..(maxIdWidth - 3)] + "...";

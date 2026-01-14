@@ -4,23 +4,16 @@ using Spectre.Console.Rendering;
 
 namespace lazydotnet.UI.Components;
 
-public class ConfirmationModal : Modal
+public class ConfirmationModal(string title, string message, Action onConfirm, Action onClose)
+    : Modal(title, new Markup(message), onClose)
 {
-    private readonly Action _onConfirm;
-
-    public ConfirmationModal(string title, string message, Action onConfirm, Action onClose)
-        : base(title, new Markup(message), onClose)
-    {
-        _onConfirm = onConfirm;
-    }
-
     public override IEnumerable<KeyBinding> GetKeyBindings()
     {
         foreach (var b in base.GetKeyBindings()) yield return b;
 
         yield return new KeyBinding("y", "confirm", () =>
         {
-            _onConfirm();
+            onConfirm();
             OnClose();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Y);

@@ -19,7 +19,6 @@ public class NuGetVersionSelectionModal : Modal
     private bool _isLoading = true;
     private string? _statusMessage;
     private int _lastFrameIndex = -1;
-    private CancellationTokenSource? _loadCts;
 
     public NuGetVersionSelectionModal(
         NuGetService nuGetService,
@@ -47,8 +46,7 @@ public class NuGetVersionSelectionModal : Modal
 
     private void LoadVersionsAsync()
     {
-        _loadCts = new CancellationTokenSource();
-        var ct = _loadCts.Token;
+        var ct = new CancellationTokenSource().Token;
 
         _isLoading = true;
         _statusMessage = "Fetching versions...";
@@ -59,7 +57,7 @@ public class NuGetVersionSelectionModal : Modal
             try
             {
                 var versions = await _nuGetService.GetPackageVersionsAsync(_packageId, _logAction, ct);
-                
+
                 if (ct.IsCancellationRequested) return;
 
                 if (versions.Count == 0)
@@ -68,21 +66,10 @@ public class NuGetVersionSelectionModal : Modal
                 }
                 else
                 {
-                    // Sort versions descending (newest first) usually preferred, 
-                    // but the service might return them in a specific order. 
-                    // Usually NuGet API returns them. Let's assume the service gives us a good list.
-                    // If the service returns ascending, we might want to reverse them so newest is top.
-                    // Let's check what the service returns. Usually it's easier to pick if newest is top.
-                    // But for now let's just use what we get, maybe reverse it if it looks ascending.
-                    // Actually, let's reverse it to have latest on top if it's not.
-                    // A simple heuristic: if the last one looks bigger than the first one, reverse.
-                    // But safe bet is usually just Reverse() if it comes from NuGet API which is often older->newer.
-                    // Let's just create a temporary list and reverse it.
                     var reversed = versions.ToList();
                     reversed.Reverse();
                     _versionList.SetItems(reversed);
-                    
-                    // Try to select the current version
+
                     var index = reversed.IndexOf(_currentVersion);
                     if (index >= 0)
                     {
@@ -90,14 +77,13 @@ public class NuGetVersionSelectionModal : Modal
                     }
                     else
                     {
-                        // Or latest
                          if (_latestVersion != null)
                          {
                              var latestIndex = reversed.IndexOf(_latestVersion);
                              if (latestIndex >= 0) _versionList.Select(latestIndex);
                          }
                     }
-                    
+
                     _statusMessage = null;
                 }
             }
@@ -118,39 +104,40 @@ public class NuGetVersionSelectionModal : Modal
 
     public override IEnumerable<KeyBinding> GetKeyBindings()
     {
-        foreach (var b in base.GetKeyBindings()) yield return b;
+        foreach (var b in base.GetKeyBindings())
+            yield return b;
 
-        if (!_isLoading && _versionList.Count > 0)
+        if (_isLoading || _versionList.Count <= 0)
+            yield break;
+
+        yield return new KeyBinding("k", "up", () =>
         {
-            yield return new KeyBinding("k", "up", () =>
-            {
-                _versionList.MoveUp();
-                return Task.CompletedTask;
-            }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
+            _versionList.MoveUp();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
 
-            yield return new KeyBinding("j", "down", () =>
-            {
-                _versionList.MoveDown();
-                return Task.CompletedTask;
-            }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+        yield return new KeyBinding("j", "down", () =>
+        {
+            _versionList.MoveDown();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
-            yield return new KeyBinding("enter", "select", () =>
+        yield return new KeyBinding("enter", "select", () =>
+        {
+            if (_versionList.SelectedItem != null)
             {
-                if (_versionList.SelectedItem != null)
-                {
-                    _onSelected(_versionList.SelectedItem);
-                    OnClose();
-                }
-                return Task.CompletedTask;
-            }, k => k.Key == ConsoleKey.Enter);
-        }
+                _onSelected(_versionList.SelectedItem);
+                OnClose();
+            }
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.Enter);
     }
 
     public override bool OnTick()
     {
         if (_isLoading)
         {
-            int currentFrame = SpinnerHelper.GetCurrentFrameIndex();
+            var currentFrame = SpinnerHelper.GetCurrentFrameIndex();
             if (currentFrame != _lastFrameIndex)
             {
                 _lastFrameIndex = currentFrame;
@@ -179,21 +166,19 @@ public class NuGetVersionSelectionModal : Modal
         }
         else
         {
-            int visibleRows = Math.Min(20, height - 10);
+            var visibleRows = Math.Min(20, height - 10);
             var (start, end) = _versionList.GetVisibleRange(visibleRows);
 
             var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
             table.AddColumn("Version");
 
-            for (int i = start; i < end; i++)
+            for (var i = start; i < end; i++)
             {
                 var v = _versionList.Items[i];
-                bool isSelected = i == _versionList.SelectedIndex;
-                
-                string style = "";
-                string closeStyle = "";
+                var isSelected = i == _versionList.SelectedIndex;
 
-                // Color logic
+                string style;
+
                 if (v == _currentVersion)
                 {
                     style = isSelected ? "[black on green]" : "[green]";
@@ -206,13 +191,14 @@ public class NuGetVersionSelectionModal : Modal
                 {
                     style = isSelected ? "[black on blue]" : "";
                 }
-                
-                closeStyle = isSelected ? "[/]" : (string.IsNullOrEmpty(style) ? "" : "[/]");
+
+                var empty = string.IsNullOrEmpty(style) ? "" : "[/]";
+                var closeStyle = isSelected ? "[/]" : empty;
 
                 table.AddRow(new Markup($"{style}{Markup.Escape(v)}{closeStyle}"));
             }
             grid.AddRow(table);
-            
+
             var indicator = _versionList.GetScrollIndicator(visibleRows);
             if (indicator != null)
             {

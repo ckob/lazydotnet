@@ -10,20 +10,18 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 {
     private TestNode? _root;
     private readonly List<TestNode> _visibleNodes = [];
-    private int _selectedIndex = 0;
-    private int _scrollOffset = 0;
+    private int _selectedIndex;
+    private int _scrollOffset;
     private int _lastFrameIndex = -1;
     private string? _currentPath;
 
-    private readonly Lock _lock = new(); // Synchronization lock
+    private readonly Lock _lock = new();
 
-    private bool _isLoading = false;
-    private readonly bool _isRunningTests = false;
+    private bool _isLoading;
+    private const bool IsRunningTests = false;
     private string? _statusMessage;
 
-    private readonly Dictionary<string, TestRunResult> _testResults = [];
-
-    private int _runningTestCount = 0;
+    private int _runningTestCount;
 
     private CancellationTokenSource? _discoveryCts;
 
@@ -31,13 +29,12 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public string Title => "Tests";
+    public static string Title => "Tests";
 
     public async Task LoadAsync(string projectPath, string projectName, bool force = false)
     {
         if (!force && _currentPath == projectPath && !_isLoading) return;
 
-        // Cancel previous discovery if running
         if (_discoveryCts != null)
         {
             await _discoveryCts.CancelAsync();
@@ -52,7 +49,6 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         _isLoading = true;
         _root = null;
         _visibleNodes.Clear();
-        _testResults.Clear();
         _statusMessage = "Discovering tests...";
         RequestRefresh?.Invoke();
 
@@ -63,7 +59,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             {
                 var r = testService.BuildTestTree(tests);
                 r.IsExpanded = true;
-                
+
                 lock (_lock)
                 {
                     _root = r;
@@ -79,7 +75,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         }
         catch (OperationCanceledException)
         {
-            return;
+            // Ignore
         }
         catch (Exception ex)
         {
@@ -100,7 +96,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         if (_isLoading || _runningTestCount > 0)
         {
             var spinner = _runningTestCount > 0 ? Spinner.Known.CircleHalves : null;
-            int currentFrame = SpinnerHelper.GetCurrentFrameIndex(spinner);
+            var currentFrame = SpinnerHelper.GetCurrentFrameIndex(spinner);
             if (currentFrame != _lastFrameIndex)
             {
                 _lastFrameIndex = currentFrame;
@@ -116,7 +112,6 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         {
             _root = null;
             _visibleNodes.Clear();
-            _testResults.Clear();
             _selectedIndex = 0;
             _scrollOffset = 0;
             _statusMessage = null;
@@ -126,7 +121,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        if (_isLoading || _isRunningTests) yield break;
+        if (_isLoading || IsRunningTests) yield break;
 
         yield return new KeyBinding("k", "up", () =>
         {
@@ -146,7 +141,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
         yield return new KeyBinding("→", "expand", () =>
         {
-            if (node.IsContainer && !node.IsExpanded)
+            if (node is { IsContainer: true, IsExpanded: false })
             {
                 node.IsExpanded = true;
                 RefreshVisibleNodes();
@@ -156,7 +151,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
         yield return new KeyBinding("←", "collapse", () =>
         {
-            if (node.IsContainer && node.IsExpanded)
+            if (node is { IsContainer: true, IsExpanded: true })
             {
                 node.IsExpanded = false;
                 RefreshVisibleNodes();
@@ -164,10 +159,15 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             else if (node.Parent != null)
             {
                 var idx = _visibleNodes.IndexOf(node.Parent);
-                if (idx != -1)
+                if (idx == -1)
                 {
-                    _selectedIndex = idx;
-                    if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
+                    return Task.CompletedTask;
+                }
+
+                _selectedIndex = idx;
+                if (_selectedIndex < _scrollOffset)
+                {
+                    _scrollOffset = _selectedIndex;
                 }
             }
             return Task.CompletedTask;
@@ -181,7 +181,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                 RefreshVisibleNodes();
             }
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
+        }, k => k.Key is ConsoleKey.Enter or ConsoleKey.Spacebar, false);
 
         yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.KeyChar == 'r' || k.KeyChar == 'R');
         yield return new KeyBinding("e/o", "open", () => OpenInEditorAsync(node), k => k.KeyChar == 'e' || k.KeyChar == 'o');
@@ -190,25 +190,28 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
     {
         var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding != null)
+        if (binding == null)
         {
-            await binding.Action();
-            return true;
+            return false;
         }
-        return false;
+
+        await binding.Action();
+        return true;
     }
 
     public void MoveUp()
     {
-        if (_selectedIndex == -1 && _visibleNodes.Count > 0)
+        switch (_selectedIndex)
         {
-            _selectedIndex = _visibleNodes.Count - 1;
-            return;
-        }
-        if (_selectedIndex > 0)
-        {
-            _selectedIndex--;
-            if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
+            case -1 when _visibleNodes.Count > 0:
+                _selectedIndex = _visibleNodes.Count - 1;
+                return;
+            case > 0:
+            {
+                _selectedIndex--;
+                if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
+                break;
+            }
         }
     }
 
@@ -240,8 +243,6 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         }
     }
 
-    // ...
-
     public TestNode? GetSelectedNode()
     {
         lock (_lock)
@@ -254,7 +255,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
     private void EnsureVisible(int height)
     {
-        int contentHeight = Math.Max(1, height);
+        var contentHeight = Math.Max(1, height);
         if (_selectedIndex == -1)
         {
             _scrollOffset = 0;
@@ -263,11 +264,11 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
         if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
         if (_selectedIndex >= _scrollOffset + contentHeight) _scrollOffset = _selectedIndex - contentHeight + 1;
-        
+
         if (_scrollOffset < 0) _scrollOffset = 0;
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
+    public IRenderable GetContent(int height, int width, bool isActive)
     {
         if (_isLoading)
         {
@@ -281,32 +282,31 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                  return new Markup(_statusMessage ?? "[dim]No tests available.[/]");
             }
 
-            // Single Grid, No Layout Split
             var treeGrid = new Grid();
             treeGrid.AddColumn(new GridColumn().NoWrap());
 
-            // Handle scrolling
-            EnsureVisible(availableHeight);
+            EnsureVisible(height);
 
-            int end = Math.Min(_scrollOffset + availableHeight, _visibleNodes.Count);
+            var end = Math.Min(_scrollOffset + height, _visibleNodes.Count);
 
-            for (int i = _scrollOffset; i < end; i++)
+            for (var i = _scrollOffset; i < end; i++)
 
             {
                 var node = _visibleNodes[i];
-                bool isSelected = i == _selectedIndex;
+                var isSelected = i == _selectedIndex;
 
                 string indent = new(' ', (node.Depth - 1) * 2);
 
-                string expandIcon = node.IsContainer ? (node.IsExpanded ? "v" : ">") : " ";
-                string statusIcon = node.Status switch
+                var expandIcon = node.IsExpanded ? "v" : ">";
+                var expandPlaceholder = node.IsContainer ? expandIcon : " ";
+                var statusIcon = node.Status switch
                 {
                     TestStatus.Passed => "✓",
                     TestStatus.Failed => "✗",
                     TestStatus.Running => SpinnerHelper.GetFrame(Spinner.Known.CircleHalves),
                     _ => "○"
                 };
-                string statusColor = node.Status switch
+                var statusColor = node.Status switch
                 {
                     TestStatus.Passed => "green",
                     TestStatus.Failed => "red",
@@ -314,49 +314,47 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                     _ => "dim"
                 };
 
-                string lineIcon = $"[yellow]{expandIcon}[/] [{statusColor}]{statusIcon}[/]";
-                int visibleIconLen = 1 + 1 + statusIcon.Length;
+                var lineIcon = $"[yellow]{expandPlaceholder}[/] [{statusColor}]{statusIcon}[/]";
+                var visibleIconLen = 1 + 1 + statusIcon.Length;
 
-                // Truncation logic
-                int width = Math.Max(10, availableWidth);
-                int prefixLen = indent.Length + 1 + visibleIconLen + 1;
-                
-                string rawName = node.Name;
-                string testCountSuffix = (node.IsContainer && node.TestCount > 0) ? $" ({node.TestCount} tests)" : "";
-                
-                int cleanNameLen = rawName.Length + testCountSuffix.Length;
-                int maxNameLen = width - prefixLen - 1;
+                var maxWidth = Math.Max(10, width);
+                var prefixLen = indent.Length + 1 + visibleIconLen + 1;
+
+                var rawName = node.Name;
+                var testCountSuffix = node is { IsContainer: true, TestCount: > 0 } ? $" ({node.TestCount} tests)" : "";
+
+                var cleanNameLen = rawName.Length + testCountSuffix.Length;
+                var maxNameLen = maxWidth - prefixLen - 1;
 
                 if (cleanNameLen > maxNameLen && maxNameLen > 0)
                 {
-                    // Truncate raw name before escaping
-                    int allowedNameLen = maxNameLen - testCountSuffix.Length - 1;
+                    var allowedNameLen = maxNameLen - testCountSuffix.Length - 1;
                     if (allowedNameLen > 0 && rawName.Length > allowedNameLen)
                     {
                         rawName = string.Concat(rawName.AsSpan(0, allowedNameLen), "…");
                     }
                 }
 
-                string dispName = Markup.Escape(rawName);
+                var displayName = Markup.Escape(rawName);
                 if (testCountSuffix.Length > 0)
                 {
-                    dispName += $" [dim]{Markup.Escape(testCountSuffix)}[/]";
+                    displayName += $" [dim]{Markup.Escape(testCountSuffix)}[/]";
                 }
 
                 if (isSelected)
                 {
                     if (isActive)
                     {
-                        treeGrid.AddRow(new Markup($"{indent} [black on blue]{lineIcon} {dispName}[/]"));
+                        treeGrid.AddRow(new Markup($"{indent} [black on blue]{lineIcon} {displayName}[/]"));
                     }
                     else
                     {
-                        treeGrid.AddRow(new Markup($"{indent} [bold white]{lineIcon} {dispName}[/]"));
+                        treeGrid.AddRow(new Markup($"{indent} [bold white]{lineIcon} {displayName}[/]"));
                     }
                 }
                 else
                 {
-                    treeGrid.AddRow(new Markup($"{indent} {lineIcon} {dispName}"));
+                    treeGrid.AddRow(new Markup($"{indent} {lineIcon} {displayName}"));
                 }
             }
 
@@ -364,13 +362,12 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         }
     }
 
-    private async Task RunSelectedTestAsync(TestNode node)
+    private Task RunSelectedTestAsync(TestNode node)
     {
-        if (_currentPath == null) return;
+        if (_currentPath == null) return Task.CompletedTask;
 
         Interlocked.Increment(ref _runningTestCount);
 
-        // Collect tests to run
         var testsToRun = new List<TestNode>();
         if (node.IsTest)
         {
@@ -384,12 +381,11 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         if (testsToRun.Count == 0)
         {
             Interlocked.Decrement(ref _runningTestCount);
-            return;
+            return Task.CompletedTask;
         }
 
-        // Update status for the targeted node and its subtree
         SetStatusRecursive(node, TestStatus.Running);
-        
+
         _statusMessage = $"Running tests ({_runningTestCount} active)...";
 
         RequestRefresh?.Invoke();
@@ -417,18 +413,18 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                             _ => TestStatus.None
                         };
                         targetNode.Duration = res.Duration ?? 0;
-                        targetNode.ErrorMessage = res.ErrorMessage != null ? string.Join(Environment.NewLine, res.ErrorMessage) : null;
-                        
+                        targetNode.ErrorMessage = string.Join(Environment.NewLine, res.ErrorMessage);
+
                         var stackTrace = new List<string>();
                         await foreach (var line in res.StackTrace) stackTrace.Add(line);
-                        
+
                         var stdOut = new List<string>();
                         await foreach (var line in res.StdOut) stdOut.Add(line);
 
                         lock (targetNode.OutputLock)
                         {
                             targetNode.Output.Clear();
-                            if (res.ErrorMessage != null && res.ErrorMessage.Length > 0)
+                            if (res.ErrorMessage.Length > 0)
                             {
                                 targetNode.Output.Add(new TestOutputLine("Error:", "red"));
                                 foreach (var err in res.ErrorMessage)
@@ -438,11 +434,11 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                                 targetNode.Output.Add(new TestOutputLine(""));
                             }
 
-                            foreach (var line in stackTrace) 
+                            foreach (var line in stackTrace)
                             {
                                 targetNode.Output.Add(new TestOutputLine(line, "dim"));
                             }
-                            foreach (var line in stdOut) 
+                            foreach (var line in stdOut)
                             {
                                 targetNode.Output.Add(new TestOutputLine(line));
                             }
@@ -455,7 +451,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             }
             catch (Exception ex)
             {
-                File.AppendAllText("debug.log", $"[TestRun Error]: {ex}\n");
+                await File.AppendAllTextAsync("debug.log", $"[TestRun Error]: {ex}\n");
                 _statusMessage = $"Run error: {ex.Message}";
                 foreach (var t in testsToRun)
                 {
@@ -466,17 +462,13 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             finally
             {
                 Interlocked.Decrement(ref _runningTestCount);
-                if (_runningTestCount == 0)
-                {
-                    _statusMessage = "All tests finished.";
-                }
-                else
-                {
-                    _statusMessage = $"Running tests ({_runningTestCount} active)...";
-                }
+                _statusMessage = _runningTestCount == 0
+                    ? "All tests finished."
+                    : $"Running tests ({_runningTestCount} active)...";
                 RequestRefresh?.Invoke();
             }
         });
+        return Task.CompletedTask;
     }
 
     private static List<TestNode> GetAllLeafNodes(TestNode node)
@@ -496,26 +488,23 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
         var parent = node.Parent;
         while (parent != null)
         {
-            bool anyRunning = false;
-            bool anyFailed = false;
-            bool allPassed = true;
-            bool anyNone = false;
+            var anyRunning = false;
+            var anyFailed = false;
+            var allPassed = true;
+            var anyNone = false;
 
-            foreach (var child in parent.Children)
+            foreach (var childStatus in parent.Children.Select(x => x.Status))
             {
-                if (child.Status == TestStatus.Failed) anyFailed = true;
-                if (child.Status == TestStatus.Running) anyRunning = true;
-                if (child.Status != TestStatus.Passed) allPassed = false;
-                if (child.Status == TestStatus.None) anyNone = true;
+                if (childStatus == TestStatus.Failed) anyFailed = true;
+                if (childStatus == TestStatus.Running) anyRunning = true;
+                if (childStatus != TestStatus.Passed) allPassed = false;
+                if (childStatus == TestStatus.None) anyNone = true;
             }
 
             if (anyFailed) parent.Status = TestStatus.Failed;
             else if (allPassed && !anyNone) parent.Status = TestStatus.Passed;
-            else if (anyRunning) 
+            else if (anyRunning)
             {
-                // Only keep Running if it was already Running (set by SetStatusRecursive)
-                // or if we want to show progress. User said "only see spinner on node executing and children".
-                // So if a parent was NOT part of the execution, it shouldn't become "Running".
                 if (parent.Status != TestStatus.Running)
                 {
                     parent.Status = TestStatus.None;
@@ -546,9 +535,14 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             _visibleNodes.Add(node);
         }
 
-        if (node.IsExpanded)
+        if (!node.IsExpanded)
         {
-            foreach (var child in node.Children) Traverse(child);
+            return;
+        }
+
+        foreach (var child in node.Children)
+        {
+            Traverse(child);
         }
     }
 }
