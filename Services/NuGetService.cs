@@ -158,9 +158,10 @@ public class NuGetService(EasyDotnetService easyDotnetService)
             if (output?.Projects == null) return [];
 
             return output.Projects
-                .SelectMany(p => (p.Frameworks).SelectMany(f => f.TopLevelPackages ?? []))
+                .Where(p => p is { Frameworks: not null })
+                .SelectMany(p => (p.Frameworks ?? []).SelectMany(f => f.TopLevelPackages ?? []))
                 .GroupBy(p => new { p.Id, p.ResolvedVersion })
-                .Select(g => new NuGetPackageInfo(g.Key.Id, g.Key.ResolvedVersion, null))
+                .Select(g => new NuGetPackageInfo(g.Key.Id ?? "", g.Key.ResolvedVersion ?? "", null))
                 .OrderBy(p => p.Id)
                 .ToList();
         }
@@ -193,12 +194,18 @@ public class NuGetService(EasyDotnetService easyDotnetService)
             if (output?.Projects == null) return [];
 
             var outdated = new Dictionary<string, string>();
-            foreach (var f in output.Projects.SelectMany(p => p.Frameworks))
+            foreach (var p in output.Projects.Where(p => p is { Frameworks: not null }))
             {
-                if (f.TopLevelPackages == null) continue;
-                foreach (var pkg in f.TopLevelPackages)
+                foreach (var f in p.Frameworks ?? [])
                 {
-                    outdated[pkg.Id] = pkg.LatestVersion;
+                    if (f.TopLevelPackages == null) continue;
+                    foreach (var pkg in f.TopLevelPackages)
+                    {
+                        if (pkg is { Id: not null, LatestVersion: not null })
+                        {
+                            outdated[pkg.Id] = pkg.LatestVersion;
+                        }
+                    }
                 }
             }
             return outdated;
@@ -211,14 +218,14 @@ public class NuGetService(EasyDotnetService easyDotnetService)
         }
     }
 
-    private sealed record DotnetListPackageOutput(List<DotnetListPackageProject> Projects);
-    private sealed record DotnetListPackageProject(string Path, List<DotnetListPackageFramework> Frameworks);
-    private sealed record DotnetListPackageFramework(string Framework, List<PackageReference>? TopLevelPackages);
+    private sealed record DotnetListPackageOutput(List<DotnetListPackageProject>? Projects);
+    private sealed record DotnetListPackageProject(string? Path, List<DotnetListPackageFramework>? Frameworks);
+    private sealed record DotnetListPackageFramework(string? Framework, List<PackageReference>? TopLevelPackages);
 
-    private sealed record DotnetListOutdatedOutput(List<DotnetListOutdatedProject> Projects);
-    private sealed record DotnetListOutdatedProject(string Path, List<DotnetListOutdatedFramework> Frameworks);
-    private sealed record DotnetListOutdatedFramework(string Framework, List<DotnetListOutdatedPackage>? TopLevelPackages);
-    private sealed record DotnetListOutdatedPackage(string Id, string ResolvedVersion, string LatestVersion);
+    private sealed record DotnetListOutdatedOutput(List<DotnetListOutdatedProject>? Projects);
+    private sealed record DotnetListOutdatedProject(string? Path, List<DotnetListOutdatedFramework>? Frameworks);
+    private sealed record DotnetListOutdatedFramework(string? Framework, List<DotnetListOutdatedPackage>? TopLevelPackages);
+    private sealed record DotnetListOutdatedPackage(string? Id, string? ResolvedVersion, string? LatestVersion);
 
     public static async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
     {
@@ -335,7 +342,7 @@ public class VersionComparer : IComparer<string?>
 {
     public int Compare(string? x, string? y)
     {
-        if (Version.TryParse(x, out var v1) && System.Version.TryParse(y, out var v2))
+        if (Version.TryParse(x, out var v1) && Version.TryParse(y, out var v2))
             return v1.CompareTo(v2);
         return string.Compare(x, y, StringComparison.Ordinal);
     }
