@@ -102,7 +102,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
         try
         {
-            var refs = await solutionService.GetProjectReferencesAsync(projectPath);
+            var refs = await ProjectService.GetProjectReferencesAsync(projectPath);
             if (_currentProjectPath == projectPath)
             {
                 _refsList.SetItems(refs);
@@ -153,7 +153,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
                 RequestRefresh?.Invoke();
                 try
                 {
-                    await solutionService.AddProjectReferenceAsync(_currentProjectPath, selected.Path);
+                    await ProjectService.AddProjectReferenceAsync(_currentProjectPath, selected.Path);
                     await LoadAsync(_currentProjectPath, "", force: true);
                 }
                 finally
@@ -186,7 +186,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
                 try
                 {
-                    await solutionService.RemoveProjectReferenceAsync(_currentProjectPath, targetPath);
+                    await ProjectService.RemoveProjectReferenceAsync(_currentProjectPath, targetPath);
                     await LoadAsync(_currentProjectPath, "", force: true);
                 }
                 finally

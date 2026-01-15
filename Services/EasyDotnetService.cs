@@ -181,57 +181,6 @@ public class EasyDotnetService : IAsyncDisposable
         }
     }
 
-    public async Task<List<SolutionFileProjectResponse>> ListProjectsAsync(string solutionFilePath)
-    {
-        await EnsureInitializedAsync();
-        try
-        {
-            var result = await _jsonRpc!.InvokeWithParameterObjectAsync<List<SolutionFileProjectResponse>>(
-                "solution/list-projects",
-                new { solutionFilePath });
-
-            return result;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error calling list-projects: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<List<string>> ListProjectReferencesAsync(string projectPath)
-    {
-        await EnsureInitializedAsync();
-        try
-        {
-            var result = await _jsonRpc!.InvokeWithParameterObjectAsync<List<string>>(
-                "msbuild/list-project-reference",
-                new { projectPath });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error calling list-project-reference: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath)
-    {
-        await EnsureInitializedAsync();
-        return await _jsonRpc!.InvokeWithParameterObjectAsync<bool>(
-            "msbuild/add-project-reference",
-            new { projectPath, targetPath });
-    }
-
-    public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath)
-    {
-        await EnsureInitializedAsync();
-        return await _jsonRpc!.InvokeWithParameterObjectAsync<bool>(
-            "msbuild/remove-project-reference",
-            new { projectPath, targetPath });
-    }
-
     public async Task<IAsyncEnumerable<DiscoveredTest>> DiscoverTestsAsync(string projectPath, string? targetFrameworkMoniker = null, string? configuration = null, CancellationToken ct = default)
     {
         await EnsureInitializedAsync();

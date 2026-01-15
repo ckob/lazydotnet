@@ -1,3 +1,5 @@
+using Microsoft.Build.Construction;
+
 namespace lazydotnet.Services;
 
 public record ProjectInfo
@@ -13,7 +15,7 @@ public class SolutionService(EasyDotnetService easyDotnetService)
 {
     public SolutionInfo? CurrentSolution { get; private set; }
 
-    public async Task<SolutionInfo?> FindAndParseSolutionAsync(string path)
+    public Task<SolutionInfo?> FindAndParseSolutionAsync(string path)
     {
         string? slnFile = null;
         string? rootDir = null;
@@ -29,14 +31,13 @@ public class SolutionService(EasyDotnetService easyDotnetService)
             rootDir = Path.GetDirectoryName(slnFile);
         }
 
-        if (slnFile == null || rootDir == null) return null;
+        if (slnFile == null || rootDir == null) return Task.FromResult<SolutionInfo?>(null);
 
         easyDotnetService.InitializeContext(rootDir, slnFile);
 
-        var projectsResponse = await easyDotnetService.ListProjectsAsync(slnFile);
-
-        var projects = projectsResponse
-            .DistinctBy(p => p.AbsolutePath)
+        var solution = SolutionFile.Parse(slnFile);
+        var projects = solution.ProjectsInOrder
+            .Where(p => p.ProjectType != SolutionProjectType.SolutionFolder)
             .Select(proj => new ProjectInfo
             {
                 Name = proj.ProjectName,
@@ -45,31 +46,6 @@ public class SolutionService(EasyDotnetService easyDotnetService)
             }).ToList();
 
         CurrentSolution = new SolutionInfo(Path.GetFileNameWithoutExtension(slnFile), slnFile, projects);
-        return CurrentSolution;
-    }
-
-    public async Task<List<string>> GetProjectReferencesAsync(string projectPath)
-    {
-        try
-        {
-            if (!File.Exists(projectPath))
-                return [];
-
-            return await easyDotnetService.ListProjectReferencesAsync(projectPath);
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    public async Task<bool> AddProjectReferenceAsync(string projectPath, string targetPath)
-    {
-        return await easyDotnetService.AddProjectReferenceAsync(projectPath, targetPath);
-    }
-
-    public async Task<bool> RemoveProjectReferenceAsync(string projectPath, string targetPath)
-    {
-        return await easyDotnetService.RemoveProjectReferenceAsync(projectPath, targetPath);
+        return Task.FromResult<SolutionInfo?>(CurrentSolution);
     }
 }
