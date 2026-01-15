@@ -508,9 +508,9 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                 else
                 {
                     table.AddRow(
-                        new Markup($"[bold white]{Markup.Escape(pkg.Id)}[/]"),
-                        new Markup($"[bold white]{Markup.Escape(pkg.ResolvedVersion)}[/]"),
-                        new Markup($"[bold white]{Markup.Remove(latestText)}[/]")
+                        new Markup(Markup.Escape(pkg.Id)),
+                        new Markup(Markup.Escape(pkg.ResolvedVersion)),
+                        new Markup(latestText)
                     );
                 }
             }

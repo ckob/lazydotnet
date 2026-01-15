@@ -349,7 +349,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                     }
                     else
                     {
-                        treeGrid.AddRow(new Markup($"{indent} [bold white]{lineIcon} {displayName}[/]"));
+                        treeGrid.AddRow(new Markup($"{indent} {lineIcon} {displayName}"));
                     }
                 }
                 else

@@ -259,8 +259,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
                 grid.AddRow(isActive
                     ? new Markup(
                         $"  [black on blue]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]")
-                    : new Markup(
-                        $"  [bold white]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]"));
+                    : new Markup($"  [green]→[/] {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/]"));
             }
             else
             {
