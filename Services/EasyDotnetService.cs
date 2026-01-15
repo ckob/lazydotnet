@@ -232,42 +232,6 @@ public class EasyDotnetService : IAsyncDisposable
             new { projectPath, targetPath });
     }
 
-    public async Task<IAsyncEnumerable<NugetPackageMetadata>> SearchPackagesAsync(string searchTerm, List<string>? sources = null, CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync();
-        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<NugetPackageMetadata>>(
-            "nuget/search-packages",
-            new { searchTerm, sources },
-            ct);
-    }
-
-    public async Task<IAsyncEnumerable<string>> GetPackageVersionsAsync(string packageId, List<string>? sources = null, bool includePrerelease = false, CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync();
-        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<string>>(
-            "nuget/get-package-versions",
-            new { packageId, sources, includePrerelease },
-            ct);
-    }
-
-    public async Task<IAsyncEnumerable<OutdatedDependencyInfoResponse>> GetOutdatedPackagesAsync(string targetPath, bool? includeTransitive = null, CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync();
-        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<OutdatedDependencyInfoResponse>>(
-            "outdated/packages",
-            new { targetPath, includeTransitive },
-            ct);
-    }
-
-    public async Task<IAsyncEnumerable<PackageReference>> ListPackageReferencesAsync(string projectPath, string targetFramework = "", CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync();
-        return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<PackageReference>>(
-            "msbuild/list-package-reference",
-            new { projectPath, targetFramework },
-            ct);
-    }
-
     public async Task<IAsyncEnumerable<DiscoveredTest>> DiscoverTestsAsync(string projectPath, string? targetFrameworkMoniker = null, string? configuration = null, CancellationToken ct = default)
     {
         await EnsureInitializedAsync();
@@ -283,20 +247,6 @@ public class EasyDotnetService : IAsyncDisposable
         return await _jsonRpc!.InvokeWithParameterObjectAsync<IAsyncEnumerable<TestRunResult>>(
             "test/run",
             new { projectPath, configuration, filter, targetFrameworkMoniker });
-    }
-
-    public async Task RestorePackagesAsync(string targetPath)
-    {
-        await EnsureInitializedAsync();
-        await _jsonRpc!.InvokeWithParameterObjectAsync("nuget/restore", new { targetPath });
-    }
-
-    public async Task<DotnetProjectV1> GetProjectPropertiesAsync(string targetPath, string targetFramework = "", string configuration = "")
-    {
-        await EnsureInitializedAsync();
-        return await _jsonRpc!.InvokeWithParameterObjectAsync<DotnetProjectV1>(
-            "msbuild/project-properties",
-            new { request = new { targetPath, targetFramework, configuration } });
     }
 
     public async ValueTask DisposeAsync()

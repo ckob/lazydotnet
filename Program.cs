@@ -1,8 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Build.Locator;
 using lazydotnet.Core;
 using lazydotnet.UI;
 using lazydotnet.Services;
 using lazydotnet.Screens;
+
+MSBuildLocator.RegisterDefaults();
 
 var services = new ServiceCollection();
 
