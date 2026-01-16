@@ -5,7 +5,7 @@ using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
-using Microsoft.Build.Evaluation;
+using System.Text.Json;
 
 namespace lazydotnet.Services;
 
@@ -165,64 +165,71 @@ public static class NuGetService
 
     public static async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(projectPath) || projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(projectPath))
         {
             return [];
         }
 
-        return await Task.Run(() =>
+        try
         {
-            try
-            {
-                var projectCollection = new ProjectCollection();
-                var project = projectCollection.LoadProject(projectPath);
-                var packages = project.GetItems("PackageReference")
-                    .Select(i => new NuGetPackageInfo(
-                        i.EvaluatedInclude,
-                        i.GetMetadataValue("Version"),
-                        null))
-                    .OrderBy(p => p.Id)
-                    .ToList();
+            var command = Cli.Wrap("dotnet")
+                .WithArguments(["list", projectPath, "package", "--format", "json"])
+                .WithValidation(CommandResultValidation.None);
 
-                projectCollection.UnloadAllProjects();
-                return packages;
-            }
-            catch (Exception ex)
+            var result = await AppCli.RunBufferedAsync(command, ct);
+            if (string.IsNullOrEmpty(result.StandardOutput))
             {
-                if (ex is not OperationCanceledException)
-                    logger?.Invoke($"[red]Error loading packages: {Markup.Escape(ex.Message)}[/]");
-                return new List<NuGetPackageInfo>();
+                return [];
             }
-        }, ct);
+
+            var data = JsonSerializer.Deserialize<DotnetListOutput>(result.StandardOutput, JsonOptions);
+            if (data?.Projects == null) return [];
+
+            return data.Projects
+                .SelectMany(p => p.Frameworks ?? [])
+                .SelectMany(f => f.TopLevelPackages ?? [])
+                .Where(pkg => !string.IsNullOrEmpty(pkg.Id) && !string.IsNullOrEmpty(pkg.ResolvedVersion))
+                .Select(pkg => new NuGetPackageInfo(pkg.Id!, pkg.ResolvedVersion!, null))
+                .Distinct()
+                .OrderBy(p => p.Id)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            if (ex is not OperationCanceledException)
+                logger?.Invoke($"[red]Error loading packages: {Markup.Escape(ex.Message)}[/]");
+            return [];
+        }
     }
 
     public static async Task<Dictionary<string, string>> GetLatestVersionsAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
-            var packages = await GetPackagesAsync(projectPath, logger, ct);
-            var outdated = new Dictionary<string, string>();
+            var command = Cli.Wrap("dotnet")
+                .WithArguments(["list", projectPath, "package", "--outdated", "--format", "json"])
+                .WithValidation(CommandResultValidation.None);
 
-            var tasks = packages.Select(async pkg =>
+            var result = await AppCli.RunBufferedAsync(command, ct);
+            if (string.IsNullOrEmpty(result.StandardOutput))
             {
-                var versions = await GetPackageVersionsAsync(pkg.Id, null, ct);
-                var latest = versions.FirstOrDefault();
-                if (latest != null && latest != pkg.ResolvedVersion)
-                {
-                    lock (outdated)
-                    {
-                        outdated[pkg.Id] = latest;
-                    }
-                }
-            });
+                return [];
+            }
 
-            await Task.WhenAll(tasks);
-            return outdated;
+            var data = JsonSerializer.Deserialize<DotnetListOutput>(result.StandardOutput, JsonOptions);
+            if (data?.Projects == null) return [];
+
+            return data.Projects
+                .SelectMany(p => p.Frameworks ?? [])
+                .SelectMany(f => f.TopLevelPackages ?? [])
+                .Where(pkg => !string.IsNullOrEmpty(pkg.Id) && !string.IsNullOrEmpty(pkg.LatestVersion))
+                .GroupBy(pkg => pkg.Id!)
+                .ToDictionary(g => g.Key, g => g.First().LatestVersion!);
         }
         catch (Exception ex)
         {
             if (ex is not OperationCanceledException)
-                logger?.Invoke($"[yellow]Warning: Could not fetch latest versions: {ex.Message}[/]");
+                logger?.Invoke($"[yellow]Warning: Could not fetch latest versions: {Markup.Escape(ex.Message)}[/]");
             return [];
         }
     }
@@ -323,6 +330,7 @@ public static class NuGetService
 
         await AppCli.RunAsync(command);
     }
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 }
 
 public class SearchResult
@@ -337,3 +345,8 @@ public class SearchVersion
 {
     public string Version { get; set; } = "";
 }
+
+internal record DotnetListOutput(List<DotnetProject>? Projects);
+internal record DotnetProject(string Path, List<DotnetFramework>? Frameworks);
+internal record DotnetFramework(string Framework, List<DotnetPackage>? TopLevelPackages);
+internal record DotnetPackage(string? Id, string? ResolvedVersion, string? LatestVersion);
