@@ -13,7 +13,7 @@ public enum AppMode
     Busy // Showing spinner/progress
 }
 
-public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
+public class NuGetDetailsTab : IProjectTab
 {
     private readonly ScrollableList<NuGetPackageInfo> _nugetList = new();
 
@@ -75,6 +75,8 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         }
     }
 
+    public bool IsLoaded(string projectPath) => _currentProjectPath == projectPath && !_isLoading;
+
     public bool OnTick()
     {
         if (!_isFetchingLatest && !_isLoading && !_isActionRunning) return false;
@@ -106,7 +108,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
         try
         {
             // Step 1: Load installed packages (local, fast)
-            var packages = await nuGetService.GetPackagesAsync(projectPath, LogAction, ct);
+            var packages = await NuGetService.GetPackagesAsync(projectPath, LogAction, ct);
             if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
                 return;
 
@@ -123,7 +125,7 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             {
                 try
                 {
-                    var latestVersions = await nuGetService.GetLatestVersionsAsync(projectPath, LogAction, ct);
+                    var latestVersions = await NuGetService.GetLatestVersionsAsync(projectPath, LogAction, ct);
                     if (ct.IsCancellationRequested || _currentProjectPath != projectPath)
                         return;
 
@@ -202,7 +204,6 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
             yield return new KeyBinding("a", "add", () =>
             {
                 var modal = new NuGetSearchModal(
-                    nuGetService,
                     async selected => { await InstallPackageAsync(selected.Id, null); },
                     () => RequestModal?.Invoke(null!),
                     LogAction,
@@ -247,7 +248,6 @@ public class NuGetDetailsTab(NuGetService nuGetService) : IProjectTab
                 if (p == null) return Task.CompletedTask;
 
                 var modal = new NuGetVersionSelectionModal(
-                    nuGetService,
                     p.Id,
                     p.ResolvedVersion,
                     p.LatestVersion,

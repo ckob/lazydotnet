@@ -50,7 +50,6 @@ public class AppLayout
     }
     public LogViewer LogViewer { get; } = new();
     public TestOutputViewer TestOutputViewer { get; } = new();
-    public LogViewer EasyDotnetOutputViewer { get; } = new();
 
     public Layout GetRoot() => _rootLayout;
 
@@ -67,12 +66,12 @@ public class AppLayout
 
     public void NextBottomTab()
     {
-        BottomActiveTab = (BottomActiveTab + 1) % 3;
+        BottomActiveTab = (BottomActiveTab + 1) % 2;
     }
 
     public void PreviousBottomTab()
     {
-        BottomActiveTab = (BottomActiveTab - 1 + 3) % 3;
+        BottomActiveTab = (BottomActiveTab - 1 + 2) % 2;
     }
 
     public void SetDetailsActiveTab(int tab)
@@ -125,28 +124,20 @@ public class AppLayout
         OnLog?.Invoke();
     }
 
-    public void AddEasyDotnetLog(string message)
-    {
-        EasyDotnetOutputViewer.AddLog(message);
-        OnLog?.Invoke();
-    }
-
     public void UpdateBottom(int width, int height)
     {
         var isActive = ActivePanel == 2;
         var logTab = BottomActiveTab == 0 ? "[green]Log[/]" : "[dim]Log[/]";
         var testTab = BottomActiveTab == 1 ? "[green]Test Output[/]" : "[dim]Test Output[/]";
-        var ednTab = BottomActiveTab == 2 ? "[green]EasyDotnet Output[/]" : "[dim]EasyDotnet Output[/]";
 
         var header = isActive
-            ? $"[green][[3]][/]-{logTab} - {testTab} - {ednTab}"
-            : $"[dim][[3]][/]-{logTab} - {testTab} - {ednTab}";
+            ? $"[green][[3]][/]-{logTab} - {testTab}"
+            : $"[dim][[3]][/]-{logTab} - {testTab}";
 
         var content = BottomActiveTab switch
         {
             0 => LogViewer.GetContent(height - 2, width, isActive),
             1 => TestOutputViewer.GetContent(height - 2, width, isActive),
-            2 => EasyDotnetOutputViewer.GetContent(height - 2, width, isActive),
             _ => new Markup("")
         };
 

@@ -195,7 +195,6 @@ public class DashboardScreen : IScreen
                 {
                     0 => _layout.LogViewer.GetKeyBindings(),
                     1 => _layout.TestOutputViewer.GetKeyBindings(),
-                    2 => _layout.EasyDotnetOutputViewer.GetKeyBindings(),
                     _ => null
                 };
 
@@ -233,7 +232,6 @@ public class DashboardScreen : IScreen
             {
                 0 => "Log",
                 1 => "Test Output",
-                2 => "EasyDotnet Output",
                 _ => "Bottom"
             },
             _ => "Local"
@@ -247,7 +245,6 @@ public class DashboardScreen : IScreen
             {
                 0 => _layout.LogViewer.GetKeyBindings(),
                 1 => _layout.TestOutputViewer.GetKeyBindings(),
-                2 => _layout.EasyDotnetOutputViewer.GetKeyBindings(),
                 _ => []
             },
             _ => []

@@ -11,5 +11,6 @@ public interface IProjectTab : IKeyBindable
     Task LoadAsync(string projectPath, string projectName, bool force = false);
     IRenderable GetContent(int height, int width, bool isActive);
     void ClearData();
+    bool IsLoaded(string projectPath);
     bool OnTick() => false;
 }

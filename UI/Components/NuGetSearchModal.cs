@@ -7,7 +7,6 @@ namespace lazydotnet.UI.Components;
 
 public class NuGetSearchModal : Modal
 {
-    private readonly NuGetService _nuGetService;
     private readonly Action<SearchResult> _onSelected;
     private readonly Action<string>? _logAction;
     private readonly Action _requestRefresh;
@@ -20,14 +19,12 @@ public class NuGetSearchModal : Modal
     private CancellationTokenSource? _searchCts;
 
     public NuGetSearchModal(
-        NuGetService nuGetService,
         Action<SearchResult> onSelected,
         Action onClose,
         Action<string>? logAction,
         Action requestRefresh)
         : base("NuGet Search", new Markup("Type to search packages..."), onClose)
     {
-        _nuGetService = nuGetService;
         _onSelected = onSelected;
         _logAction = logAction;
         _requestRefresh = requestRefresh;
@@ -124,7 +121,7 @@ public class NuGetSearchModal : Modal
                 _statusMessage = "Searching...";
                 _requestRefresh();
 
-                var results = await _nuGetService.SearchPackagesAsync(_searchQuery, _logAction, token);
+                var results = await NuGetService.SearchPackagesAsync(_searchQuery, _logAction, token);
 
                 if (token.IsCancellationRequested) return;
 

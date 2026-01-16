@@ -14,6 +14,7 @@ public class ProjectDetailsPane : IKeyBindable
 
     private string? _currentProjectPath;
     private string? _currentProjectName;
+    private CancellationTokenSource? _loadCts;
 
     public Action<string>? LogAction
     {
@@ -25,9 +26,9 @@ public class ProjectDetailsPane : IKeyBindable
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public ProjectDetailsPane(SolutionService solutionService, NuGetService nuGetService, TestService testService, IEditorService editorService)
+    public ProjectDetailsPane(SolutionService solutionService, TestService testService, IEditorService editorService)
     {
-        _nugetTab = new NuGetDetailsTab(nuGetService);
+        _nugetTab = new NuGetDetailsTab();
         var refsTab = new ProjectReferencesTab(solutionService, editorService);
         _testsTab = new TestDetailsTab(testService, editorService);
 
@@ -102,17 +103,32 @@ public class ProjectDetailsPane : IKeyBindable
         if (_currentProjectPath == null || _currentProjectName == null)
             return;
 
-        var task = _tabInstances[_tabs.ActiveTab].LoadAsync(_currentProjectPath, _currentProjectName);
+        var activeTab = _tabInstances[_tabs.ActiveTab];
+        if (activeTab.IsLoaded(_currentProjectPath))
+            return;
+
+        _loadCts?.Cancel();
+        _loadCts = new CancellationTokenSource();
+        var token = _loadCts.Token;
+
+        var path = _currentProjectPath;
+        var name = _currentProjectName;
+
         _ = Task.Run(async () =>
         {
-            try { await task; }
+            try
+            {
+                await activeTab.LoadAsync(path, name);
+                if (!token.IsCancellationRequested)
+                {
+                    RequestRefresh?.Invoke();
+                }
+            }
             catch
             {
                 // ignored
             }
-
-            RequestRefresh?.Invoke();
-        });
+        }, token);
     }
 
     public IEnumerable<KeyBinding> GetKeyBindings()

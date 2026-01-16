@@ -78,6 +78,8 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         _lastFrameIndex = -1;
     }
 
+    public bool IsLoaded(string projectPath) => _currentProjectPath == projectPath && !_isLoading;
+
     public bool OnTick()
     {
         if (_isLoading)

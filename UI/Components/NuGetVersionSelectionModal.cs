@@ -7,7 +7,6 @@ namespace lazydotnet.UI.Components;
 
 public class NuGetVersionSelectionModal : Modal
 {
-    private readonly NuGetService _nuGetService;
     private readonly string _packageId;
     private readonly string _currentVersion;
     private readonly string? _latestVersion;
@@ -21,7 +20,6 @@ public class NuGetVersionSelectionModal : Modal
     private int _lastFrameIndex = -1;
 
     public NuGetVersionSelectionModal(
-        NuGetService nuGetService,
         string packageId,
         string currentVersion,
         string? latestVersion,
@@ -31,7 +29,6 @@ public class NuGetVersionSelectionModal : Modal
         Action requestRefresh)
         : base($"Select Version: {packageId}", new Markup("Loading versions..."), onClose)
     {
-        _nuGetService = nuGetService;
         _packageId = packageId;
         _currentVersion = currentVersion;
         _latestVersion = latestVersion;
@@ -56,7 +53,7 @@ public class NuGetVersionSelectionModal : Modal
         {
             try
             {
-                var versions = await _nuGetService.GetPackageVersionsAsync(_packageId, _logAction, ct);
+                var versions = await NuGetService.GetPackageVersionsAsync(_packageId, _logAction, ct);
 
                 if (ct.IsCancellationRequested) return;
 

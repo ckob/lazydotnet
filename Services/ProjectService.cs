@@ -5,26 +5,29 @@ namespace lazydotnet.Services;
 
 public static class ProjectService
 {
-    public static Task<List<string>> GetProjectReferencesAsync(string projectPath)
+    public static async Task<List<string>> GetProjectReferencesAsync(string projectPath)
     {
-        try
+        return await Task.Run(() =>
         {
-            if (!File.Exists(projectPath))
-                return Task.FromResult(new List<string>());
+            try
+            {
+                if (!File.Exists(projectPath))
+                    return [];
 
-            var projectCollection = new ProjectCollection();
-            var project = projectCollection.LoadProject(projectPath);
-            var references = project.GetItems("ProjectReference")
-                .Select(i => Path.GetFullPath(Path.Combine(project.DirectoryPath, i.EvaluatedInclude)))
-                .ToList();
+                var projectCollection = new ProjectCollection();
+                var project = projectCollection.LoadProject(projectPath);
+                var references = project.GetItems("ProjectReference")
+                    .Select(i => Path.GetFullPath(Path.Combine(project.DirectoryPath, i.EvaluatedInclude)))
+                    .ToList();
 
-            projectCollection.UnloadAllProjects();
-            return Task.FromResult(references);
-        }
-        catch
-        {
-            return Task.FromResult(new List<string>());
-        }
+                projectCollection.UnloadAllProjects();
+                return references;
+            }
+            catch
+            {
+                return [];
+            }
+        });
     }
 
     public static async Task AddProjectReferenceAsync(string projectPath, string targetPath)

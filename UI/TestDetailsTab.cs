@@ -54,10 +54,10 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
 
         try
         {
-            var tests = await testService.DiscoverTestsAsync(projectPath, token);
+            var tests = await TestService.DiscoverTestsAsync(projectPath, token);
             if (tests.Count != 0)
             {
-                var r = testService.BuildTestTree(tests);
+                var r = TestService.BuildTestTree(tests);
                 r.IsExpanded = true;
 
                 lock (_lock)
@@ -118,6 +118,8 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             _currentPath = null;
         }
     }
+
+    public bool IsLoaded(string projectPath) => _currentPath == projectPath && !_isLoading;
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
@@ -399,7 +401,7 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
                     .Select(t => new RunRequestNode(t.Uid!, t.Name))
                     .ToArray();
 
-                var results = await testService.RunTestsAsync(_currentPath, filter);
+                var results = await TestService.RunTestsAsync(_currentPath, filter);
 
                 await foreach (var res in results)
                 {

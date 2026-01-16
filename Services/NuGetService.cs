@@ -1,12 +1,10 @@
 using System.Text.RegularExpressions;
-using System.Text.Json;
 using CliWrap;
 using Spectre.Console;
 using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
-using NuGet.Versioning;
 using Microsoft.Build.Evaluation;
 
 namespace lazydotnet.Services;
@@ -72,11 +70,9 @@ public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string
     private static partial Regex VersionRegex();
 }
 
-public class NuGetService
+public static class NuGetService
 {
-    private readonly JsonSerializerOptions _jsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
-
-    public async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
+    public static async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
@@ -129,7 +125,7 @@ public class NuGetService
         }
     }
 
-    public async Task<List<string>> GetPackageVersionsAsync(string packageId, Action<string>? logger = null, CancellationToken ct = default)
+    public static async Task<List<string>> GetPackageVersionsAsync(string packageId, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {
@@ -167,32 +163,40 @@ public class NuGetService
         }
     }
 
-    public Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
+    public static async Task<List<NuGetPackageInfo>> GetPackagesAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
     {
-        try
+        if (string.IsNullOrEmpty(projectPath) || projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
         {
-            var projectCollection = new ProjectCollection();
-            var project = projectCollection.LoadProject(projectPath);
-            var packages = project.GetItems("PackageReference")
-                .Select(i => new NuGetPackageInfo(
-                    i.EvaluatedInclude,
-                    i.GetMetadataValue("Version"),
-                    null))
-                .OrderBy(p => p.Id)
-                .ToList();
+            return [];
+        }
 
-            projectCollection.UnloadAllProjects();
-            return Task.FromResult(packages);
-        }
-        catch (Exception ex)
+        return await Task.Run(() =>
         {
-            if (ex is not OperationCanceledException)
-                logger?.Invoke($"[red]Error loading packages: {Markup.Escape(ex.Message)}[/]");
-            return Task.FromResult(new List<NuGetPackageInfo>());
-        }
+            try
+            {
+                var projectCollection = new ProjectCollection();
+                var project = projectCollection.LoadProject(projectPath);
+                var packages = project.GetItems("PackageReference")
+                    .Select(i => new NuGetPackageInfo(
+                        i.EvaluatedInclude,
+                        i.GetMetadataValue("Version"),
+                        null))
+                    .OrderBy(p => p.Id)
+                    .ToList();
+
+                projectCollection.UnloadAllProjects();
+                return packages;
+            }
+            catch (Exception ex)
+            {
+                if (ex is not OperationCanceledException)
+                    logger?.Invoke($"[red]Error loading packages: {Markup.Escape(ex.Message)}[/]");
+                return new List<NuGetPackageInfo>();
+            }
+        }, ct);
     }
 
-    public async Task<Dictionary<string, string>> GetLatestVersionsAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
+    public static async Task<Dictionary<string, string>> GetLatestVersionsAsync(string projectPath, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
         {

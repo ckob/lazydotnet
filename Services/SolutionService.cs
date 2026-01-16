@@ -11,7 +11,7 @@ public record ProjectInfo
 
 public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects);
 
-public class SolutionService(EasyDotnetService easyDotnetService)
+public class SolutionService
 {
     public SolutionInfo? CurrentSolution { get; private set; }
 
@@ -32,8 +32,6 @@ public class SolutionService(EasyDotnetService easyDotnetService)
         }
 
         if (slnFile == null || rootDir == null) return Task.FromResult<SolutionInfo?>(null);
-
-        easyDotnetService.InitializeContext(rootDir, slnFile);
 
         var solution = SolutionFile.Parse(slnFile);
         var projects = solution.ProjectsInOrder
