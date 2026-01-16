@@ -1,6 +1,0 @@
-[submodule "References/easy-dotnet-server"]
-	path = References/easy-dotnet-server
-	url = git@github.com:GustavEikaas/easy-dotnet-server.git
-[submodule "References/easy-dotnet"]
-	path = References/easy-dotnet
-	url = https://github.com/GustavEikaas/easy-dotnet.nvim
