@@ -30,7 +30,7 @@ public class ProjectDetailsPane : IKeyBindable
     {
         _nugetTab = new NuGetDetailsTab();
         var refsTab = new ProjectReferencesTab(solutionService, editorService);
-        _testsTab = new TestDetailsTab(testService, editorService);
+        _testsTab = new TestDetailsTab(editorService);
 
         _tabInstances.Add(refsTab);
         _tabInstances.Add(_nugetTab);

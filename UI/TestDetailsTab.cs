@@ -6,7 +6,7 @@ using lazydotnet.UI.Components;
 
 namespace lazydotnet.UI;
 
-public class TestDetailsTab(TestService testService, IEditorService editorService) : IProjectTab
+public class TestDetailsTab(IEditorService editorService) : IProjectTab
 {
     private TestNode? _root;
     private readonly List<TestNode> _visibleNodes = [];
@@ -229,13 +229,6 @@ public class TestDetailsTab(TestService testService, IEditorService editorServic
             _selectedIndex++;
         }
     }
-
-    public string? GetScrollIndicator()
-    {
-        if (_visibleNodes.Count == 0) return null;
-        return $"{_selectedIndex + 1} of {_visibleNodes.Count}";
-    }
-
 
     private async Task OpenInEditorAsync(TestNode node)
     {

@@ -5,7 +5,6 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using Microsoft.Build.Evaluation;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-using CliWrap;
 
 namespace lazydotnet.Services;
 
@@ -76,11 +75,11 @@ public enum TestStatus
 
 public class TestService
 {
-    private static readonly SemaphoreSlim _vstestLock = new(1, 1);
+    private static readonly SemaphoreSlim VstestLock = new(1, 1);
 
     public static async Task<List<DiscoveredTest>> DiscoverTestsAsync(string projectPath, CancellationToken cancellationToken = default)
     {
-        await _vstestLock.WaitAsync(cancellationToken);
+        await VstestLock.WaitAsync(cancellationToken);
         try
         {
             return await Task.Run(async () =>
@@ -110,7 +109,7 @@ public class TestService
         }
         finally
         {
-            _vstestLock.Release();
+            VstestLock.Release();
         }
     }
 
@@ -130,7 +129,7 @@ public class TestService
         try
         {
             AppCli.Log($"[dim]Discovering tests for {Path.GetFileName(targetPath)}...[/]");
-            
+
             return await Task.Run(() =>
             {
                 var options = new TestPlatformOptions
@@ -139,11 +138,10 @@ public class TestService
                     SkipDefaultAdapters = false
                 };
 
-                // VSTest translation layer DiscoverTests is blocking when using this overload
                 wrapper.DiscoverTests([targetPath], null, options, handler);
-                
+
                 handler.CompletionTask.Wait(ct);
-                
+
                 return handler.Tests.Select(tc => new DiscoveredTest(
                     tc.Id.ToString(),
                     null,
@@ -156,66 +154,12 @@ public class TestService
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[yellow]VSTest discovery failed: {ex.Message}. Falling back to CLI.[/]");
-            return await DiscoverVsTestsCliAsync(targetPath, ct);
+            AppCli.Log($"[red]VSTest discovery failed: {ex.Message}[/]");
+            return [];
         }
         finally
         {
             wrapper.EndSession();
-        }
-    }
-
-    private static async Task<List<DiscoveredTest>> DiscoverVsTestsCliAsync(string targetPath, CancellationToken ct)
-    {
-        try
-        {
-            var command = targetPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                ? Cli.Wrap("dotnet").WithArguments(["test", targetPath, "--list-tests"])
-                : Cli.Wrap(targetPath).WithArguments("--list-tests");
-
-             command = command.WithValidation(CommandResultValidation.None);
-
-            var result = await AppCli.RunBufferedAsync(command, ct);
-             if (result.ExitCode != 0)
-            {
-                if (!string.IsNullOrEmpty(result.StandardError))
-                    AppCli.Log($"[dim]VSTest CLI discovery stderr: {result.StandardError.Trim()}[/]");
-                return [];
-            }
-
-            var tests = new List<DiscoveredTest>();
-            var lines = result.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-
-            bool testSectionStarted = false;
-            foreach (var line in lines)
-            {
-                var trimmed = line.Trim();
-                if (string.IsNullOrWhiteSpace(trimmed)) continue;
-
-                if (trimmed.Contains("The following Tests are available:", StringComparison.OrdinalIgnoreCase))
-                {
-                    testSectionStarted = true;
-                    continue;
-                }
-
-                if (trimmed.Contains(' ') && !testSectionStarted) continue;
-
-                tests.Add(new DiscoveredTest(
-                    Guid.NewGuid().ToString(),
-                    null,
-                    trimmed,
-                    trimmed,
-                    null,
-                    null
-                ));
-            }
-
-            return tests;
-        }
-        catch (Exception ex)
-        {
-            AppCli.Log($"[red]VSTest CLI discovery failed: {ex.Message}[/]");
-            return [];
         }
     }
 
@@ -275,67 +219,16 @@ public class TestService
         {
             mtpClient = await MtpClient.CreateAsync(targetPath, ct);
             var tests = await mtpClient.DiscoverTestsAsync(ct);
-
-            if (tests.Count == 0)
-            {
-                return await DiscoverMtpTestsCliAsync(targetPath, ct);
-            }
             return tests;
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[yellow]MTP RPC discovery failed: {ex.Message}. Falling back to CLI.[/]");
-            return await DiscoverMtpTestsCliAsync(targetPath, ct);
+            AppCli.Log($"[red]MTP RPC discovery failed: {ex.Message}[/]");
+            return [];
         }
         finally
         {
             if (mtpClient != null) await mtpClient.DisposeAsync();
-        }
-    }
-
-    private static async Task<List<DiscoveredTest>> DiscoverMtpTestsCliAsync(string targetPath, CancellationToken ct)
-    {
-        try
-        {
-            var command = targetPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                ? Cli.Wrap("dotnet").WithArguments(["test", targetPath, "--list-tests"])
-                : Cli.Wrap(targetPath).WithArguments("--list-tests");
-
-            command = command.WithValidation(CommandResultValidation.None);
-
-            var result = await AppCli.RunBufferedAsync(command, ct);
-            if (result.ExitCode != 0)
-            {
-                if (!string.IsNullOrEmpty(result.StandardError))
-                    AppCli.Log($"[dim]MTP CLI discovery stderr: {result.StandardError.Trim()}[/]");
-                return [];
-            }
-
-            var tests = new List<DiscoveredTest>();
-            var lines = result.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-
-            bool testSectionStarted = false;
-            foreach (var line in lines)
-            {
-                var trimmed = line.Trim();
-                if (string.IsNullOrWhiteSpace(trimmed)) continue;
-
-                if (trimmed.Contains("The following tests are available:", StringComparison.OrdinalIgnoreCase))
-                {
-                    testSectionStarted = true;
-                    continue;
-                }
-
-                if (trimmed.Contains(' ') && !testSectionStarted) continue;
-
-                tests.Add(new DiscoveredTest(trimmed, null, trimmed, trimmed, null, null));
-            }
-
-            return tests;
-        }
-        catch
-        {
-            return [];
         }
     }
 
@@ -357,7 +250,7 @@ public class TestService
         }
     }
 
-    private class DiscoveryHandler : ITestDiscoveryEventsHandler, ITestDiscoveryEventsHandler2
+    private sealed class DiscoveryHandler : ITestDiscoveryEventsHandler, ITestDiscoveryEventsHandler2
     {
         public List<TestCase> Tests { get; } = [];
         private readonly TaskCompletionSource _tcs = new();
@@ -374,13 +267,13 @@ public class TestService
             _tcs.TrySetResult();
         }
 
-        public void HandleDiscoveryComplete(DiscoveryCompleteEventArgs args, IEnumerable<TestCase>? lastChunk)
+        public void HandleDiscoveryComplete(DiscoveryCompleteEventArgs discoveryCompleteEventArgs, IEnumerable<TestCase>? lastChunk)
         {
             if (lastChunk != null) Tests.AddRange(lastChunk);
             _tcs.TrySetResult();
         }
 
-        public void HandleLogMessage(TestMessageLevel level, string? message) 
+        public void HandleLogMessage(TestMessageLevel level, string? message)
         {
             if (level == TestMessageLevel.Error) AppCli.Log($"[red]VSTest: {message}[/]");
         }
@@ -512,7 +405,7 @@ public class TestService
                 return suffix;
         }
 
-        var methodName = fqn.Split('.').Last();
+        var methodName = fqn.Split('.')[^1];
         if (displayName.StartsWith(methodName) && displayName.Length > methodName.Length)
         {
              var suffix = displayName[methodName.Length..];
@@ -588,12 +481,12 @@ public class TestService
             }
             catch (Exception ex)
             {
-                AppCli.Log($"[yellow]MTP RPC run failed: {ex.Message}. Falling back to CLI.[/]");
-                return RunMtpTestsCliAsync(targetPath, filter);
+                AppCli.Log($"[red]MTP RPC run failed: {ex.Message}[/]");
+                return EmptyRun();
             }
         }
 
-        await _vstestLock.WaitAsync();
+        await VstestLock.WaitAsync();
         try
         {
             var vstestPath = VsTestConsoleLocator.GetVsTestConsolePath();
@@ -612,14 +505,12 @@ public class TestService
                         SkipDefaultAdapters = false
                     };
 
-                    // To run tests reliably, we first discover them to get the TestCase objects
-                    // because RunTests(IEnumerable<TestCase> tests, ...) is more reliable than filters
                     var discoveryHandler = new DiscoveryHandler();
                     wrapper.DiscoverTests([targetPath], null, options, discoveryHandler);
                     discoveryHandler.CompletionTask.Wait();
 
                     var testCases = discoveryHandler.Tests;
-                    if (filter != null && filter.Length > 0)
+                    if (filter is { Length: > 0 })
                     {
                         var filterIds = filter.Select(f => f.Uid).ToHashSet();
                         testCases = testCases.Where(t => filterIds.Contains(t.Id.ToString())).ToList();
@@ -631,82 +522,14 @@ public class TestService
                 {
                     handler.Fail(ex);
                 }
-                finally
-                {
-                    // Note: wrapper.EndSession() should probably be called when run is complete
-                    // But handler is async. We'll let the handler complete first.
-                }
             });
 
             return handler.GetResultsAsync();
         }
         finally
         {
-            _vstestLock.Release();
+            VstestLock.Release();
         }
-    }
-
-    private static async IAsyncEnumerable<TestRunResult> RunMtpTestsCliAsync(string targetPath, RunRequestNode[] filter)
-    {
-        var channel = Channel.CreateUnbounded<TestRunResult>();
-        var args = new List<string>();
-
-        if (targetPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-        {
-            args.Add(targetPath);
-        }
-
-        if (filter is { Length: > 0 })
-        {
-            var filterStr = string.Join('|', filter.Select(f => $"Name~{f.DisplayName}"));
-            args.Add("--filter");
-            args.Add(filterStr);
-        }
-
-        var command = targetPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-            ? Cli.Wrap("dotnet").WithArguments(args)
-            : Cli.Wrap(targetPath).WithArguments(args);
-
-        command = command.WithValidation(CommandResultValidation.None)
-            .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
-            {
-                if (line.StartsWith("Passed: ", StringComparison.OrdinalIgnoreCase))
-                {
-                    var name = line[8..].Split('(')[0].Trim();
-                    channel.Writer.TryWrite(new TestRunResult(name, "Passed", null, EmptyStrings(), [], EmptyStrings()));
-                }
-                else if (line.StartsWith("Failed: ", StringComparison.OrdinalIgnoreCase))
-                {
-                    var name = line[8..].Split('(')[0].Trim();
-                    channel.Writer.TryWrite(new TestRunResult(name, "Failed", null, EmptyStrings(), ["Test failed"], EmptyStrings()));
-                }
-            }));
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await command.ExecuteAsync();
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-        });
-
-        while (await channel.Reader.WaitToReadAsync())
-        {
-            while (channel.Reader.TryRead(out var result))
-            {
-                yield return result;
-            }
-        }
-    }
-
-    private static async IAsyncEnumerable<string> EmptyStrings()
-    {
-        yield break;
     }
 
     private static async IAsyncEnumerable<TestRunResult> EmptyRun()
