@@ -5,31 +5,23 @@ using lazydotnet.Services;
 
 namespace lazydotnet.UI.Components;
 
-public class TestOutputViewer : IKeyBindable
+public class TestDetailsModal(string title, List<TestOutputLine> details, Action onClose) : Modal(title, new Markup(""), onClose)
 {
-    private List<TestOutputLine> _lines = [];
+    private readonly List<TestOutputLine> _lines = details;
     private int _scrollOffset;
     private int _selectedLogicalIndex = -1;
     private readonly Lock _lock = new();
 
-    public IEnumerable<KeyBinding> GetKeyBindings()
+    public override IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp),
+        foreach (var b in base.GetKeyBindings()) yield return b;
+
+        yield return new KeyBinding("k", "up", () => { MoveUp(); return Task.CompletedTask; },
             k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
-        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown),
+        yield return new KeyBinding("j", "down", () => { MoveDown(); return Task.CompletedTask; },
             k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
-    }
-
-    public void SetOutput(List<TestOutputLine> lines)
-    {
-        lock (_lock)
-        {
-            _lines = lines;
-            if (_selectedLogicalIndex >= _lines.Count)
-                _selectedLogicalIndex = _lines.Count > 0 ? _lines.Count - 1 : -1;
-        }
     }
 
     private void MoveUp()
@@ -37,7 +29,6 @@ public class TestOutputViewer : IKeyBindable
         lock (_lock)
         {
             if (_lines.Count == 0) return;
-
             if (_selectedLogicalIndex == -1)
             {
                 _selectedLogicalIndex = _lines.Count - 1;
@@ -54,7 +45,6 @@ public class TestOutputViewer : IKeyBindable
                     return;
                 }
             }
-
             _selectedLogicalIndex = 0;
         }
     }
@@ -63,7 +53,13 @@ public class TestOutputViewer : IKeyBindable
     {
         lock (_lock)
         {
-            if (_lines.Count == 0 || _selectedLogicalIndex == -1) return;
+            if (_lines.Count == 0) return;
+
+            if (_selectedLogicalIndex == -1)
+            {
+                _selectedLogicalIndex = 0;
+                return;
+            }
 
             var index = _selectedLogicalIndex;
             while (index < _lines.Count - 1)
@@ -75,8 +71,6 @@ public class TestOutputViewer : IKeyBindable
                     return;
                 }
             }
-
-            _selectedLogicalIndex = -1;
         }
     }
 
@@ -87,22 +81,32 @@ public class TestOutputViewer : IKeyBindable
         public string? Style;
     }
 
-    public IRenderable GetContent(int height, int width, bool isActive)
+    public override IRenderable GetRenderable(int width, int height)
     {
         lock (_lock)
         {
-            if (_lines.Count == 0) return new Markup("");
-
-            var visibleRows = Math.Max(1, height);
-            var renderWidth = Math.Max(1, width - 4);
+            var modalWidth = width * 8 / 10;
+            var modalHeight = height * 8 / 10;
+            var renderWidth = modalWidth - 8;
+            var visibleRows = modalHeight - 4;
 
             var physicalLines = BuildPhysicalLines(renderWidth);
             UpdateScrollOffset(physicalLines, visibleRows);
 
-            var table = CreateOutputTable(renderWidth);
-            RenderPhysicalLines(table, physicalLines, visibleRows, isActive);
+            var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
+            table.AddColumn(new TableColumn("Content").NoWrap().Width(renderWidth));
 
-            return table;
+            RenderPhysicalLines(table, physicalLines, visibleRows);
+
+            return new Panel(new Padder(table, new Padding(2, 1, 2, 1)))
+            {
+                Header = new PanelHeader($"[bold yellow] {Title} [/]"),
+                Border = BoxBorder.Rounded,
+                BorderStyle = new Style(Color.Blue),
+                Expand = false,
+                Width = modalWidth,
+                Height = modalHeight
+            };
         }
     }
 
@@ -113,7 +117,6 @@ public class TestOutputViewer : IKeyBindable
         {
             var logical = _lines[i];
             var wrapped = WrapText(logical.Text, renderWidth);
-
             physicalLines.AddRange(wrapped.Select(w =>
                 new PhysicalLine { Text = w, LogicalIndex = i, Style = logical.Style }));
         }
@@ -124,48 +127,24 @@ public class TestOutputViewer : IKeyBindable
     {
         if (_selectedLogicalIndex != -1)
         {
-            var (first, last) = GetPhysicalIndicesForLogical(_selectedLogicalIndex, physicalLines);
+            var first = physicalLines.FindIndex(p => p.LogicalIndex == _selectedLogicalIndex);
+            var last = physicalLines.FindLastIndex(p => p.LogicalIndex == _selectedLogicalIndex);
 
-            if (first != -1)
-            {
-                if (first < _scrollOffset) _scrollOffset = first;
-                if (last >= _scrollOffset + visibleRows) _scrollOffset = last - visibleRows + 1;
-            }
-        }
-        else
+        if (first != -1)
         {
-            _scrollOffset = Math.Max(0, physicalLines.Count - visibleRows);
+            if (first < _scrollOffset) _scrollOffset = first;
+            if (last >= _scrollOffset + visibleRows) _scrollOffset = last - visibleRows + 1;
         }
-
-        _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, physicalLines.Count - visibleRows)));
     }
-
-    private static (int first, int last) GetPhysicalIndicesForLogical(int logicalIndex, List<PhysicalLine> physicalLines)
+    else
     {
-        var first = -1;
-        var last = -1;
-        for (var i = 0; i < physicalLines.Count; i++)
-        {
-            if (physicalLines[i].LogicalIndex == logicalIndex)
-            {
-                if (first == -1) first = i;
-                last = i;
-            }
-        }
-        return (first, last);
+        _scrollOffset = 0;
     }
+    _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, physicalLines.Count - visibleRows)));
+}
 
-    private static Table CreateOutputTable(int renderWidth)
-    {
-        return new Table()
-            .Border(TableBorder.None)
-            .HideHeaders()
-            .NoSafeBorder()
-            .Expand()
-            .AddColumn(new TableColumn("Output").NoWrap().Width(renderWidth));
-    }
 
-    private void RenderPhysicalLines(Table table, List<PhysicalLine> physicalLines, int visibleRows, bool isActive)
+    private void RenderPhysicalLines(Table table, List<PhysicalLine> physicalLines, int visibleRows)
     {
         var start = _scrollOffset;
         var renderedCount = 0;
@@ -178,8 +157,7 @@ public class TestOutputViewer : IKeyBindable
 
             if (isSelected)
             {
-                var selectionStyle = isActive ? "black on white" : "black on silver";
-                table.AddRow(new Markup($"[{selectionStyle}]{escapedText}[/]"));
+                table.AddRow(new Markup($"[black on white]{escapedText}[/]"));
             }
             else
             {
@@ -188,7 +166,6 @@ public class TestOutputViewer : IKeyBindable
                     : escapedText;
                 table.AddRow(new Markup(contentMarkup));
             }
-
             renderedCount++;
         }
 
@@ -206,27 +183,23 @@ public class TestOutputViewer : IKeyBindable
 
         var lines = new List<string>();
         var start = 0;
-
         while (start < text.Length)
         {
             var remaining = text.Length - start;
             var length = Math.Min(width, remaining);
-
             if (start + length < text.Length)
             {
                 var lastSpace = text.LastIndexOf(' ', start + length, length);
                 if (lastSpace > start)
                 {
-                    lines.Add(text.Substring(start, lastSpace - start));
+                    lines.Add(text[start..lastSpace]);
                     start = lastSpace + 1;
                     continue;
                 }
             }
-
             lines.Add(text.Substring(start, length));
             start += length;
         }
-
         return lines;
     }
 }

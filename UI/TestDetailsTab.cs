@@ -134,6 +134,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         yield return GetExpandBinding(node);
         yield return GetCollapseBinding(node);
         yield return GetToggleBinding(node);
+        yield return GetDetailsBinding(node);
         yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.KeyChar == 'r' || k.KeyChar == 'R');
         yield return new KeyBinding("e/o", "open", () => OpenInEditorAsync(node), k => k.KeyChar == 'e' || k.KeyChar == 'o');
     }
@@ -193,7 +194,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
     private KeyBinding GetToggleBinding(TestNode node)
     {
-        return new KeyBinding("enter/space", "toggle", () =>
+        return new KeyBinding("space", "toggle", () =>
         {
             if (node.IsContainer)
             {
@@ -201,7 +202,84 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
                 RefreshVisibleNodes();
             }
             return Task.CompletedTask;
-        }, k => k.Key is ConsoleKey.Enter or ConsoleKey.Spacebar, false);
+        }, k => k.Key == ConsoleKey.Spacebar, false);
+    }
+
+    private KeyBinding GetDetailsBinding(TestNode node)
+    {
+        return new KeyBinding("enter", "details", () =>
+        {
+            ShowTestDetails(node);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.Enter, true);
+    }
+
+    private void ShowTestDetails(TestNode node)
+    {
+        var lines = new List<TestOutputLine>();
+
+        // Build metadata lines
+        var statusColor = GetStatusColor(node.Status);
+        var statusIcon = GetStatusIcon(node.Status);
+        lines.Add(new TestOutputLine($"Status: {statusIcon} {node.Status}", statusColor));
+
+        if (node.IsTest)
+        {
+            lines.Add(new TestOutputLine($"Duration: {node.Duration}ms"));
+            if (node.FilePath != null)
+            {
+                var relativePath = PathHelper.GetRelativePath(node.FilePath);
+                lines.Add(new TestOutputLine($"File: {relativePath}", "blue"));
+                if (node.LineNumber != null)
+                {
+                    lines.Add(new TestOutputLine($"Line: {node.LineNumber}"));
+                }
+            }
+        }
+        else
+        {
+            var passedCount = GetCountByStatus(node, TestStatus.Passed);
+            var failedCount = GetCountByStatus(node, TestStatus.Failed);
+            var maxDuration = GetMaxDuration(node);
+
+            lines.Add(new TestOutputLine($"Total Tests: {node.TestCount}"));
+            lines.Add(new TestOutputLine($"Passed: {passedCount}", "green"));
+            lines.Add(new TestOutputLine($"Failed: {failedCount}", "red"));
+            lines.Add(new TestOutputLine($"Max Duration: {maxDuration}ms"));
+        }
+
+        lines.Add(new TestOutputLine(""));
+
+        // Build output/error lines
+        var output = node.GetOutputSnapshot();
+        if (output.Count > 0)
+        {
+            lines.Add(new TestOutputLine("Output/Error", "bold underline"));
+            lines.Add(new TestOutputLine(""));
+            lines.AddRange(output);
+        }
+        else if (node.IsTest)
+        {
+            if (node.Status == TestStatus.Passed)
+                lines.Add(new TestOutputLine("Test passed successfully.", "green"));
+            else if (node.Status == TestStatus.Failed)
+                lines.Add(new TestOutputLine("Test failed but no output was captured.", "red"));
+            else
+                lines.Add(new TestOutputLine("Test has not been run yet.", "dim"));
+        }
+
+        var modal = new TestDetailsModal(node.Name, lines, () => RequestModal?.Invoke(null!));
+
+        if (node.FilePath != null)
+        {
+            modal.SetAdditionalKeyBindings([
+                new KeyBinding("e/o", "open in editor", async () => {
+                    await editorService.OpenFileAsync(node.FilePath, node.LineNumber);
+                }, k => k.KeyChar is 'e' or 'o' or 'E' or 'O')
+            ]);
+        }
+
+        RequestModal?.Invoke(modal);
     }
 
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
@@ -310,7 +388,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
     }
 
-    private static IRenderable RenderNode(TestNode node, bool isSelected, int width, bool isActive)
+    private static Markup RenderNode(TestNode node, bool isSelected, int width, bool isActive)
     {
         string indent = new(' ', (node.Depth - 1) * 2);
         var statusColor = GetStatusColor(node.Status);
@@ -347,6 +425,26 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
 
         return new Markup($"{indent} {lineIcon} {displayName}");
+    }
+
+    private static int GetCountByStatus(TestNode node, TestStatus status)
+    {
+        if (node.IsTest)
+        {
+            return node.Status == status ? 1 : 0;
+        }
+
+        return node.Children.Sum(c => GetCountByStatus(c, status));
+    }
+
+    private static double GetMaxDuration(TestNode node)
+    {
+        if (node.IsTest)
+        {
+            return node.Duration;
+        }
+
+        return node.Children.Count > 0 ? node.Children.Max(GetMaxDuration) : 0;
     }
 
     private static string GetStatusColor(TestStatus status) => status switch

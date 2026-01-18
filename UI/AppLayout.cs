@@ -49,29 +49,18 @@ public class AppLayout
         return availableHeight - topHeight;
     }
     public LogViewer LogViewer { get; } = new();
-    public TestOutputViewer TestOutputViewer { get; } = new();
 
     public Layout GetRoot() => _rootLayout;
 
     public int ActivePanel { get; private set; }
 
-    public int BottomActiveTab { get; private set; }
+    public int BottomActiveTab { get; }
 
     private int _detailsActiveTab;
 
     public void SetActivePanel(int panel)
     {
         ActivePanel = Math.Clamp(panel, 0, 2);
-    }
-
-    public void NextBottomTab()
-    {
-        BottomActiveTab = (BottomActiveTab + 1) % 2;
-    }
-
-    public void PreviousBottomTab()
-    {
-        BottomActiveTab = (BottomActiveTab - 1 + 2) % 2;
     }
 
     public void SetDetailsActiveTab(int tab)
@@ -127,19 +116,13 @@ public class AppLayout
     public void UpdateBottom(int width, int height)
     {
         var isActive = ActivePanel == 2;
-        var logTab = BottomActiveTab == 0 ? "[green]Log[/]" : "[dim]Log[/]";
-        var testTab = BottomActiveTab == 1 ? "[green]Test Output[/]" : "[dim]Test Output[/]";
+        var logTab = "[green]Log[/]";
 
         var header = isActive
-            ? $"[green][[3]][/]-{logTab} - {testTab}"
-            : $"[dim][[3]][/]-{logTab} - {testTab}";
+            ? $"[green][[3]][/]-{logTab}"
+            : $"[dim][[3]][/]-{logTab}";
 
-        var content = BottomActiveTab switch
-        {
-            0 => LogViewer.GetContent(height - 2, width, isActive),
-            1 => TestOutputViewer.GetContent(height - 2, width, isActive),
-            _ => new Markup("")
-        };
+        var content = LogViewer.GetContent(height - 2, width, isActive);
 
         var panel = new Panel(content)
             .Header(header)

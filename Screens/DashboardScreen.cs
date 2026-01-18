@@ -91,8 +91,6 @@ public class DashboardScreen : IScreen
             HandleProjectChange(currentProject, currentPath);
         }
 
-        UpdateTestOutputViewer();
-
         if (_detailsPane.OnTick())
         {
             _needsRefresh = true;
@@ -136,18 +134,6 @@ public class DashboardScreen : IScreen
         else
         {
             _detailsPane.ClearForNonProject();
-        }
-    }
-
-    private void UpdateTestOutputViewer()
-    {
-        if (_layout.ActivePanel == 1 && _detailsPane.ActiveTab == 2)
-        {
-            var selectedTest = _detailsPane.GetSelectedTestNode();
-            if (selectedTest != null)
-            {
-                _layout.TestOutputViewer.SetOutput(selectedTest.GetOutputSnapshot());
-            }
         }
     }
 
@@ -204,29 +190,7 @@ public class DashboardScreen : IScreen
 
     private IEnumerable<KeyBinding> GetBottomPanelBindings()
     {
-        var subBindings = _layout.BottomActiveTab switch
-        {
-            0 => _layout.LogViewer.GetKeyBindings(),
-            1 => _layout.TestOutputViewer.GetKeyBindings(),
-            _ => null
-        };
-
-        if (subBindings != null)
-        {
-            yield return new KeyBinding("[", "prev tab", () =>
-            {
-                _layout.PreviousBottomTab();
-                return Task.CompletedTask;
-            }, k => k.KeyChar == '[', false);
-
-            yield return new KeyBinding("]", "next tab", () =>
-            {
-                _layout.NextBottomTab();
-                return Task.CompletedTask;
-            }, k => k.KeyChar == ']', false);
-
-            foreach (var b in subBindings) yield return b;
-        }
+        return _layout.LogViewer.GetKeyBindings();
     }
 
     private void ShowHelpModal()
@@ -238,7 +202,6 @@ public class DashboardScreen : IScreen
             2 => _layout.BottomActiveTab switch
             {
                 0 => "Log",
-                1 => "Test Output",
                 _ => "Bottom"
             },
             _ => "Local"
@@ -248,12 +211,7 @@ public class DashboardScreen : IScreen
         {
             0 => _explorer.GetKeyBindings(),
             1 => _detailsPane.GetKeyBindings(),
-            2 => _layout.BottomActiveTab switch
-            {
-                0 => _layout.LogViewer.GetKeyBindings(),
-                1 => _layout.TestOutputViewer.GetKeyBindings(),
-                _ => []
-            },
+            2 => [.. _layout.LogViewer.GetKeyBindings()],
             _ => []
         }).ToList();
 

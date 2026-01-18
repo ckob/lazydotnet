@@ -10,6 +10,16 @@ public class Modal(string title, IRenderable content, Action onClose) : IKeyBind
     protected IRenderable Content { get; } = content;
     protected Action OnClose { get; } = onClose;
 
+    protected int? Width { get; set; }
+
+    private readonly List<KeyBinding> _additionalBindings = [];
+
+    public void SetAdditionalKeyBindings(IEnumerable<KeyBinding> bindings)
+    {
+        _additionalBindings.Clear();
+        _additionalBindings.AddRange(bindings);
+    }
+
     public virtual IEnumerable<KeyBinding> GetKeyBindings()
     {
         yield return new KeyBinding("esc", "close", () =>
@@ -17,20 +27,23 @@ public class Modal(string title, IRenderable content, Action onClose) : IKeyBind
             OnClose();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Escape);
-    }
 
-    protected int? Width { get; set; }
+        foreach (var binding in _additionalBindings)
+        {
+            yield return binding;
+        }
+    }
 
     public virtual IRenderable GetRenderable(int width, int height)
     {
         var panel = new Panel(new Padder(Content, new Padding(2, 1, 2, 1)))
-            {
-                Header = new PanelHeader($"[bold yellow] {Title} [/]"),
-                Border = BoxBorder.Rounded,
-                BorderStyle = new Style(Color.Blue),
-                Expand = false,
-                Width = Width
-            };
+        {
+            Header = new PanelHeader($"[bold yellow] {Title} [/]"),
+            Border = BoxBorder.Rounded,
+            BorderStyle = new Style(Color.Blue),
+            Expand = false,
+            Width = Width
+        };
 
         return panel;
     }

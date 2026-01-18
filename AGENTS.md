@@ -1,5 +1,5 @@
 # Build & Test
-- Build: `dotnet clean && dotnet build`
+- Build: `dotnet clean && dotnet build`. **CRITICAL:** Fix all compiler warnings.
 - Run: `dotnet run` (requires .sln in directory)
 
 # Code Style
