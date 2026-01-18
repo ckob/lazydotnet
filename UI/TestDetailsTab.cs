@@ -95,7 +95,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     {
         if (_isLoading || _runningTestCount > 0)
         {
-            var spinner = _runningTestCount > 0 ? Spinner.Known.CircleHalves : null;
+            var spinner = _runningTestCount > 0 ? Spinner.Known.Dots : null;
             var currentFrame = SpinnerHelper.GetCurrentFrameIndex(spinner);
             if (currentFrame != _lastFrameIndex)
             {
@@ -459,7 +459,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     {
         TestStatus.Passed => "✓",
         TestStatus.Failed => "✗",
-        TestStatus.Running => SpinnerHelper.GetFrame(Spinner.Known.CircleHalves),
+        TestStatus.Running => SpinnerHelper.GetFrame(Spinner.Known.Dots),
         _ => "○"
     };
 
