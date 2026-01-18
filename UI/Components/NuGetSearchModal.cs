@@ -96,6 +96,7 @@ public class NuGetSearchModal : Modal
     private void TriggerSearch()
     {
         _searchCts?.Cancel();
+        _searchCts?.Dispose();
         _searchCts = new CancellationTokenSource();
         var token = _searchCts.Token;
 
@@ -128,7 +129,10 @@ public class NuGetSearchModal : Modal
                 _searchList.SetItems(results);
                 _statusMessage = results.Count == 0 ? "No results." : $"Found {results.Count} packages.";
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+                // Search was cancelled, ignore.
+            }
             catch (Exception ex)
             {
                 _statusMessage = $"Search failed: {ex.Message}";

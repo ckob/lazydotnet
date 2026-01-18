@@ -24,8 +24,8 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                 {
                     _currentScreen?.OnEnter();
 
-                    var lastWidth = Console.WindowWidth;
-                    var lastHeight = Console.WindowHeight;
+                    _lastWidth = Console.WindowWidth;
+                    _lastHeight = Console.WindowHeight;
 
                     layout.OnLog += () =>
                     {
@@ -41,74 +41,82 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
 
                     while (_isRunning && _currentScreen != null)
                     {
-                        try
-                        {
-                            var needsRefresh = false;
-
-                            var width = Console.WindowWidth;
-                            var height = Console.WindowHeight;
-
-                            if (width != lastWidth || height != lastHeight)
-                            {
-                                lastWidth = width;
-                                lastHeight = height;
-                                needsRefresh = true;
-                            }
-
-                            if (_currentScreen.OnTick())
-                            {
-                                needsRefresh = true;
-                            }
-
-                            while (Console.KeyAvailable)
-                            {
-                                var key = Console.ReadKey(true);
-                                var nextScreen = await _currentScreen.HandleInputAsync(key, layout);
-
-                                if (nextScreen == null)
-                                {
-                                    _isRunning = false;
-                                    break;
-                                }
-
-                                if (nextScreen != _currentScreen)
-                                {
-                                    _currentScreen = nextScreen;
-                                    _currentScreen.OnEnter();
-                                }
-
-                                needsRefresh = true;
-                            }
-
-                            if (needsRefresh)
-                            {
-                                lock (_uiLock)
-                                {
-                                    _currentScreen.Render(layout, width, height);
-                                    var bottomH = AppLayout.GetBottomHeight(height);
-                                    layout.UpdateBottom(width, bottomH);
-                                    layout.UpdateFooter(_currentScreen.GetKeyBindings());
-                                    ctx.Refresh();
-                                }
-                            }
-
-                            await Task.Delay(33);
-                        }
-                        catch (Exception ex)
-                        {
-                            layout.AddLog($"[red]CRITICAL ERROR: {ex.Message}[/]");
-                            lock (_uiLock)
-                            {
-                                var bottomH = AppLayout.GetBottomHeight(Console.WindowHeight);
-                                layout.UpdateBottom(Console.WindowWidth, bottomH);
-                                ctx.Refresh();
-                            }
-                            await Task.Delay(1000);
-                        }
+                        await ProcessTickAsync(ctx);
                     }
                 }).GetAwaiter().GetResult();
         });
 
         await Task.CompletedTask;
     }
+
+    private async Task ProcessTickAsync(LiveDisplayContext ctx)
+    {
+        try
+        {
+            var needsRefresh = false;
+
+            var width = Console.WindowWidth;
+            var height = Console.WindowHeight;
+
+            if (width != _lastWidth || height != _lastHeight)
+            {
+                _lastWidth = width;
+                _lastHeight = height;
+                needsRefresh = true;
+            }
+
+            if (_currentScreen!.OnTick())
+            {
+                needsRefresh = true;
+            }
+
+            while (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(true);
+                var nextScreen = await _currentScreen.HandleInputAsync(key, layout);
+
+                if (nextScreen == null)
+                {
+                    _isRunning = false;
+                    break;
+                }
+
+                if (nextScreen != _currentScreen)
+                {
+                    _currentScreen = nextScreen;
+                    _currentScreen.OnEnter();
+                }
+
+                needsRefresh = true;
+            }
+
+            if (needsRefresh)
+            {
+                lock (_uiLock)
+                {
+                    _currentScreen.Render(layout, width, height);
+                    var bottomH = AppLayout.GetBottomHeight(height);
+                    layout.UpdateBottom(width, bottomH);
+                    layout.UpdateFooter(_currentScreen.GetKeyBindings());
+                    ctx.Refresh();
+                }
+            }
+
+            await Task.Delay(33);
+        }
+        catch (Exception ex)
+        {
+            layout.AddLog($"[red]CRITICAL ERROR: {ex.Message}[/]");
+            lock (_uiLock)
+            {
+                var bottomH = AppLayout.GetBottomHeight(Console.WindowHeight);
+                layout.UpdateBottom(Console.WindowWidth, bottomH);
+                ctx.Refresh();
+            }
+            await Task.Delay(1000);
+        }
+    }
+
+    private int _lastWidth;
+    private int _lastHeight;
 }

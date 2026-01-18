@@ -226,6 +226,13 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
             return grid;
         }
 
+        RenderReferences(grid, height, width, isActive);
+
+        return grid;
+    }
+
+    private void RenderReferences(Grid grid, int height, int width, bool isActive)
+    {
         var visibleRows = Math.Max(1, height);
         var (start, end) = _refsList.GetVisibleRange(visibleRows);
 
@@ -235,26 +242,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
             var refName = Path.GetFileNameWithoutExtension(refPath);
             var isSelected = i == _refsList.SelectedIndex;
 
-            var displayPath = refPath;
-            if (solutionService.CurrentSolution != null)
-            {
-                var slnDir = Path.GetDirectoryName(solutionService.CurrentSolution.Path);
-                if (slnDir != null)
-                {
-                    displayPath = Path.GetRelativePath(slnDir, refPath);
-                }
-            }
-
-            var pathMarkup = $"({displayPath})";
-            var availableTextWidth = width - 6;
-            if (refName.Length + pathMarkup.Length + 4 > availableTextWidth)
-            {
-                var maxPathLen = availableTextWidth - refName.Length - 8;
-                if (maxPathLen > 15)
-                {
-                    pathMarkup = $"({displayPath[..(maxPathLen / 2)]}...{displayPath[^(maxPathLen / 2)..]})";
-                }
-            }
+            var pathMarkup = GetRelativePathMarkup(refPath, width - 6, refName.Length);
 
             if (isSelected)
             {
@@ -268,7 +256,30 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
                 grid.AddRow(new Markup($"  [green]→[/] {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/]"));
             }
         }
+    }
 
-        return grid;
+    private string GetRelativePathMarkup(string refPath, int availableTextWidth, int refNameLen)
+    {
+        var displayPath = refPath;
+        if (solutionService.CurrentSolution != null)
+        {
+            var slnDir = Path.GetDirectoryName(solutionService.CurrentSolution.Path);
+            if (slnDir != null)
+            {
+                displayPath = Path.GetRelativePath(slnDir, refPath);
+            }
+        }
+
+        var pathMarkup = $"({displayPath})";
+        if (refNameLen + pathMarkup.Length + 4 > availableTextWidth)
+        {
+            var maxPathLen = availableTextWidth - refNameLen - 8;
+            if (maxPathLen > 15)
+            {
+                pathMarkup = $"({displayPath[..(maxPathLen / 2)]}...{displayPath[^(maxPathLen / 2)..]})";
+            }
+        }
+
+        return pathMarkup;
     }
 }

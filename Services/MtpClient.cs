@@ -154,7 +154,6 @@ public class MtpClient : IAsyncDisposable
 
             if (updates != null)
             {
-                // AppCli.Log($"[dim]MTP Run {runIdGuid} received {updates.Length} updates.[/]");
                 var list = _runResults.GetOrAdd(runIdGuid, _ => []);
                 lock (list)
                 {
@@ -171,19 +170,20 @@ public class MtpClient : IAsyncDisposable
     [JsonRpcMethod("client/log")]
     public void OnClientLog(object? level, string? message)
     {
-        // if (message != null) AppCli.Log($"[dim][MTP Log]: {message}[/]");
+        // Client log received from MTP server, currently ignored.
     }
 
     [JsonRpcMethod("telemetry/update")]
-    public void OnTelemetryUpdate(object? payload) { }
+    public void OnTelemetryUpdate(object? payload)
+    {
+        // Telemetry update received from MTP server, currently ignored.
+    }
 
     public async Task<List<DiscoveredTest>> DiscoverTestsAsync(CancellationToken ct)
     {
         var runId = Guid.NewGuid();
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _completionSources[runId] = tcs;
-
-        // AppCli.Log($"[dim]MTP Discovering tests (RunId: {runId})...[/]");
 
         try
         {
@@ -196,50 +196,9 @@ public class MtpClient : IAsyncDisposable
 
             if (_runResults.TryGetValue(runId, out var nodes))
             {
-                // AppCli.Log($"[dim]MTP Discovery finished with {nodes.Count} total nodes.[/]");
                 return nodes
                     .Where(n => n.NodeType is "test" or "action" or null)
-                    .Select(n =>
-                    {
-                        string name;
-
-                        if (!string.IsNullOrEmpty(n.TestType) && !string.IsNullOrEmpty(n.TestMethod))
-                        {
-                            name = $"{n.TestType}.{n.TestMethod}";
-                        }
-                        else
-                        {
-                            var displayName = n.DisplayName;
-                            name = displayName;
-
-                            if (!string.IsNullOrEmpty(n.TestNamespace))
-                            {
-                                if (!displayName.StartsWith(n.TestNamespace + "."))
-                                {
-                                    name = $"{n.TestNamespace}.{displayName}";
-                                }
-                            }
-                            else if (!string.IsNullOrEmpty(n.TestType) && !displayName.StartsWith(n.TestType + "."))
-                            {
-                                name = $"{n.TestType}.{displayName}";
-                            }
-                        }
-
-                        var openParenIndex = name.IndexOf('(');
-                        if (openParenIndex > 0)
-                        {
-                            name = name[..openParenIndex];
-                        }
-
-                        return new DiscoveredTest(
-                            n.Uid,
-                            n.TestNamespace,
-                            name,
-                            n.DisplayName,
-                            n.FilePath,
-                            n.LineStart
-                        );
-                    }).ToList();
+                    .Select(MapToDiscoveredTest).ToList();
             }
             return [];
         }
@@ -255,13 +214,55 @@ public class MtpClient : IAsyncDisposable
         }
     }
 
+    private static DiscoveredTest MapToDiscoveredTest(MtpTestNode n)
+    {
+        var name = GetDiscoveredTestName(n);
+
+        var openParenIndex = name.IndexOf('(');
+        if (openParenIndex > 0)
+        {
+            name = name[..openParenIndex];
+        }
+
+        return new DiscoveredTest(
+            n.Uid,
+            n.TestNamespace,
+            name,
+            n.DisplayName,
+            n.FilePath,
+            n.LineStart
+        );
+    }
+
+    private static string GetDiscoveredTestName(MtpTestNode n)
+    {
+        if (!string.IsNullOrEmpty(n.TestType) && !string.IsNullOrEmpty(n.TestMethod))
+        {
+            return $"{n.TestType}.{n.TestMethod}";
+        }
+
+        var name = n.DisplayName;
+
+        if (!string.IsNullOrEmpty(n.TestNamespace))
+        {
+            if (!name.StartsWith(n.TestNamespace + "."))
+            {
+                name = $"{n.TestNamespace}.{name}";
+            }
+        }
+        else if (!string.IsNullOrEmpty(n.TestType) && !name.StartsWith(n.TestType + "."))
+        {
+            name = $"{n.TestType}.{name}";
+        }
+
+        return name;
+    }
+
     public async IAsyncEnumerable<TestRunResult> RunTestsAsync(RunRequestNode[] filter, [EnumeratorCancellation] CancellationToken ct)
     {
         var runId = Guid.NewGuid();
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _completionSources[runId] = tcs;
-
-        // AppCli.Log($"[dim]MTP Running tests (RunId: {runId})...[/]");
 
         // Map generic RunRequestNode to MtpRunRequestNode
         var mtpTests = filter.Select(t => new MtpRunRequestNode(t.Uid, t.DisplayName)).ToArray();
@@ -309,7 +310,7 @@ public class MtpClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        try { await _jsonRpc.NotifyAsync("exit"); } catch { }
+        try { await _jsonRpc.NotifyAsync("exit"); } catch { /* Ignore exit notification failure */ }
         _jsonRpc.Dispose();
         _tcpClient.Dispose();
         _listener.Stop();

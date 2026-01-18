@@ -43,7 +43,7 @@ public class ProjectDetailsPane : IKeyBindable
             tab.RequestSelectProject = p => RequestSelectProject?.Invoke(p);
         }
 
-        _tabs = new TabbedPane(ProjectReferencesTab.Title, _nugetTab.Title, TestDetailsTab.Title);
+        _tabs = new TabbedPane(ProjectReferencesTab.Title, NuGetDetailsTab.Title, TestDetailsTab.Title);
     }
 
     public int ActiveTab => _tabs.ActiveTab;
@@ -108,6 +108,7 @@ public class ProjectDetailsPane : IKeyBindable
             return;
 
         _loadCts?.Cancel();
+        _loadCts?.Dispose();
         _loadCts = new CancellationTokenSource();
         var token = _loadCts.Token;
 

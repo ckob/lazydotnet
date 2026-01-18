@@ -88,47 +88,10 @@ public class DashboardScreen : IScreen
 
         if (currentPath != _lastSelectedProjectPath)
         {
-            _lastSelectedProjectPath = currentPath;
-            _needsRefresh = true;
-
-            if (currentPath != null)
-            {
-                _detailsPane.ClearData();
-
-                _debounceCts?.Cancel();
-                _debounceCts = new CancellationTokenSource();
-                var token = _debounceCts.Token;
-
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await Task.Delay(500, token);
-                        if (token.IsCancellationRequested) return;
-
-                        await _detailsPane.LoadProjectDataAsync(currentPath, currentProject!.Name);
-                        _needsRefresh = true;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // Ignore
-                    }
-                }, token);
-            }
-            else
-            {
-                _detailsPane.ClearForNonProject();
-            }
+            HandleProjectChange(currentProject, currentPath);
         }
 
-        if (_layout.ActivePanel == 1 && _detailsPane.ActiveTab == 2)
-        {
-            var selectedTest = _detailsPane.GetSelectedTestNode();
-            if (selectedTest != null)
-            {
-                _layout.TestOutputViewer.SetOutput(selectedTest.GetOutputSnapshot());
-            }
-        }
+        UpdateTestOutputViewer();
 
         if (_detailsPane.OnTick())
         {
@@ -140,20 +103,68 @@ public class DashboardScreen : IScreen
         return result;
     }
 
+    private void HandleProjectChange(ProjectInfo? currentProject, string? currentPath)
+    {
+        _lastSelectedProjectPath = currentPath;
+        _needsRefresh = true;
+
+        if (currentPath != null)
+        {
+            _detailsPane.ClearData();
+
+            _debounceCts?.Cancel();
+            _debounceCts?.Dispose();
+            _debounceCts = new CancellationTokenSource();
+            var token = _debounceCts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(500, token);
+                    if (token.IsCancellationRequested) return;
+
+                    await _detailsPane.LoadProjectDataAsync(currentPath, currentProject!.Name);
+                    _needsRefresh = true;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Ignore
+                }
+            }, token);
+        }
+        else
+        {
+            _detailsPane.ClearForNonProject();
+        }
+    }
+
+    private void UpdateTestOutputViewer()
+    {
+        if (_layout.ActivePanel == 1 && _detailsPane.ActiveTab == 2)
+        {
+            var selectedTest = _detailsPane.GetSelectedTestNode();
+            if (selectedTest != null)
+            {
+                _layout.TestOutputViewer.SetOutput(selectedTest.GetOutputSnapshot());
+            }
+        }
+    }
+
     private Modal? _activeModal;
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
         if (_activeModal != null)
         {
-            foreach (var b in _activeModal.GetKeyBindings())
-            {
-                yield return b;
-            }
-
-            yield break;
+            return _activeModal.GetKeyBindings();
         }
 
+        return GetGlobalBindings().Concat(GetPanelSpecificBindings());
+    }
+
+    private IEnumerable<KeyBinding> GetGlobalBindings()
+    {
         yield return new KeyBinding("q", "quit", () => Task.FromResult<IScreen?>(null),
             k => k.Key == ConsoleKey.Q);
         yield return new KeyBinding("tab", "next panel", () => Task.CompletedTask,
@@ -173,52 +184,48 @@ public class DashboardScreen : IScreen
             ShowHelpModal();
             return Task.CompletedTask;
         }, k => k.KeyChar == '?');
+    }
 
+    private IEnumerable<KeyBinding> GetPanelSpecificBindings()
+    {
         switch (_layout.ActivePanel)
         {
             case 0:
-                foreach (var b in _explorer.GetKeyBindings())
-                {
-                    yield return b;
-                }
-
+                foreach (var b in _explorer.GetKeyBindings()) yield return b;
                 break;
             case 1:
-                foreach (var b in _detailsPane.GetKeyBindings())
-                {
-                    yield return b;
-                }
-
+                foreach (var b in _detailsPane.GetKeyBindings()) yield return b;
                 break;
             case 2:
-                var subBindings = _layout.BottomActiveTab switch
-                {
-                    0 => _layout.LogViewer.GetKeyBindings(),
-                    1 => _layout.TestOutputViewer.GetKeyBindings(),
-                    _ => null
-                };
-
-                if (subBindings != null)
-                {
-                    yield return new KeyBinding("[", "prev tab", () =>
-                    {
-                        _layout.PreviousBottomTab();
-                        return Task.CompletedTask;
-                    }, k => k.KeyChar == '[', false);
-
-                    yield return new KeyBinding("]", "next tab", () =>
-                    {
-                        _layout.NextBottomTab();
-                        return Task.CompletedTask;
-                    }, k => k.KeyChar == ']', false);
-
-                    foreach (var b in subBindings)
-                    {
-                        yield return b;
-                    }
-                }
-
+                foreach (var b in GetBottomPanelBindings()) yield return b;
                 break;
+        }
+    }
+
+    private IEnumerable<KeyBinding> GetBottomPanelBindings()
+    {
+        var subBindings = _layout.BottomActiveTab switch
+        {
+            0 => _layout.LogViewer.GetKeyBindings(),
+            1 => _layout.TestOutputViewer.GetKeyBindings(),
+            _ => null
+        };
+
+        if (subBindings != null)
+        {
+            yield return new KeyBinding("[", "prev tab", () =>
+            {
+                _layout.PreviousBottomTab();
+                return Task.CompletedTask;
+            }, k => k.KeyChar == '[', false);
+
+            yield return new KeyBinding("]", "next tab", () =>
+            {
+                _layout.NextBottomTab();
+                return Task.CompletedTask;
+            }, k => k.KeyChar == ']', false);
+
+            foreach (var b in subBindings) yield return b;
         }
     }
 
@@ -413,6 +420,7 @@ public class DashboardScreen : IScreen
                 if (_buildCts != null)
                 {
                     await _buildCts.CancelAsync();
+                    _buildCts.Dispose();
                 }
 
                 _buildCts = new CancellationTokenSource();

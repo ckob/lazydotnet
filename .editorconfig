@@ -1,0 +1,10 @@
+# Inspiration from dotnet official .editorconfig
+# https://github.com/dotnet/runtime/blob/main/.editorconfig
+
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+dotnet_diagnostic.S3776.severity = warning

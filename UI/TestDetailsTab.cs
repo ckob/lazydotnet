@@ -125,6 +125,21 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     {
         if (_isLoading || IsRunningTests) yield break;
 
+        foreach (var b in GetNavigationBindings()) yield return b;
+
+        if (_visibleNodes.Count == 0) yield break;
+
+        var node = _selectedIndex == -1 ? _visibleNodes[0] : _visibleNodes[_selectedIndex];
+
+        yield return GetExpandBinding(node);
+        yield return GetCollapseBinding(node);
+        yield return GetToggleBinding(node);
+        yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.KeyChar == 'r' || k.KeyChar == 'R');
+        yield return new KeyBinding("e/o", "open", () => OpenInEditorAsync(node), k => k.KeyChar == 'e' || k.KeyChar == 'o');
+    }
+
+    private IEnumerable<KeyBinding> GetNavigationBindings()
+    {
         yield return new KeyBinding("k", "up", () =>
         {
             MoveUp();
@@ -136,12 +151,11 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             MoveDown();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+    }
 
-        if (_visibleNodes.Count == 0) yield break;
-
-        var node = _selectedIndex == -1 ? _visibleNodes[0] : _visibleNodes[_selectedIndex];
-
-        yield return new KeyBinding("→", "expand", () =>
+    private KeyBinding GetExpandBinding(TestNode node)
+    {
+        return new KeyBinding("→", "expand", () =>
         {
             if (node is { IsContainer: true, IsExpanded: false })
             {
@@ -150,8 +164,11 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             }
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.RightArrow, false);
+    }
 
-        yield return new KeyBinding("←", "collapse", () =>
+    private KeyBinding GetCollapseBinding(TestNode node)
+    {
+        return new KeyBinding("←", "collapse", () =>
         {
             if (node is { IsContainer: true, IsExpanded: true })
             {
@@ -161,21 +178,22 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             else if (node.Parent != null)
             {
                 var idx = _visibleNodes.IndexOf(node.Parent);
-                if (idx == -1)
+                if (idx != -1)
                 {
-                    return Task.CompletedTask;
-                }
-
-                _selectedIndex = idx;
-                if (_selectedIndex < _scrollOffset)
-                {
-                    _scrollOffset = _selectedIndex;
+                    _selectedIndex = idx;
+                    if (_selectedIndex < _scrollOffset)
+                    {
+                        _scrollOffset = _selectedIndex;
+                    }
                 }
             }
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.LeftArrow, false);
+    }
 
-        yield return new KeyBinding("enter/space", "toggle", () =>
+    private KeyBinding GetToggleBinding(TestNode node)
+    {
+        return new KeyBinding("enter/space", "toggle", () =>
         {
             if (node.IsContainer)
             {
@@ -184,9 +202,6 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             }
             return Task.CompletedTask;
         }, k => k.Key is ConsoleKey.Enter or ConsoleKey.Spacebar, false);
-
-        yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.KeyChar == 'r' || k.KeyChar == 'R');
-        yield return new KeyBinding("e/o", "open", () => OpenInEditorAsync(node), k => k.KeyChar == 'e' || k.KeyChar == 'o');
     }
 
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
@@ -285,76 +300,78 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             var end = Math.Min(_scrollOffset + height, _visibleNodes.Count);
 
             for (var i = _scrollOffset; i < end; i++)
-
             {
                 var node = _visibleNodes[i];
                 var isSelected = i == _selectedIndex;
-
-                string indent = new(' ', (node.Depth - 1) * 2);
-
-                var expandIcon = node.IsExpanded ? "v" : ">";
-                var expandPlaceholder = node.IsContainer ? expandIcon : " ";
-                var statusIcon = node.Status switch
-                {
-                    TestStatus.Passed => "✓",
-                    TestStatus.Failed => "✗",
-                    TestStatus.Running => SpinnerHelper.GetFrame(Spinner.Known.CircleHalves),
-                    _ => "○"
-                };
-                var statusColor = node.Status switch
-                {
-                    TestStatus.Passed => "green",
-                    TestStatus.Failed => "red",
-                    TestStatus.Running => "yellow",
-                    _ => "dim"
-                };
-
-                var lineIcon = $"[yellow]{expandPlaceholder}[/] [{statusColor}]{statusIcon}[/]";
-                var visibleIconLen = 1 + 1 + statusIcon.Length;
-
-                var maxWidth = Math.Max(10, width);
-                var prefixLen = indent.Length + 1 + visibleIconLen + 1;
-
-                var rawName = node.Name;
-                var testCountSuffix = node is { IsContainer: true, TestCount: > 0 } ? $" ({node.TestCount} tests)" : "";
-
-                var cleanNameLen = rawName.Length + testCountSuffix.Length;
-                var maxNameLen = maxWidth - prefixLen - 1;
-
-                if (cleanNameLen > maxNameLen && maxNameLen > 0)
-                {
-                    var allowedNameLen = maxNameLen - testCountSuffix.Length - 1;
-                    if (allowedNameLen > 0 && rawName.Length > allowedNameLen)
-                    {
-                        rawName = string.Concat(rawName.AsSpan(0, allowedNameLen), "…");
-                    }
-                }
-
-                var displayName = Markup.Escape(rawName);
-                if (testCountSuffix.Length > 0)
-                {
-                    displayName += $" [dim]{Markup.Escape(testCountSuffix)}[/]";
-                }
-
-                if (isSelected)
-                {
-                    if (isActive)
-                    {
-                        treeGrid.AddRow(new Markup($"{indent} [black on blue]{lineIcon} {displayName}[/]"));
-                    }
-                    else
-                    {
-                        treeGrid.AddRow(new Markup($"{indent} {lineIcon} {displayName}"));
-                    }
-                }
-                else
-                {
-                    treeGrid.AddRow(new Markup($"{indent} {lineIcon} {displayName}"));
-                }
+                treeGrid.AddRow(RenderNode(node, isSelected, width, isActive));
             }
 
             return treeGrid;
         }
+    }
+
+    private static IRenderable RenderNode(TestNode node, bool isSelected, int width, bool isActive)
+    {
+        string indent = new(' ', (node.Depth - 1) * 2);
+        var statusColor = GetStatusColor(node.Status);
+        var statusIcon = GetStatusIcon(node.Status);
+        var expandIcon = node.IsExpanded ? "v" : ">";
+        var expandPlaceholder = node.IsContainer ? expandIcon : " ";
+
+        var lineIcon = $"[yellow]{expandPlaceholder}[/] [{statusColor}]{statusIcon}[/]";
+        var visibleIconLen = 1 + 1 + statusIcon.Length;
+
+        var maxWidth = Math.Max(10, width);
+        var prefixLen = indent.Length + 1 + visibleIconLen + 1;
+
+        var rawName = node.Name;
+        var testCountSuffix = node is { IsContainer: true, TestCount: > 0 } ? $" ({node.TestCount} tests)" : "";
+
+        var cleanNameLen = rawName.Length + testCountSuffix.Length;
+        var maxNameLen = maxWidth - prefixLen - 1;
+
+        if (cleanNameLen > maxNameLen && maxNameLen > 0)
+        {
+            rawName = TruncateName(rawName, maxNameLen - testCountSuffix.Length - 1);
+        }
+
+        var displayName = Markup.Escape(rawName);
+        if (testCountSuffix.Length > 0)
+        {
+            displayName += $" [dim]{Markup.Escape(testCountSuffix)}[/]";
+        }
+
+        if (isSelected && isActive)
+        {
+            return new Markup($"{indent} [black on blue]{lineIcon} {displayName}[/]");
+        }
+
+        return new Markup($"{indent} {lineIcon} {displayName}");
+    }
+
+    private static string GetStatusColor(TestStatus status) => status switch
+    {
+        TestStatus.Passed => "green",
+        TestStatus.Failed => "red",
+        TestStatus.Running => "yellow",
+        _ => "dim"
+    };
+
+    private static string GetStatusIcon(TestStatus status) => status switch
+    {
+        TestStatus.Passed => "✓",
+        TestStatus.Failed => "✗",
+        TestStatus.Running => SpinnerHelper.GetFrame(Spinner.Known.CircleHalves),
+        _ => "○"
+    };
+
+    private static string TruncateName(string name, int allowedLen)
+    {
+        if (allowedLen > 0 && name.Length > allowedLen)
+        {
+            return string.Concat(name.AsSpan(0, allowedLen), "…");
+        }
+        return name;
     }
 
     private Task RunSelectedTestAsync(TestNode node)
@@ -363,15 +380,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
         Interlocked.Increment(ref _runningTestCount);
 
-        var testsToRun = new List<TestNode>();
-        if (node.IsTest)
-        {
-            testsToRun.Add(node);
-        }
-        else
-        {
-            testsToRun.AddRange(GetAllLeafNodes(node));
-        }
+        var testsToRun = GetTestsToRun(node);
 
         if (testsToRun.Count == 0)
         {
@@ -380,69 +389,14 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
 
         SetStatusRecursive(node, TestStatus.Running);
-
         _statusMessage = $"Running tests ({_runningTestCount} active)...";
-
         RequestRefresh?.Invoke();
 
         _ = Task.Run(async () =>
         {
             try
             {
-                var filter = testsToRun
-                    .Where(t => t.Uid != null)
-                    .Select(t => new RunRequestNode(t.Uid!, t.Name))
-                    .ToArray();
-
-                var results = await TestService.RunTestsAsync(_currentPath, filter);
-
-                await foreach (var res in results)
-                {
-                    var targetNode = testsToRun.FirstOrDefault(t => t.Uid == res.Id);
-                    if (targetNode != null)
-                    {
-                        targetNode.Status = res.Outcome.ToLower() switch
-                        {
-                            "passed" => TestStatus.Passed,
-                            "failed" => TestStatus.Failed,
-                            _ => TestStatus.None
-                        };
-                        targetNode.Duration = res.Duration ?? 0;
-                        targetNode.ErrorMessage = string.Join(Environment.NewLine, res.ErrorMessage);
-
-                        var stackTrace = new List<string>();
-                        await foreach (var line in res.StackTrace) stackTrace.Add(line);
-
-                        var stdOut = new List<string>();
-                        await foreach (var line in res.StdOut) stdOut.Add(line);
-
-                        lock (targetNode.OutputLock)
-                        {
-                            targetNode.Output.Clear();
-                            if (res.ErrorMessage.Length > 0)
-                            {
-                                targetNode.Output.Add(new TestOutputLine("Error:", "red"));
-                                foreach (var err in res.ErrorMessage)
-                                {
-                                    targetNode.Output.Add(new TestOutputLine(err));
-                                }
-                                targetNode.Output.Add(new TestOutputLine(""));
-                            }
-
-                            foreach (var line in stackTrace)
-                            {
-                                targetNode.Output.Add(new TestOutputLine(line, "dim"));
-                            }
-                            foreach (var line in stdOut)
-                            {
-                                targetNode.Output.Add(new TestOutputLine(line));
-                            }
-                        }
-
-                        UpdateParentStatus(targetNode);
-                        RequestRefresh?.Invoke();
-                    }
-                }
+                await ExecuteTestRunAsync(testsToRun);
             }
             catch (Exception ex)
             {
@@ -466,6 +420,83 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         return Task.CompletedTask;
     }
 
+    private static List<TestNode> GetTestsToRun(TestNode node)
+    {
+        var testsToRun = new List<TestNode>();
+        if (node.IsTest)
+        {
+            testsToRun.Add(node);
+        }
+        else
+        {
+            testsToRun.AddRange(GetAllLeafNodes(node));
+        }
+        return testsToRun;
+    }
+
+    private async Task ExecuteTestRunAsync(List<TestNode> testsToRun)
+    {
+        var filter = testsToRun
+            .Where(t => t.Uid != null)
+            .Select(t => new RunRequestNode(t.Uid!, t.Name))
+            .ToArray();
+
+        var results = await TestService.RunTestsAsync(_currentPath!, filter);
+
+        await foreach (var res in results)
+        {
+            var targetNode = testsToRun.FirstOrDefault(t => t.Uid == res.Id);
+            if (targetNode != null)
+            {
+                await UpdateTestNodeWithResultAsync(targetNode, res);
+                UpdateParentStatus(targetNode);
+                RequestRefresh?.Invoke();
+            }
+        }
+    }
+
+    private static async Task UpdateTestNodeWithResultAsync(TestNode targetNode, TestRunResult res)
+    {
+        targetNode.Status = res.Outcome.ToLower() switch
+        {
+            "passed" => TestStatus.Passed,
+            "failed" => TestStatus.Failed,
+            _ => TestStatus.None
+        };
+        targetNode.Duration = res.Duration ?? 0;
+        targetNode.ErrorMessage = string.Join(Environment.NewLine, res.ErrorMessage);
+
+        var stackTrace = new List<string>();
+        await foreach (var line in res.StackTrace) stackTrace.Add(line);
+
+        var stdOut = new List<string>();
+        await foreach (var line in res.StdOut) stdOut.Add(line);
+
+        lock (targetNode.OutputLock)
+        {
+            targetNode.Output.Clear();
+            if (res.ErrorMessage.Length > 0)
+            {
+                targetNode.Output.Add(new TestOutputLine("Error:", "red"));
+                foreach (var err in res.ErrorMessage)
+                {
+                    targetNode.Output.Add(new TestOutputLine(err));
+                }
+
+                targetNode.Output.Add(new TestOutputLine(""));
+            }
+
+            foreach (var line in stackTrace)
+            {
+                targetNode.Output.Add(new TestOutputLine(line, "dim"));
+            }
+            foreach (var line in stdOut)
+            {
+                targetNode.Output.Add(new TestOutputLine(line));
+            }
+        }
+    }
+
     private static List<TestNode> GetAllLeafNodes(TestNode node)
     {
         var leaves = new List<TestNode>();
@@ -483,32 +514,31 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         var parent = node.Parent;
         while (parent != null)
         {
-            var anyRunning = false;
-            var anyFailed = false;
-            var allPassed = true;
-            var anyNone = false;
-
-            foreach (var childStatus in parent.Children.Select(x => x.Status))
-            {
-                if (childStatus == TestStatus.Failed) anyFailed = true;
-                if (childStatus == TestStatus.Running) anyRunning = true;
-                if (childStatus != TestStatus.Passed) allPassed = false;
-                if (childStatus == TestStatus.None) anyNone = true;
-            }
-
-            if (anyFailed) parent.Status = TestStatus.Failed;
-            else if (allPassed && !anyNone) parent.Status = TestStatus.Passed;
-            else if (anyRunning)
-            {
-                if (parent.Status != TestStatus.Running)
-                {
-                    parent.Status = TestStatus.None;
-                }
-            }
-            else parent.Status = TestStatus.None;
-
+            parent.Status = CalculateParentStatus(parent);
             parent = parent.Parent;
         }
+    }
+
+    private static TestStatus CalculateParentStatus(TestNode parent)
+    {
+        var anyRunning = false;
+        var anyFailed = false;
+        var allPassed = true;
+        var anyNone = false;
+
+        foreach (var childStatus in parent.Children.Select(x => x.Status))
+        {
+            if (childStatus == TestStatus.Failed) anyFailed = true;
+            if (childStatus == TestStatus.Running) anyRunning = true;
+            if (childStatus != TestStatus.Passed) allPassed = false;
+            if (childStatus == TestStatus.None) anyNone = true;
+        }
+
+        if (anyFailed) return TestStatus.Failed;
+        if (allPassed && !anyNone) return TestStatus.Passed;
+        if (anyRunning) return parent.Status == TestStatus.Running ? TestStatus.Running : TestStatus.None;
+
+        return TestStatus.None;
     }
 
     private static void SetStatusRecursive(TestNode node, TestStatus status)

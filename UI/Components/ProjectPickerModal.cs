@@ -57,71 +57,80 @@ public class ProjectPickerModal : Modal
         }
         else
         {
-            var maxItemWidth = 0;
-            foreach (var project in _projectList.Items)
-            {
-                var displayPath = _rootPath != null ? Path.GetRelativePath(_rootPath, project.Path) : project.Path;
-                var len = project.Name.Length + displayPath.Length + 4;
-                if (len > maxItemWidth) maxItemWidth = len;
-            }
-
-            var modalWidth = Math.Min(width - 8, maxItemWidth + 10);
-            modalWidth = Math.Max(modalWidth, 40);
+            var modalWidth = CalculateModalWidth(width);
             Width = modalWidth;
 
             var gridAvailableWidth = modalWidth - 8;
-
             var visibleRows = Math.Min(25, height - 10);
             var (start, end) = _projectList.GetVisibleRange(visibleRows);
 
             for (var i = start; i < end; i++)
             {
-                var project = _projectList.Items[i];
-                var isSelected = i == _projectList.SelectedIndex;
-
-                var displayPath = _rootPath != null ? Path.GetRelativePath(_rootPath, project.Path) : project.Path;
-                var name = project.Name;
-                var path = $"({displayPath})";
-
-                if (name.Length + path.Length + 1 > gridAvailableWidth)
-                {
-                    var availableForPath = gridAvailableWidth - name.Length - 1;
-                    if (availableForPath >= 7)
-                    {
-                        var pathTextMax = availableForPath - 2;
-                        var side = (pathTextMax - 3) / 2;
-                        path = $"({displayPath[..side]}...{displayPath[^side..]})";
-                    }
-                    else
-                    {
-                        if (name.Length > gridAvailableWidth - 3)
-                            name = name[..(gridAvailableWidth - 3)] + "...";
-                        path = "";
-                    }
-                }
-
-                var currentLen = name.Length + (string.IsNullOrWhiteSpace(path) ? 0 : path.Length + 1);
-                var padding = new string(' ', Math.Max(0, gridAvailableWidth - currentLen));
-
-                string line;
-                if (isSelected)
-                {
-                    var plainText = string.IsNullOrWhiteSpace(path) ? name : $"{name} {path}";
-                    line = $"[black on blue]{Markup.Escape(plainText)}{padding}[/]";
-                }
-                else
-                {
-                    var content = string.IsNullOrWhiteSpace(path)
-                        ? Markup.Escape(name)
-                        : $"{Markup.Escape(name)} [dim]{Markup.Escape(path)}[/]";
-                    line = $"{content}{padding}";
-                }
-
-                grid.AddRow(new Markup(line));
+                grid.AddRow(RenderProjectRow(_projectList.Items[i], i == _projectList.SelectedIndex, gridAvailableWidth));
             }
         }
 
-        var panel = new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
+        return CreatePanel(grid);
+    }
+
+    private int CalculateModalWidth(int width)
+    {
+        var maxItemWidth = 0;
+        foreach (var project in _projectList.Items)
+        {
+            var displayPath = _rootPath != null ? Path.GetRelativePath(_rootPath, project.Path) : project.Path;
+            var len = project.Name.Length + displayPath.Length + 4;
+            if (len > maxItemWidth) maxItemWidth = len;
+        }
+
+        var modalWidth = Math.Min(width - 8, maxItemWidth + 10);
+        return Math.Max(modalWidth, 40);
+    }
+
+    private IRenderable RenderProjectRow(ProjectInfo project, bool isSelected, int availableWidth)
+    {
+        var displayPath = _rootPath != null ? Path.GetRelativePath(_rootPath, project.Path) : project.Path;
+        var name = project.Name;
+        var path = $"({displayPath})";
+
+        if (name.Length + path.Length + 1 > availableWidth)
+        {
+            (name, path) = TruncateProjectRow(name, displayPath, availableWidth);
+        }
+
+        var currentLen = name.Length + (string.IsNullOrWhiteSpace(path) ? 0 : path.Length + 1);
+        var padding = new string(' ', Math.Max(0, availableWidth - currentLen));
+
+        if (isSelected)
+        {
+            var plainText = string.IsNullOrWhiteSpace(path) ? name : $"{name} {path}";
+            return new Markup($"[black on blue]{Markup.Escape(plainText)}{padding}[/]");
+        }
+
+        var content = string.IsNullOrWhiteSpace(path)
+            ? Markup.Escape(name)
+            : $"{Markup.Escape(name)} [dim]{Markup.Escape(path)}[/]";
+        return new Markup($"{content}{padding}");
+    }
+
+    private static (string name, string path) TruncateProjectRow(string name, string displayPath, int availableWidth)
+    {
+        var availableForPath = availableWidth - name.Length - 1;
+        if (availableForPath >= 7)
+        {
+            var pathTextMax = availableForPath - 2;
+            var side = (pathTextMax - 3) / 2;
+            return (name, $"({displayPath[..side]}...{displayPath[^side..]})");
+        }
+
+        if (name.Length > availableWidth - 3)
+            name = name[..(availableWidth - 3)] + "...";
+        return (name, "");
+    }
+
+    private Panel CreatePanel(Grid grid)
+    {
+        return new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
         {
             Header = new PanelHeader($"[bold yellow] {Title} [/]"),
             Border = BoxBorder.Rounded,
@@ -129,7 +138,5 @@ public class ProjectPickerModal : Modal
             Expand = false,
             Width = Width
         };
-
-        return panel;
     }
 }

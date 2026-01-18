@@ -57,32 +57,7 @@ public class NuGetVersionSelectionModal : Modal
 
                 if (ct.IsCancellationRequested) return;
 
-                if (versions.Count == 0)
-                {
-                    _statusMessage = "No versions found.";
-                }
-                else
-                {
-                    var reversed = versions.ToList();
-                    reversed.Reverse();
-                    _versionList.SetItems(reversed);
-
-                    var index = reversed.IndexOf(_currentVersion);
-                    if (index >= 0)
-                    {
-                        _versionList.Select(index);
-                    }
-                    else
-                    {
-                         if (_latestVersion != null)
-                         {
-                             var latestIndex = reversed.IndexOf(_latestVersion);
-                             if (latestIndex >= 0) _versionList.Select(latestIndex);
-                         }
-                    }
-
-                    _statusMessage = null;
-                }
+                ProcessLoadedVersions(versions);
             }
             catch (Exception ex)
             {
@@ -97,6 +72,32 @@ public class NuGetVersionSelectionModal : Modal
                 }
             }
         }, ct);
+    }
+
+    private void ProcessLoadedVersions(IReadOnlyList<string> versions)
+    {
+        if (versions.Count == 0)
+        {
+            _statusMessage = "No versions found.";
+            return;
+        }
+
+        var reversed = versions.ToList();
+        reversed.Reverse();
+        _versionList.SetItems(reversed);
+
+        var index = reversed.IndexOf(_currentVersion);
+        if (index >= 0)
+        {
+            _versionList.Select(index);
+        }
+        else if (_latestVersion != null)
+        {
+            var latestIndex = reversed.IndexOf(_latestVersion);
+            if (latestIndex >= 0) _versionList.Select(latestIndex);
+        }
+
+        _statusMessage = null;
     }
 
     public override IEnumerable<KeyBinding> GetKeyBindings()
@@ -163,47 +164,60 @@ public class NuGetVersionSelectionModal : Modal
         }
         else
         {
-            var visibleRows = Math.Min(20, height - 10);
-            var (start, end) = _versionList.GetVisibleRange(visibleRows);
-
-            var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
-            table.AddColumn("Version");
-
-            for (var i = start; i < end; i++)
-            {
-                var v = _versionList.Items[i];
-                var isSelected = i == _versionList.SelectedIndex;
-
-                string style;
-
-                if (v == _currentVersion)
-                {
-                    style = isSelected ? "[black on green]" : "[green]";
-                }
-                else if (v == _latestVersion)
-                {
-                    style = isSelected ? "[black on yellow]" : "[yellow]";
-                }
-                else
-                {
-                    style = isSelected ? "[black on blue]" : "";
-                }
-
-                var empty = string.IsNullOrEmpty(style) ? "" : "[/]";
-                var closeStyle = isSelected ? "[/]" : empty;
-
-                table.AddRow(new Markup($"{style}{Markup.Escape(v)}{closeStyle}"));
-            }
-            grid.AddRow(table);
-
-            var indicator = _versionList.GetScrollIndicator(visibleRows);
-            if (indicator != null)
-            {
-                grid.AddRow(new Markup($"[dim]{indicator}[/]"));
-            }
+            RenderVersionList(grid, height);
         }
 
-        var panel = new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
+        return CreatePanel(grid);
+    }
+
+    private void RenderVersionList(Grid grid, int height)
+    {
+        var visibleRows = Math.Min(20, height - 10);
+        var (start, end) = _versionList.GetVisibleRange(visibleRows);
+
+        var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
+        table.AddColumn("Version");
+
+        for (var i = start; i < end; i++)
+        {
+            var v = _versionList.Items[i];
+            var isSelected = i == _versionList.SelectedIndex;
+            table.AddRow(RenderVersionRow(v, isSelected));
+        }
+        grid.AddRow(table);
+
+        var indicator = _versionList.GetScrollIndicator(visibleRows);
+        if (indicator != null)
+        {
+            grid.AddRow(new Markup($"[dim]{indicator}[/]"));
+        }
+    }
+
+    private IRenderable RenderVersionRow(string version, bool isSelected)
+    {
+        string style = GetVersionStyle(version, isSelected);
+        var closeStyle = string.IsNullOrEmpty(style) ? "" : "[/]";
+        return new Markup($"{style}{Markup.Escape(version)}{closeStyle}");
+    }
+
+    private string GetVersionStyle(string version, bool isSelected)
+    {
+        if (version == _currentVersion)
+        {
+            return isSelected ? "[black on green]" : "[green]";
+        }
+
+        if (version == _latestVersion)
+        {
+            return isSelected ? "[black on yellow]" : "[yellow]";
+        }
+
+        return isSelected ? "[black on blue]" : "";
+    }
+
+    private Panel CreatePanel(Grid grid)
+    {
+        return new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
         {
             Header = new PanelHeader($"[bold yellow] {Title} [/]"),
             Border = BoxBorder.Rounded,
@@ -211,7 +225,5 @@ public class NuGetVersionSelectionModal : Modal
             Expand = false,
             Width = Width
         };
-
-        return panel;
     }
 }

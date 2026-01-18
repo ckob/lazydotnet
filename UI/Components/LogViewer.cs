@@ -139,89 +139,107 @@ public partial class LogViewer : IKeyBindable
             var visibleRows = Math.Max(1, height);
             var renderWidth = Math.Max(1, width - 4);
 
-            // 1. Flatten to physical lines
-            var physicalLines = new List<PhysicalLine>();
-            for (var i = 0; i < _logs.Count; i++)
-            {
-                var logical = _logs[i];
-                var (cleanText, style) = ExtractStyle(logical);
-                var wrapped = WrapText(cleanText, renderWidth);
+            var physicalLines = BuildPhysicalLines(renderWidth);
+            UpdateScrollOffset(physicalLines, visibleRows);
 
-                physicalLines.AddRange(wrapped.Select(w =>
-                    new PhysicalLine { Text = w, LogicalIndex = i, Style = style }));
+            var table = CreateLogTable(renderWidth);
+            RenderPhysicalLines(table, physicalLines, visibleRows, isActive);
+
+            return table;
+        }
+    }
+
+    private List<PhysicalLine> BuildPhysicalLines(int renderWidth)
+    {
+        var physicalLines = new List<PhysicalLine>();
+        for (var i = 0; i < _logs.Count; i++)
+        {
+            var logical = _logs[i];
+            var (cleanText, style) = ExtractStyle(logical);
+            var wrapped = WrapText(cleanText, renderWidth);
+
+            physicalLines.AddRange(wrapped.Select(w =>
+                new PhysicalLine { Text = w, LogicalIndex = i, Style = style }));
+        }
+        return physicalLines;
+    }
+
+    private void UpdateScrollOffset(List<PhysicalLine> physicalLines, int visibleRows)
+    {
+        if (_selectedLogicalIndex == -1)
+        {
+            _scrollOffset = Math.Max(0, physicalLines.Count - visibleRows);
+        }
+        else
+        {
+            var (first, last) = GetPhysicalIndicesForLogical(_selectedLogicalIndex, physicalLines);
+
+            if (first != -1)
+            {
+                if (first < _scrollOffset) _scrollOffset = first;
+                if (last >= _scrollOffset + visibleRows) _scrollOffset = last - visibleRows + 1;
             }
+        }
 
-            // 2. Scrolling logic on physical lines
-            if (_selectedLogicalIndex == -1)
+        _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, physicalLines.Count - visibleRows)));
+    }
+
+    private static (int first, int last) GetPhysicalIndicesForLogical(int logicalIndex, List<PhysicalLine> physicalLines)
+    {
+        var first = -1;
+        var last = -1;
+        for (var i = 0; i < physicalLines.Count; i++)
+        {
+            if (physicalLines[i].LogicalIndex != logicalIndex)
+                continue;
+
+            if (first == -1) first = i;
+            last = i;
+        }
+        return (first, last);
+    }
+
+    private static Table CreateLogTable(int renderWidth)
+    {
+        return new Table()
+            .Border(TableBorder.None)
+            .HideHeaders()
+            .NoSafeBorder()
+            .Expand()
+            .AddColumn(new TableColumn("Log").NoWrap().Width(renderWidth));
+    }
+
+    private void RenderPhysicalLines(Table table, List<PhysicalLine> physicalLines, int visibleRows, bool isActive)
+    {
+        var start = _scrollOffset;
+        var renderedCount = 0;
+
+        for (var i = start; i < physicalLines.Count && renderedCount < visibleRows; i++)
+        {
+            var line = physicalLines[i];
+            var isSelected = line.LogicalIndex == _selectedLogicalIndex;
+            var escapedText = Markup.Escape(line.Text);
+
+            if (isSelected)
             {
-                _scrollOffset = Math.Max(0, physicalLines.Count - visibleRows);
+                var selectionStyle = isActive ? "black on white" : "black on silver";
+                table.AddRow(new Markup($"[{selectionStyle}]{escapedText}[/]"));
             }
             else
             {
-                var first = -1;
-                var last = -1;
-                for (var i = 0; i < physicalLines.Count; i++)
-                {
-                    if (physicalLines[i].LogicalIndex != _selectedLogicalIndex)
-                        continue;
-
-                    if (first == -1) first = i;
-                    last = i;
-                }
-
-                if (first != -1)
-                {
-                    if (first < _scrollOffset) _scrollOffset = first;
-                    if (last >= _scrollOffset + visibleRows) _scrollOffset = last - visibleRows + 1;
-                }
+                var contentMarkup = string.IsNullOrEmpty(line.Style)
+                    ? escapedText
+                    : $"[{line.Style}]{escapedText}[/]";
+                table.AddRow(new Markup(contentMarkup));
             }
 
-            _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, physicalLines.Count - visibleRows)));
+            renderedCount++;
+        }
 
-            // 3. Render
-            var table = new Table()
-                .Border(TableBorder.None)
-                .HideHeaders()
-                .NoSafeBorder()
-                .Expand()
-                .AddColumn(new TableColumn("Log").NoWrap().Width(renderWidth));
-
-            var start = _scrollOffset;
-            var renderedCount = 0;
-
-            for (var i = start; i < physicalLines.Count && renderedCount < visibleRows; i++)
-            {
-                var line = physicalLines[i];
-                var isSelected = line.LogicalIndex == _selectedLogicalIndex;
-
-                var escapedText = Markup.Escape(line.Text);
-                if (isSelected)
-                {
-                    var selectionStyle = isActive ? "black on white" : "black on silver";
-                    table.AddRow(new Markup($"[{selectionStyle}]{escapedText}[/]"));
-                }
-                else
-                {
-                    var contentMarkup = escapedText;
-                    if (!string.IsNullOrEmpty(line.Style))
-                    {
-                        contentMarkup = $"[{line.Style}]{escapedText}[/]";
-                    }
-
-                    table.AddRow(new Markup(contentMarkup));
-                }
-
-                renderedCount++;
-            }
-
-            // Pad with empty rows to maintain fixed height
-            while (renderedCount < visibleRows)
-            {
-                table.AddRow(new Markup(""));
-                renderedCount++;
-            }
-
-            return table;
+        while (renderedCount < visibleRows)
+        {
+            table.AddRow(new Markup(""));
+            renderedCount++;
         }
     }
 

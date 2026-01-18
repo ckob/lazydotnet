@@ -286,89 +286,7 @@ public class TestService
 
         foreach (var test in tests)
         {
-            var fqn = test.Name;
-            var parts = fqn.Split('.');
-            var current = root;
-
-            for (var i = 0; i < parts.Length - 1; i++)
-            {
-                var part = parts[i];
-                var existing = current.Children.FirstOrDefault(c => c.Name == part && c.IsContainer);
-                if (existing == null)
-                {
-                    existing = new TestNode
-                    {
-                        Name = part,
-                        Parent = current,
-                        Depth = current.Depth + 1,
-                        IsContainer = true,
-                        FullName = string.Join(".", parts.Take(i + 1))
-                    };
-                    current.Children.Add(existing);
-                }
-
-                if (string.IsNullOrEmpty(existing.FilePath))
-                {
-                    existing.FilePath = test.FilePath;
-                    existing.LineNumber = test.LineNumber;
-                }
-
-                current = existing;
-            }
-
-            var methodName = parts[^1];
-            var shortDisplayName = GetShortDisplayName(test.DisplayName, fqn);
-
-            if (shortDisplayName == methodName)
-            {
-                var testNode = new TestNode
-                {
-                    Name = methodName,
-                    Parent = current,
-                    Depth = current.Depth + 1,
-                    IsTest = true,
-                    IsContainer = false,
-                    FullName = fqn,
-                    Uid = test.Id,
-                    FilePath = test.FilePath,
-                    LineNumber = test.LineNumber
-                };
-                current.Children.Add(testNode);
-            }
-            else
-            {
-                var methodContainer = current.Children.FirstOrDefault(c => c.Name == methodName && c.IsContainer);
-                if (methodContainer == null)
-                {
-                    methodContainer = new TestNode
-                    {
-                        Name = methodName,
-                        Parent = current,
-                        Depth = current.Depth + 1,
-                        IsContainer = true,
-                        IsTheoryContainer = true,
-                        IsExpanded = false,
-                        FullName = fqn,
-                        FilePath = test.FilePath,
-                        LineNumber = test.LineNumber
-                    };
-                    current.Children.Add(methodContainer);
-                }
-
-                var caseNode = new TestNode
-                {
-                    Name = shortDisplayName,
-                    Parent = methodContainer,
-                    Depth = methodContainer.Depth + 1,
-                    IsTest = true,
-                    IsContainer = false,
-                    FullName = fqn,
-                    Uid = test.Id,
-                    FilePath = test.FilePath,
-                    LineNumber = test.LineNumber
-                };
-                methodContainer.Children.Add(caseNode);
-            }
+            AddTestToTree(root, test);
         }
 
         CompactTree(root);
@@ -376,6 +294,107 @@ public class TestService
         RecalculateMetadata(root, 0);
 
         return root;
+    }
+
+    private static void AddTestToTree(TestNode root, DiscoveredTest test)
+    {
+        var fqn = test.Name;
+        var parts = fqn.Split('.');
+        var current = root;
+
+        for (var i = 0; i < parts.Length - 1; i++)
+        {
+            current = GetOrCreateContainer(current, parts[i], parts.Take(i + 1), test);
+        }
+
+        var methodName = parts[^1];
+        var shortDisplayName = GetShortDisplayName(test.DisplayName, fqn);
+
+        if (shortDisplayName == methodName)
+        {
+            AddTestNode(current, methodName, fqn, test);
+        }
+        else
+        {
+            AddTheoryNode(current, methodName, shortDisplayName, fqn, test);
+        }
+    }
+
+    private static TestNode GetOrCreateContainer(TestNode current, string part, IEnumerable<string> fullPathParts, DiscoveredTest test)
+    {
+        var existing = current.Children.FirstOrDefault(c => c.Name == part && c.IsContainer);
+        if (existing == null)
+        {
+            existing = new TestNode
+            {
+                Name = part,
+                Parent = current,
+                Depth = current.Depth + 1,
+                IsContainer = true,
+                FullName = string.Join(".", fullPathParts)
+            };
+            current.Children.Add(existing);
+        }
+
+        if (string.IsNullOrEmpty(existing.FilePath))
+        {
+            existing.FilePath = test.FilePath;
+            existing.LineNumber = test.LineNumber;
+        }
+
+        return existing;
+    }
+
+    private static void AddTestNode(TestNode parent, string methodName, string fqn, DiscoveredTest test)
+    {
+        var testNode = new TestNode
+        {
+            Name = methodName,
+            Parent = parent,
+            Depth = parent.Depth + 1,
+            IsTest = true,
+            IsContainer = false,
+            FullName = fqn,
+            Uid = test.Id,
+            FilePath = test.FilePath,
+            LineNumber = test.LineNumber
+        };
+        parent.Children.Add(testNode);
+    }
+
+    private static void AddTheoryNode(TestNode parent, string methodName, string shortDisplayName, string fqn, DiscoveredTest test)
+    {
+        var methodContainer = parent.Children.FirstOrDefault(c => c.Name == methodName && c.IsContainer);
+        if (methodContainer == null)
+        {
+            methodContainer = new TestNode
+            {
+                Name = methodName,
+                Parent = parent,
+                Depth = parent.Depth + 1,
+                IsContainer = true,
+                IsTheoryContainer = true,
+                IsExpanded = false,
+                FullName = fqn,
+                FilePath = test.FilePath,
+                LineNumber = test.LineNumber
+            };
+            parent.Children.Add(methodContainer);
+        }
+
+        var caseNode = new TestNode
+        {
+            Name = shortDisplayName,
+            Parent = methodContainer,
+            Depth = methodContainer.Depth + 1,
+            IsTest = true,
+            IsContainer = false,
+            FullName = fqn,
+            Uid = test.Id,
+            FilePath = test.FilePath,
+            LineNumber = test.LineNumber
+        };
+        methodContainer.Children.Add(caseNode);
     }
 
     private static int RecalculateMetadata(TestNode node, int depth)
@@ -468,24 +487,33 @@ public class TestService
     {
         if (!IsTestProject(projectPath)) return EmptyRun();
 
-        var isMtp = IsMtpProject(projectPath);
         var targetPath = GetTargetPath(projectPath);
         if (targetPath == null || !File.Exists(targetPath)) return EmptyRun();
 
-        if (isMtp)
+        if (IsMtpProject(projectPath))
         {
-            try
-            {
-                var mtpClient = await MtpClient.CreateAsync(targetPath, CancellationToken.None);
-                return mtpClient.RunTestsAsync(filter, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                AppCli.Log($"[red]MTP RPC run failed: {ex.Message}[/]");
-                return EmptyRun();
-            }
+            return await RunMtpTestsAsync(targetPath, filter);
         }
 
+        return await RunVsTestsAsync(targetPath, filter);
+    }
+
+    private static async Task<IAsyncEnumerable<TestRunResult>> RunMtpTestsAsync(string targetPath, RunRequestNode[] filter)
+    {
+        try
+        {
+            var mtpClient = await MtpClient.CreateAsync(targetPath, CancellationToken.None);
+            return mtpClient.RunTestsAsync(filter, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            AppCli.Log($"[red]MTP RPC run failed: {ex.Message}[/]");
+            return EmptyRun();
+        }
+    }
+
+    private static async Task<IAsyncEnumerable<TestRunResult>> RunVsTestsAsync(string targetPath, RunRequestNode[] filter)
+    {
         await VstestLock.WaitAsync();
         try
         {
@@ -499,24 +527,7 @@ public class TestService
             {
                 try
                 {
-                    var options = new TestPlatformOptions
-                    {
-                        CollectMetrics = false,
-                        SkipDefaultAdapters = false
-                    };
-
-                    var discoveryHandler = new DiscoveryHandler();
-                    wrapper.DiscoverTests([targetPath], null, options, discoveryHandler);
-                    discoveryHandler.CompletionTask.Wait();
-
-                    var testCases = discoveryHandler.Tests;
-                    if (filter is { Length: > 0 })
-                    {
-                        var filterIds = filter.Select(f => f.Uid).ToHashSet();
-                        testCases = testCases.Where(t => filterIds.Contains(t.Id.ToString())).ToList();
-                    }
-
-                    wrapper.RunTests(testCases, null, options, handler);
+                    ExecuteVsTestRun(wrapper, targetPath, filter, handler);
                 }
                 catch (Exception ex)
                 {
@@ -530,6 +541,28 @@ public class TestService
         {
             VstestLock.Release();
         }
+    }
+
+    private static void ExecuteVsTestRun(VsTestConsoleWrapper wrapper, string targetPath, RunRequestNode[] filter, RunHandler handler)
+    {
+        var options = new TestPlatformOptions
+        {
+            CollectMetrics = false,
+            SkipDefaultAdapters = false
+        };
+
+        var discoveryHandler = new DiscoveryHandler();
+        wrapper.DiscoverTests([targetPath], null, options, discoveryHandler);
+        discoveryHandler.CompletionTask.Wait();
+
+        var testCases = discoveryHandler.Tests;
+        if (filter is { Length: > 0 })
+        {
+            var filterIds = filter.Select(f => f.Uid).ToHashSet();
+            testCases = testCases.Where(t => filterIds.Contains(t.Id.ToString())).ToList();
+        }
+
+        wrapper.RunTests(testCases, null, options, handler);
     }
 
     private static async IAsyncEnumerable<TestRunResult> EmptyRun()
