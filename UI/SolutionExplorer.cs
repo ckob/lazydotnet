@@ -11,6 +11,8 @@ public class ExplorerNode
     public string? ProjectPath { get; set; }
     public bool IsProject { get; set; }
     public bool IsSolution { get; set; }
+    public bool IsSlnx { get; set; }
+    public bool IsSlnf { get; set; }
     public bool IsExpanded { get; set; } = true;
     public int Depth { get; set; }
     public List<ExplorerNode> Children { get; } = [];
@@ -32,13 +34,30 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
 
     private static ExplorerNode BuildTree(SolutionInfo solution)
     {
+        var isSingleProject = solution.Path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase);
+
+        if (isSingleProject && solution.Projects.Count == 1)
+        {
+            var proj = solution.Projects[0];
+            return new ExplorerNode
+            {
+                Name = proj.Name,
+                IsProject = true,
+                ProjectPath = proj.Path,
+                IsExpanded = true,
+                Depth = 0
+            };
+        }
+
         var root = new ExplorerNode
         {
             Name = solution.Name,
             Depth = 0,
             IsExpanded = true,
             IsProject = false,
-            IsSolution = true,
+            IsSolution = !isSingleProject,
+            IsSlnx = solution.IsSlnx,
+            IsSlnf = solution.IsSlnf,
             ProjectPath = solution.Path
         };
 
@@ -422,12 +441,14 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
             return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}[/]");
 
         return isActive ?
-            new Markup($"{indent} [black on blue]{icon} {Markup.Escape(name)}[/]") :
+            new Markup($"{indent} [black on blue]{Markup.Remove(icon)} {Markup.Escape(name)}[/]") :
             new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]");
     }
 
     private static string GetNodeIcon(ExplorerNode node)
     {
+        if (node.IsSlnx) return "[dodgerblue1]SLNX[/]";
+        if (node.IsSlnf) return "[cyan]SLNF[/]";
         if (node.IsSolution) return "[purple]SLN[/]";
         if (node.IsProject) return "[green]C#[/]";
         return node.IsExpanded ? "[yellow]v[/]" : "[yellow]>[/]";

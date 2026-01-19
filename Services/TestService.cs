@@ -142,7 +142,9 @@ public class TestService
     private static List<ProjectMetadata> GetRelevantProjects(string path)
     {
         var projects = new List<ProjectMetadata>();
-        if (path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        if (path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".slnf", StringComparison.OrdinalIgnoreCase))
         {
             var solution = SolutionFile.Parse(path);
             projects.AddRange(solution.ProjectsInOrder

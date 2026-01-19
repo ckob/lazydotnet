@@ -25,10 +25,10 @@ string? solutionFile = null;
 var i = 0;
 while (i < args.Length)
 {
-    if ((args[i] == "-s" || args[i] == "--solution") && i + 1 < args.Length)
+    if ((args[i] == "-s" || args[i] == "--solution" || args[i] == "-p" || args[i] == "--project") && i + 1 < args.Length)
     {
         var path = args[i + 1];
-        if (File.Exists(path) && path.EndsWith(".sln"))
+        if (File.Exists(path))
         {
             solutionFile = Path.GetFullPath(path);
             rootDir = Path.GetDirectoryName(solutionFile) ?? rootDir;
