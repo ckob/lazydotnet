@@ -102,6 +102,13 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         _isLoading = true;
         _refsList.Clear();
 
+        if (Directory.Exists(projectPath) && !projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            _isLoading = false;
+            RequestRefresh?.Invoke();
+            return;
+        }
+
         try
         {
             var refs = await ProjectService.GetProjectReferencesAsync(projectPath);

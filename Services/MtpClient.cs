@@ -65,16 +65,18 @@ public class MtpClient : IAsyncDisposable
     private readonly JsonRpc _jsonRpc;
     private readonly TcpClient _tcpClient;
     private readonly TcpListener _listener;
+    private readonly string _targetPath;
 
     private readonly Channel<MtpTestNodeUpdate> _updates = Channel.CreateUnbounded<MtpTestNodeUpdate>();
     private readonly ConcurrentDictionary<Guid, List<MtpTestNode>> _runResults = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _completionSources = new();
 
-    private MtpClient(TcpListener listener, TcpClient tcpClient, JsonRpc jsonRpc)
+    private MtpClient(TcpListener listener, TcpClient tcpClient, JsonRpc jsonRpc, string targetPath)
     {
         _listener = listener;
         _tcpClient = tcpClient;
         _jsonRpc = jsonRpc;
+        _targetPath = targetPath;
 
         _jsonRpc.AddLocalRpcTarget(this, new JsonRpcTargetOptions { MethodNameTransform = CommonMethodNameTransforms.CamelCase });
         _jsonRpc.StartListening();
@@ -113,7 +115,7 @@ public class MtpClient : IAsyncDisposable
 
             var jsonRpc = new JsonRpc(new HeaderDelimitedMessageHandler(tcpClient.GetStream(), tcpClient.GetStream(), formatter));
 
-            var client = new MtpClient(listener, tcpClient, jsonRpc);
+            var client = new MtpClient(listener, tcpClient, jsonRpc, targetPath);
 
             await jsonRpc.InvokeWithParameterObjectAsync("initialize", new MtpInitializeRequest(
                 Environment.ProcessId,
@@ -214,7 +216,7 @@ public class MtpClient : IAsyncDisposable
         }
     }
 
-    private static DiscoveredTest MapToDiscoveredTest(MtpTestNode n)
+    private DiscoveredTest MapToDiscoveredTest(MtpTestNode n)
     {
         var name = GetDiscoveredTestName(n);
 
@@ -230,7 +232,9 @@ public class MtpClient : IAsyncDisposable
             name,
             n.DisplayName,
             n.FilePath,
-            n.LineStart
+            n.LineStart,
+            _targetPath,
+            true
         );
     }
 

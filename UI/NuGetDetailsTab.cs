@@ -94,6 +94,14 @@ public class NuGetDetailsTab : IProjectTab
 
         PrepareForNewLoad(projectPath, projectName);
 
+        if (Directory.Exists(projectPath) && !projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            _statusMessage = "Select a project to see NuGet packages.";
+            _isLoading = false;
+            RequestRefresh?.Invoke();
+            return;
+        }
+
         try
         {
             var packages = await NuGetService.GetPackagesAsync(projectPath, LogAction, _loadCts!.Token);

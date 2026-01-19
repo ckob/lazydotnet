@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Construction;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -14,12 +15,16 @@ public record DiscoveredTest(
     string Name,
     string DisplayName,
     string? FilePath,
-    int? LineNumber
+    int? LineNumber,
+    string Source,
+    bool IsMtp
 );
 
 public record RunRequestNode(
     string Uid,
-    string DisplayName
+    string DisplayName,
+    string Source,
+    bool IsMtp
 );
 
 public record TestRunResult(
@@ -29,6 +34,13 @@ public record TestRunResult(
     IAsyncEnumerable<string> StackTrace,
     string[] ErrorMessage,
     IAsyncEnumerable<string> StdOut
+);
+
+internal record ProjectMetadata(
+    string ProjectPath,
+    string? TargetPath,
+    bool IsTestProject,
+    bool IsMtp
 );
 
 public class TestNode
@@ -44,6 +56,8 @@ public class TestNode
     public bool IsExpanded { get; set; } = true;
     public int Depth { get; set; }
     public int TestCount { get; set; }
+    public string? Source { get; set; }
+    public bool IsMtp { get; set; }
 
     public TestStatus Status { get; set; } = TestStatus.None;
     public string? ErrorMessage { get; set; }
@@ -77,7 +91,7 @@ public class TestService
 {
     private static readonly SemaphoreSlim VstestLock = new(1, 1);
 
-    public static async Task<List<DiscoveredTest>> DiscoverTestsAsync(string projectPath, CancellationToken cancellationToken = default)
+    public static async Task<List<DiscoveredTest>> DiscoverTestsAsync(string path, CancellationToken cancellationToken = default)
     {
         await VstestLock.WaitAsync(cancellationToken);
         try
@@ -86,19 +100,31 @@ public class TestService
             {
                 try
                 {
-                    if (!IsTestProject(projectPath)) return [];
+                    var projects = GetRelevantProjects(path);
+                    if (projects.Count == 0) return [];
 
-                    var isMtp = IsMtpProject(projectPath);
-                    var targetPath = GetTargetPath(projectPath);
-                    if (targetPath == null || !File.Exists(targetPath)) return new List<DiscoveredTest>();
+                    var vstestSources = projects
+                        .Where(p => !p.IsMtp && p.TargetPath != null && File.Exists(p.TargetPath))
+                        .Select(p => p.TargetPath!)
+                        .ToList();
 
-                    if (isMtp)
+                    var mtpProjects = projects
+                        .Where(p => p.IsMtp && p.TargetPath != null && File.Exists(p.TargetPath))
+                        .ToList();
+
+                    var allTests = new List<DiscoveredTest>();
+                    if (vstestSources.Count > 0)
                     {
-                        var mtpTests = await DiscoverMtpTestsAsync(targetPath, cancellationToken);
-                        if (mtpTests.Count > 0) return mtpTests;
+                        allTests.AddRange(await DiscoverVsTestsAsync(vstestSources, cancellationToken));
                     }
 
-                    return await DiscoverVsTestsAsync(targetPath, cancellationToken);
+                    if (mtpProjects.Count > 0)
+                    {
+                        var mtpResults = await Task.WhenAll(mtpProjects.Select(p => DiscoverMtpTestsAsync(p.TargetPath!, cancellationToken)));
+                        allTests.AddRange(mtpResults.SelectMany(r => r));
+                    }
+
+                    return allTests;
                 }
                 catch (Exception ex)
                 {
@@ -113,7 +139,35 @@ public class TestService
         }
     }
 
-    private static async Task<List<DiscoveredTest>> DiscoverVsTestsAsync(string targetPath, CancellationToken ct)
+    private static List<ProjectMetadata> GetRelevantProjects(string path)
+    {
+        var projects = new List<ProjectMetadata>();
+        if (path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            var solution = SolutionFile.Parse(path);
+            projects.AddRange(solution.ProjectsInOrder
+                .Where(p => p.ProjectType != SolutionProjectType.SolutionFolder)
+                .Select(p => GetProjectMetadata(p.AbsolutePath))
+                .Where(m => m.IsTestProject));
+        }
+        else if (Directory.Exists(path))
+        {
+            var projectFiles = Directory.EnumerateFiles(path, "*.csproj", SearchOption.AllDirectories);
+            foreach (var file in projectFiles)
+            {
+                var meta = GetProjectMetadata(file);
+                if (meta.IsTestProject) projects.Add(meta);
+            }
+        }
+        else
+        {
+            var meta = GetProjectMetadata(path);
+            if (meta.IsTestProject) projects.Add(meta);
+        }
+        return projects;
+    }
+
+    private static async Task<List<DiscoveredTest>> DiscoverVsTestsAsync(List<string> targetPaths, CancellationToken ct)
     {
         var vstestPath = VsTestConsoleLocator.GetVsTestConsolePath();
         if (vstestPath == null)
@@ -128,7 +182,7 @@ public class TestService
 
         try
         {
-            AppCli.Log($"[dim]Discovering tests for {Path.GetFileName(targetPath)}...[/]");
+            AppCli.Log($"[dim]Discovering tests for {targetPaths.Count} projects...[/]");
 
             return await Task.Run(() =>
             {
@@ -138,7 +192,7 @@ public class TestService
                     SkipDefaultAdapters = false
                 };
 
-                wrapper.DiscoverTests([targetPath], null, options, handler);
+                wrapper.DiscoverTests(targetPaths, null, options, handler);
 
                 handler.CompletionTask.Wait(ct);
 
@@ -148,7 +202,9 @@ public class TestService
                     tc.FullyQualifiedName,
                     tc.DisplayName,
                     tc.CodeFilePath,
-                    tc.LineNumber > 0 ? tc.LineNumber : null
+                    tc.LineNumber > 0 ? tc.LineNumber : null,
+                    tc.Source,
+                    false
                 )).ToList();
             }, ct);
         }
@@ -163,13 +219,8 @@ public class TestService
         }
     }
 
-    private static bool IsTestProject(string projectPath)
+    private static ProjectMetadata GetProjectMetadata(string projectPath)
     {
-        if (string.IsNullOrEmpty(projectPath) || projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
         try
         {
             var project = ProjectCollection.GlobalProjectCollection.LoadedProjects.FirstOrDefault(p => p.FullPath == projectPath);
@@ -179,36 +230,21 @@ public class TestService
             }
 
             var isTestProject = project.GetPropertyValue("IsTestProject");
-            var isMtp = project.GetPropertyValue("IsTestingPlatformApplication");
+            var isMtpVal = project.GetPropertyValue("IsTestingPlatformApplication");
+            var outputType = project.GetPropertyValue("OutputType");
+            var targetPath = project.GetPropertyValue("TargetPath");
 
-            return string.Equals(isTestProject, "true", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(isMtp, "true", StringComparison.OrdinalIgnoreCase);
+            var isTest = string.Equals(isTestProject, "true", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(isMtpVal, "true", StringComparison.OrdinalIgnoreCase);
+
+            var isMtp = string.Equals(isMtpVal, "true", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(outputType, "Exe", StringComparison.OrdinalIgnoreCase);
+
+            return new ProjectMetadata(projectPath, targetPath, isTest, isMtp);
         }
         catch
         {
-            return false;
-        }
-    }
-
-    private static bool IsMtpProject(string projectPath)
-    {
-        try
-        {
-            var project = ProjectCollection.GlobalProjectCollection.LoadedProjects.FirstOrDefault(p => p.FullPath == projectPath);
-            if (project == null)
-            {
-                project = ProjectCollection.GlobalProjectCollection.LoadProject(projectPath);
-            }
-            var isMtpVal = project.GetPropertyValue("IsTestingPlatformApplication");
-            var outputType = project.GetPropertyValue("OutputType");
-
-            return string.Equals(isMtpVal, "true", StringComparison.OrdinalIgnoreCase)
-                   && string.Equals(outputType, "Exe", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception ex)
-        {
-            AppCli.Log($"[red]Error checking IsMtpProject: {ex.Message}[/]");
-            return false;
+            return new ProjectMetadata(projectPath, null, false, false);
         }
     }
 
@@ -223,30 +259,12 @@ public class TestService
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[red]MTP RPC discovery failed: {ex.Message}[/]");
+            AppCli.Log($"[red]MTP RPC discovery failed for {Path.GetFileName(targetPath)}: {ex.Message}[/]");
             return [];
         }
         finally
         {
             if (mtpClient != null) await mtpClient.DisposeAsync();
-        }
-    }
-
-    private static string? GetTargetPath(string projectPath)
-    {
-        try
-        {
-            var project = ProjectCollection.GlobalProjectCollection.LoadedProjects.FirstOrDefault(p => p.FullPath == projectPath);
-            if (project == null)
-            {
-                project = ProjectCollection.GlobalProjectCollection.LoadProject(projectPath);
-            }
-            var targetPath = project.GetPropertyValue("TargetPath");
-            return targetPath;
-        }
-        catch
-        {
-            return null;
         }
     }
 
@@ -357,7 +375,9 @@ public class TestService
             FullName = fqn,
             Uid = test.Id,
             FilePath = test.FilePath,
-            LineNumber = test.LineNumber
+            LineNumber = test.LineNumber,
+            Source = test.Source,
+            IsMtp = test.IsMtp
         };
         parent.Children.Add(testNode);
     }
@@ -377,7 +397,9 @@ public class TestService
                 IsExpanded = false,
                 FullName = fqn,
                 FilePath = test.FilePath,
-                LineNumber = test.LineNumber
+                LineNumber = test.LineNumber,
+                Source = test.Source,
+                IsMtp = test.IsMtp
             };
             parent.Children.Add(methodContainer);
         }
@@ -392,7 +414,9 @@ public class TestService
             FullName = fqn,
             Uid = test.Id,
             FilePath = test.FilePath,
-            LineNumber = test.LineNumber
+            LineNumber = test.LineNumber,
+            Source = test.Source,
+            IsMtp = test.IsMtp
         };
         methodContainer.Children.Add(caseNode);
     }
@@ -483,19 +507,55 @@ public class TestService
         foreach(var child in node.Children) SortTree(child);
     }
 
-    public static async Task<IAsyncEnumerable<TestRunResult>> RunTestsAsync(string projectPath, RunRequestNode[] filter)
+    public static async Task<IAsyncEnumerable<TestRunResult>> RunTestsAsync(string path, RunRequestNode[] filter)
     {
-        if (!IsTestProject(projectPath)) return EmptyRun();
+        var projects = GetRelevantProjects(path);
+        if (projects.Count == 0) return EmptyRun();
 
-        var targetPath = GetTargetPath(projectPath);
-        if (targetPath == null || !File.Exists(targetPath)) return EmptyRun();
+        var vstestTests = filter.Where(f => !f.IsMtp).ToList();
+        var mtpTests = filter.Where(f => f.IsMtp).ToList();
 
-        if (IsMtpProject(projectPath))
+        var resultChannels = new List<IAsyncEnumerable<TestRunResult>>();
+
+        if (vstestTests.Count > 0)
         {
-            return await RunMtpTestsAsync(targetPath, filter);
+            foreach (var group in vstestTests.GroupBy(t => t.Source))
+            {
+                resultChannels.Add(await RunVsTestsAsync(group.Key, [.. group]));
+            }
         }
 
-        return await RunVsTestsAsync(targetPath, filter);
+        if (mtpTests.Count > 0)
+        {
+            foreach (var group in mtpTests.GroupBy(t => t.Source))
+            {
+                resultChannels.Add(await RunMtpTestsAsync(group.Key, [.. group]));
+            }
+        }
+
+        return MergeAsyncEnumerables(resultChannels);
+    }
+
+    private static async IAsyncEnumerable<TestRunResult> MergeAsyncEnumerables(List<IAsyncEnumerable<TestRunResult>> sources)
+    {
+        var channel = Channel.CreateUnbounded<TestRunResult>();
+        var tasks = sources.Select(async s =>
+        {
+            await foreach (var item in s)
+            {
+                await channel.Writer.WriteAsync(item);
+            }
+        });
+
+        _ = Task.WhenAll(tasks).ContinueWith(_ => channel.Writer.TryComplete());
+
+        while (await channel.Reader.WaitToReadAsync())
+        {
+            while (channel.Reader.TryRead(out var item))
+            {
+                yield return item;
+            }
+        }
     }
 
     private static async Task<IAsyncEnumerable<TestRunResult>> RunMtpTestsAsync(string targetPath, RunRequestNode[] filter)
@@ -507,7 +567,7 @@ public class TestService
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[red]MTP RPC run failed: {ex.Message}[/]");
+            AppCli.Log($"[red]MTP RPC run failed for {Path.GetFileName(targetPath)}: {ex.Message}[/]");
             return EmptyRun();
         }
     }

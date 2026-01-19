@@ -92,14 +92,14 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         foreach (var segment in segments)
         {
             pathAccumulator = string.IsNullOrEmpty(pathAccumulator) ? segment : Path.Combine(pathAccumulator, segment);
-            currentParent = GetOrCreateFolderNode(currentParent, nodeMap, segment, pathAccumulator);
+            currentParent = GetOrCreateFolderNode(currentParent, nodeMap, segment, pathAccumulator, solutionDir);
         }
 
         currentParent.Children.Add(node);
         node.Parent = currentParent;
     }
 
-    private static ExplorerNode GetOrCreateFolderNode(ExplorerNode currentParent, Dictionary<string, ExplorerNode> nodeMap, string segment, string pathAccumulator)
+    private static ExplorerNode GetOrCreateFolderNode(ExplorerNode currentParent, Dictionary<string, ExplorerNode> nodeMap, string segment, string pathAccumulator, string solutionDir)
     {
         var folderId = $"folder:{pathAccumulator}";
 
@@ -114,6 +114,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
             IsProject = false,
             IsSolution = false,
             IsExpanded = true,
+            ProjectPath = Path.GetFullPath(Path.Combine(solutionDir, pathAccumulator)),
             Parent = currentParent
         };
         currentParent.Children.Add(folderNode);
@@ -382,7 +383,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         if (_root == null) return null;
         var node = GetSelectedNode();
 
-        if ((node.IsProject || node.IsSolution) && node.ProjectPath != null)
+        if (node.ProjectPath != null)
         {
             return new ProjectInfo { Name = node.Name, Path = node.ProjectPath, Id = node.ProjectPath };
         }

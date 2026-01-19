@@ -535,8 +535,8 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     private async Task ExecuteTestRunAsync(List<TestNode> testsToRun)
     {
         var filter = testsToRun
-            .Where(t => t.Uid != null)
-            .Select(t => new RunRequestNode(t.Uid!, t.Name))
+            .Where(t => t.Uid != null && t.Source != null)
+            .Select(t => new RunRequestNode(t.Uid!, t.Name, t.Source!, t.IsMtp))
             .ToArray();
 
         var results = await TestService.RunTestsAsync(_currentPath!, filter);
