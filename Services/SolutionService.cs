@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Build.Construction;
 
 namespace lazydotnet.Services;
@@ -71,6 +72,93 @@ public class SolutionService
             IsSlnf: solutionFile.EndsWith(".slnf", StringComparison.OrdinalIgnoreCase));
 
         return CurrentSolution;
+    }
+
+    public async Task<List<SolutionInfo>> DiscoverWorkspacesAsync(string rootPath)
+    {
+        return await Task.Run(() =>
+        {
+            var results = new ConcurrentBag<SolutionInfo>();
+            var options = new EnumerationOptions { RecurseSubdirectories = true, MaxRecursionDepth = 5 };
+            
+            var ignoredDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+            { 
+                "bin", "obj", ".git", ".vs", ".vscode", "node_modules", "TestResults" 
+            };
+
+            void ScanDirectory(string currentPath, int depth)
+            {
+                if (depth > options.MaxRecursionDepth) return;
+
+                try
+                {
+                    ProcessFiles(currentPath, results);
+                    ProcessSubDirectories(currentPath, depth, ignoredDirs, ScanDirectory);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Ignore inaccessible directories
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    // Ignore missing directories
+                }
+            }
+
+            ScanDirectory(rootPath, 0);
+
+            return results
+                .OrderByDescending(w => IsSolution(w.Path))
+                .ThenBy(w => GetDepth(rootPath, w.Path))
+                .ThenBy(w => w.Name)
+                .ToList();
+        });
+
+        static void ProcessFiles(string currentPath, ConcurrentBag<SolutionInfo> results)
+        {
+            foreach (var file in Directory.GetFiles(currentPath, "*.*"))
+            {
+                var ext = Path.GetExtension(file).ToLower();
+                if (ext is ".sln" or ".slnx" or ".slnf")
+                {
+                    results.Add(new SolutionInfo(
+                        Path.GetFileName(file),
+                        file,
+                        [],
+                        IsSlnx: ext == ".slnx",
+                        IsSlnf: ext == ".slnf"));
+                }
+                else if (ext == ".csproj")
+                {
+                    results.Add(new SolutionInfo(Path.GetFileName(file), file, []));
+                }
+            }
+        }
+
+        static void ProcessSubDirectories(string currentPath, int depth, HashSet<string> ignoredDirs, Action<string, int> scanAction)
+        {
+            var subDirs = Directory.GetDirectories(currentPath);
+            Parallel.ForEach(subDirs, subDir =>
+            {
+                var dirName = Path.GetFileName(subDir);
+                if (!ignoredDirs.Contains(dirName))
+                {
+                    scanAction(subDir, depth + 1);
+                }
+            });
+        }
+
+        static bool IsSolution(string path) =>
+            path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".slnf", StringComparison.OrdinalIgnoreCase);
+
+        static int GetDepth(string root, string path)
+        {
+            var relative = Path.GetRelativePath(root, path);
+            if (relative == "." || string.IsNullOrEmpty(relative)) return 0;
+            return relative.Split(Path.DirectorySeparatorChar).Length;
+        }
     }
 
     private Task<SolutionInfo?> ParseProjectAsSolutionAsync(string csprojPath)

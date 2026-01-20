@@ -10,7 +10,9 @@ public class DashboardScreen : IScreen
 {
     private readonly SolutionExplorer _explorer;
     private readonly ProjectDetailsPane _detailsPane;
-    private string? _lastSelectedProjectPath;
+    private readonly WorkspacePane _workspacePane;
+    private string? _currentViewedPath;
+    private bool _isViewingRoot = true;
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _buildCts;
     private bool _needsRefresh;
@@ -19,6 +21,7 @@ public class DashboardScreen : IScreen
     private readonly SolutionService _solutionService;
     private readonly string _rootDir;
     private readonly string? _solutionFile;
+    private Modal? _activeModal;
 
     public DashboardScreen(
         SolutionExplorer explorer,
@@ -35,6 +38,17 @@ public class DashboardScreen : IScreen
         _rootDir = rootDir;
         _solutionFile = solutionFile;
 
+        _workspacePane = new WorkspacePane(solutionService, rootDir)
+        {
+            OnWorkspaceSelected = async path => await LoadWorkspaceAsync(path),
+            RequestModal = m =>
+            {
+                _activeModal = m;
+                _needsRefresh = true;
+            },
+            RequestRefresh = () => _needsRefresh = true
+        };
+
         _detailsPane.LogAction = msg => _layout.AddLog(msg);
         _detailsPane.RequestRefresh = () => _needsRefresh = true;
         _detailsPane.RequestModal = m =>
@@ -45,7 +59,8 @@ public class DashboardScreen : IScreen
         _detailsPane.RequestSelectProject = p =>
         {
             _explorer.SelectProjectByPath(p);
-            _layout.SetActivePanel(0);
+            _layout.SetActivePanel(2);
+            _isViewingRoot = false;
             _needsRefresh = true;
         };
     }
@@ -53,27 +68,30 @@ public class DashboardScreen : IScreen
     public void OnEnter()
     {
         _needsRefresh = true;
+        _ = LoadWorkspaceAsync(_solutionFile ?? _rootDir);
+    }
 
-        _ = Task.Run(async () =>
+    private async Task LoadWorkspaceAsync(string path)
+    {
+        try
         {
-            try
+            _layout.AddLog($"[blue]Loading workspace {path}...[/]");
+            var solution = await _solutionService.FindAndParseSolutionAsync(path);
+            if (solution != null)
             {
-                var solution = await _solutionService.FindAndParseSolutionAsync(_solutionFile ?? _rootDir);
-                if (solution != null)
-                {
-                    _explorer.SetSolution(solution);
-                    _needsRefresh = true;
-                }
-                else
-                {
-                    _layout.AddLog($"[red]No solution found at {_solutionFile ?? _rootDir}[/]");
-                }
+                _explorer.SetSolution(solution);
+                _needsRefresh = true;
+                _layout.AddLog($"[green]Workspace loaded: {solution.Name}[/]");
             }
-            catch (Exception ex)
+            else
             {
-                _layout.AddLog($"[red]Error loading solution: {ex.Message}[/]");
+                _layout.AddLog($"[red]No solution found at {path}[/]");
             }
-        });
+        }
+        catch (Exception ex)
+        {
+            _layout.AddLog($"[red]Error loading solution: {ex.Message}[/]");
+        }
     }
 
     public bool OnTick()
@@ -83,12 +101,38 @@ public class DashboardScreen : IScreen
             _needsRefresh = true;
         }
 
-        var currentProject = _explorer.GetSelectedProject();
-        var currentPath = currentProject?.Path;
+        var activePanel = _layout.ActivePanel;
 
-        if (currentPath != _lastSelectedProjectPath)
+        if (activePanel == 1)
         {
-            HandleProjectChange(currentProject, currentPath);
+            _isViewingRoot = true;
+        }
+        else if (activePanel == 2)
+        {
+            _isViewingRoot = false;
+        }
+
+        string? targetPath;
+        string? targetName;
+
+        if (_isViewingRoot)
+        {
+            targetPath = _solutionService.CurrentSolution?.Path;
+            targetName = _solutionService.CurrentSolution?.Name;
+        }
+        else
+        {
+            var project = _explorer.GetSelectedProject();
+            targetPath = project?.Path;
+            targetName = project?.Name;
+        }
+
+        if (targetPath != _currentViewedPath)
+        {
+            _currentViewedPath = targetPath;
+            _needsRefresh = true;
+
+            UpdateProjectDetails(targetPath, targetName);
         }
 
         if (_detailsPane.OnTick())
@@ -101,15 +145,11 @@ public class DashboardScreen : IScreen
         return result;
     }
 
-    private void HandleProjectChange(ProjectInfo? currentProject, string? currentPath)
+    private void UpdateProjectDetails(string? targetPath, string? targetName)
     {
-        _lastSelectedProjectPath = currentPath;
-        _needsRefresh = true;
-
-        if (currentPath != null)
+        if (targetPath != null && targetName != null)
         {
             _detailsPane.ClearData();
-
             _debounceCts?.Cancel();
             _debounceCts?.Dispose();
             _debounceCts = new CancellationTokenSource();
@@ -122,12 +162,12 @@ public class DashboardScreen : IScreen
                     await Task.Delay(500, token);
                     if (token.IsCancellationRequested) return;
 
-                    await _detailsPane.LoadProjectDataAsync(currentPath, currentProject!.Name);
+                    await _detailsPane.LoadProjectDataAsync(targetPath, targetName);
                     _needsRefresh = true;
                 }
                 catch (OperationCanceledException)
                 {
-                    // Ignore
+                    // Debounced
                 }
             }, token);
         }
@@ -136,8 +176,6 @@ public class DashboardScreen : IScreen
             _detailsPane.ClearForNonProject();
         }
     }
-
-    private Modal? _activeModal;
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
@@ -157,8 +195,8 @@ public class DashboardScreen : IScreen
             k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) == 0, false);
         yield return new KeyBinding("shift+tab", "prev panel", () => Task.CompletedTask,
             k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) != 0, false);
-        yield return new KeyBinding("1-3", "switch panel", () => Task.CompletedTask,
-            k => k.Key is ConsoleKey.D1 or ConsoleKey.D2 or ConsoleKey.D3, false);
+        yield return new KeyBinding("0-3", "switch panel", () => Task.CompletedTask,
+            k => k.Key is ConsoleKey.D0 or ConsoleKey.D1 or ConsoleKey.D2 or ConsoleKey.D3, false);
         yield return new KeyBinding("b", "build project", () => HandleBuildAsync(_layout),
             k => k.KeyChar == 'b');
         yield return new KeyBinding("B", "build solution", () => HandleBuildAsync(_layout, true),
@@ -177,12 +215,15 @@ public class DashboardScreen : IScreen
         switch (_layout.ActivePanel)
         {
             case 0:
-                foreach (var b in _explorer.GetKeyBindings()) yield return b;
-                break;
-            case 1:
                 foreach (var b in _detailsPane.GetKeyBindings()) yield return b;
                 break;
+            case 1:
+                foreach (var b in _workspacePane.GetKeyBindings()) yield return b;
+                break;
             case 2:
+                foreach (var b in _explorer.GetKeyBindings()) yield return b;
+                break;
+            case 3:
                 foreach (var b in GetBottomPanelBindings()) yield return b;
                 break;
         }
@@ -197,9 +238,10 @@ public class DashboardScreen : IScreen
     {
         var panelName = _layout.ActivePanel switch
         {
-            0 => "Explorer",
-            1 => "Details",
-            2 => _layout.BottomActiveTab switch
+            0 => "Details",
+            1 => "Workspace",
+            2 => "Explorer",
+            3 => _layout.BottomActiveTab switch
             {
                 0 => "Log",
                 _ => "Bottom"
@@ -209,9 +251,10 @@ public class DashboardScreen : IScreen
 
         var localBindings = (_layout.ActivePanel switch
         {
-            0 => _explorer.GetKeyBindings(),
-            1 => _detailsPane.GetKeyBindings(),
-            2 => [.. _layout.LogViewer.GetKeyBindings()],
+            0 => _detailsPane.GetKeyBindings(),
+            1 => _workspacePane.GetKeyBindings(),
+            2 => _explorer.GetKeyBindings(),
+            3 => [.. _layout.LogViewer.GetKeyBindings()],
             _ => []
         }).ToList();
 
@@ -220,7 +263,7 @@ public class DashboardScreen : IScreen
             new("q", "quit", () => Task.CompletedTask, _ => false),
             new("tab", "next panel", () => Task.CompletedTask, _ => false),
             new("shift+tab", "prev panel", () => Task.CompletedTask, _ => false),
-            new("1-3", "switch panel", () => Task.CompletedTask, _ => false),
+            new("0-3", "switch panel", () => Task.CompletedTask, _ => false),
             new("b", "build project", () => Task.CompletedTask, _ => false),
             new("B", "build solution", () => Task.CompletedTask, _ => false),
             new("ctrl+r", "reload", () => Task.CompletedTask, _ => false),
@@ -286,22 +329,23 @@ public class DashboardScreen : IScreen
 
         switch (binding.Label)
         {
-            case "1-3":
+            case "0-3":
             {
-                if (key.Key == ConsoleKey.D1) layout.SetActivePanel(0);
-                else if (key.Key == ConsoleKey.D2) layout.SetActivePanel(1);
-                else if (key.Key == ConsoleKey.D3) layout.SetActivePanel(2);
+                if (key.Key == ConsoleKey.D0) layout.SetActivePanel(0);
+                else if (key.Key == ConsoleKey.D1) layout.SetActivePanel(1);
+                else if (key.Key == ConsoleKey.D2) layout.SetActivePanel(2);
+                else if (key.Key == ConsoleKey.D3) layout.SetActivePanel(3);
                 return this;
             }
             case "tab":
             {
-                var next = (layout.ActivePanel + 1) % 3;
+                var next = (layout.ActivePanel + 1) % 4;
                 layout.SetActivePanel(next);
                 return this;
             }
             case "shift+tab":
             {
-                var next = (layout.ActivePanel - 1 + 3) % 3;
+                var next = (layout.ActivePanel - 1 + 4) % 4;
                 layout.SetActivePanel(next);
                 return this;
             }
@@ -421,8 +465,10 @@ public class DashboardScreen : IScreen
             var w = width / 3;
             var dw = width * 6 / 10;
 
-            layout.UpdateLeft(_explorer.GetContent(contentTopH, w - 2, layout.ActivePanel == 0));
-            layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2, layout.ActivePanel == 1));
+            layout.UpdateWorkspace(_workspacePane.GetContent(layout.ActivePanel == 1));
+            layout.UpdateLeft(_explorer.GetContent(contentTopH - 3, w - 2, layout.ActivePanel == 2, suppressHighlight: _isViewingRoot));
+            layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2, layout.ActivePanel == 0), _detailsPane.GetHeader());
+            layout.UpdateBottom(width, bottomH);
         }
     }
 }

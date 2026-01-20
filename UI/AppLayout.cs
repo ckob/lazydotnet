@@ -13,7 +13,10 @@ public class AppLayout
 
     private readonly Layout _mainLayout = new Layout("MainContainer").SplitRows(
         new Layout("Top").SplitColumns(
-            new Layout("Left").Ratio(35),
+            new Layout("LeftContainer").SplitRows(
+                new Layout("Workspace").Size(3),
+                new Layout("Left")
+            ).Ratio(35),
             new Layout("Right").Ratio(65)
         ).Ratio(TopRatio),
         new Layout("Bottom").Ratio(BottomRatio)
@@ -56,24 +59,38 @@ public class AppLayout
 
     public int BottomActiveTab { get; }
 
-    private int _detailsActiveTab;
-
     public void SetActivePanel(int panel)
     {
-        ActivePanel = Math.Clamp(panel, 0, 2);
+        ActivePanel = Math.Clamp(panel, 0, 3);
     }
 
-    public void SetDetailsActiveTab(int tab)
+    public void SetDetailsActiveTab(int _)
     {
-        _detailsActiveTab = Math.Clamp(tab, 0, 2);
+        // No longer using internal tab state for header
+    }
+
+    public void UpdateWorkspace(IRenderable renderable)
+    {
+        var isActive = ActivePanel == 1;
+        var header = isActive
+            ? "[green][[1]][/]-[green]Workspace[/]"
+            : "[dim][[1]][/]-[green]Workspace[/]";
+        var panel = new Panel(renderable)
+            .Header(header)
+            .Border(BoxBorder.Rounded)
+            .BorderColor(isActive ? Color.Green : Color.Grey)
+            .Padding(0, 0, 0, 0)
+            .Expand();
+
+        _mainLayout["Workspace"].Update(panel);
     }
 
     public void UpdateLeft(IRenderable renderable)
     {
-        var isActive = ActivePanel == 0;
+        var isActive = ActivePanel == 2;
         var header = isActive
-            ? "[green][[1]][/]-[green]Explorer[/]"
-            : "[dim][[1]][/]-[green]Explorer[/]";
+            ? "[green][[2]][/]-[green]Explorer[/]"
+            : "[dim][[2]][/]-[green]Explorer[/]";
         var panel = new Panel(renderable)
             .Header(header)
             .Border(BoxBorder.Rounded)
@@ -84,16 +101,11 @@ public class AppLayout
         _mainLayout["Left"].Update(panel);
     }
 
-    public void UpdateRight(IRenderable renderable)
+    public void UpdateRight(IRenderable renderable, string headerText)
     {
-        var isActive = ActivePanel == 1;
-        var refsTab = _detailsActiveTab == 0 ? "[green]Project References[/]" : "[dim]Project References[/]";
-        var nugetTab = _detailsActiveTab == 1 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
-        var testsTab = _detailsActiveTab == 2 ? "[green]Tests[/]" : "[dim]Tests[/]";
+        var isActive = ActivePanel == 0;
+        var header = isActive ? $"[green][[0]][/]-{headerText}" : $"[dim][[0]][/]-{headerText}";
 
-        var header = isActive
-            ? $"[green][[2]][/]-{refsTab} - {nugetTab} - {testsTab}"
-            : $"[dim][[2]][/]-{refsTab} - {nugetTab} - {testsTab}";
         var panel = new Panel(renderable)
             .Header(header)
             .Border(BoxBorder.Rounded)
@@ -115,7 +127,7 @@ public class AppLayout
 
     public void UpdateBottom(int width, int height)
     {
-        var isActive = ActivePanel == 2;
+        var isActive = ActivePanel == 3;
         var logTab = "[green]Log[/]";
 
         var header = isActive

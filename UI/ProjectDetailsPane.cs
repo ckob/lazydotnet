@@ -1,4 +1,5 @@
 using lazydotnet.Core;
+using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.UI.Components;
 using lazydotnet.Services;
@@ -81,6 +82,8 @@ public class ProjectDetailsPane : IKeyBindable
 
     public Task LoadProjectDataAsync(string projectPath, string projectName)
     {
+        if (_currentProjectPath == projectPath) return Task.CompletedTask;
+
         _currentProjectPath = projectPath;
         _currentProjectName = projectName;
 
@@ -153,9 +156,18 @@ public class ProjectDetailsPane : IKeyBindable
         }
     }
 
+    public string GetHeader()
+    {
+        var refsTab = _tabs.ActiveTab == 0 ? "[green]Project References[/]" : "[dim]Project References[/]";
+        var nugetTab = _tabs.ActiveTab == 1 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
+        var testsTab = _tabs.ActiveTab == 2 ? "[green]Tests[/]" : "[dim]Tests[/]";
+
+        return $"{refsTab} - {nugetTab} - {testsTab}";
+    }
+
     public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
     {
-         var activeInstance = _tabInstances[_tabs.ActiveTab];
-         return activeInstance.GetContent(availableHeight, availableWidth, isActive);
+        var activeInstance = _tabInstances[_tabs.ActiveTab];
+        return activeInstance.GetContent(availableHeight, availableWidth, isActive);
     }
 }

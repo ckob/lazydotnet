@@ -410,7 +410,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         return null;
     }
 
-    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
+    public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive, bool suppressHighlight = false)
     {
         if (_root == null)
         {
@@ -427,12 +427,12 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         {
             var node = _visibleNodes[i];
             var isSelected = i == _selectedIndex;
-            grid.AddRow(RenderNode(node, isSelected, isActive, availableWidth));
+            grid.AddRow(RenderNode(node, isSelected, isActive, availableWidth, suppressHighlight));
         }
         return grid;
     }
 
-    private static Markup RenderNode(ExplorerNode node, bool isSelected, bool isActive, int availableWidth)
+    private static Markup RenderNode(ExplorerNode node, bool isSelected, bool isActive, int availableWidth, bool suppressHighlight)
     {
         var indent = new string(' ', node.Depth * 2);
         var icon = GetNodeIcon(node);
@@ -441,9 +441,17 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         if (!isSelected)
             return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}[/]");
 
-        return isActive ?
-            new Markup($"{indent} [black on blue]{Markup.Remove(icon)} {Markup.Escape(name)}[/]") :
-            new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]");
+        if (isActive)
+        {
+            return new Markup($"{indent} [black on blue]{Markup.Remove(icon)} {Markup.Escape(name)}[/]");
+        }
+
+        if (suppressHighlight)
+        {
+            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}[/]");
+        }
+
+        return new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]");
     }
 
     private static string GetNodeIcon(ExplorerNode node)
