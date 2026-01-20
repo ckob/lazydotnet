@@ -26,7 +26,7 @@ public class ProjectDetailsPane : IKeyBindable
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public ProjectDetailsPane(SolutionService solutionService, TestService testService, IEditorService editorService)
+    public ProjectDetailsPane(SolutionService solutionService, IEditorService editorService)
     {
         _nugetTab = new NuGetDetailsTab();
         var refsTab = new ProjectReferencesTab(solutionService, editorService);
