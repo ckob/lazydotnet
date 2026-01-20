@@ -28,6 +28,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
 
     public void SetSolution(SolutionInfo solution)
     {
+        editorService.RootPath = Path.GetDirectoryName(solution.Path);
         _root = BuildTree(solution);
         RefreshVisibleNodes();
     }

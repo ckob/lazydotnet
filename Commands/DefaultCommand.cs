@@ -91,7 +91,7 @@ public sealed class DefaultCommand : AsyncCommand<DefaultSettings>
             }
         }
 
-        var editorService = new EditorService();
+        var editorService = new EditorService { RootPath = rootDir };
         var solutionService = new SolutionService();
         var detailsPane = new ProjectDetailsPane(solutionService, editorService);
         var layout = new AppLayout();

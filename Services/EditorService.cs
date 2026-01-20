@@ -5,11 +5,14 @@ namespace lazydotnet.Services;
 
 public interface IEditorService
 {
+    string? RootPath { get; set; }
     Task OpenFileAsync(string filePath, int? lineNumber = null);
 }
 
 public class EditorService : IEditorService
 {
+    public string? RootPath { get; set; }
+
     private enum EditorType
     {
         VsCodeStyle,
@@ -21,6 +24,11 @@ public class EditorService : IEditorService
         var (command, type) = GetEditorInfo();
         var args = new List<string>();
 
+        if (type is EditorType.VsCodeStyle or EditorType.ZedStyle)
+        {
+            args.Add(RootPath ?? Directory.GetCurrentDirectory());
+        }
+
         switch (type)
         {
             case EditorType.VsCodeStyle:
@@ -28,8 +36,7 @@ public class EditorService : IEditorService
                 break;
 
             case EditorType.ZedStyle:
-                var zedArgs = GetZedStyleArgs(filePath, lineNumber);
-                args.AddRange(zedArgs);
+                args.AddRange(GetZedStyleArgs(filePath, lineNumber));
                 break;
             default:
                 args.Add(lineNumber.HasValue ? $"{filePath}:{lineNumber}" : filePath);
