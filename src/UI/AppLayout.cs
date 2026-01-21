@@ -55,7 +55,7 @@ public class AppLayout
 
     public Layout GetRoot() => _rootLayout;
 
-    public int ActivePanel { get; private set; }
+    public int ActivePanel { get; private set; } = 2;
 
     public int BottomActiveTab { get; }
 

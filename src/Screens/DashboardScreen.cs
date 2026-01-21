@@ -12,7 +12,7 @@ public class DashboardScreen : IScreen
     private readonly ProjectDetailsPane _detailsPane;
     private readonly WorkspacePane _workspacePane;
     private string? _currentViewedPath;
-    private bool _isViewingRoot = true;
+    private bool _isViewingRoot;
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _buildCts;
     private bool _needsRefresh;
