@@ -13,6 +13,7 @@ public partial class LogViewer : IKeyBindable
 
     private int _scrollOffset;
     private int _selectedLogicalIndex = -1; // -1 means auto-scroll
+    public bool IsStreaming => _selectedLogicalIndex == -1;
 
     private const int MaxLogLines = 1000;
 
@@ -28,6 +29,11 @@ public partial class LogViewer : IKeyBindable
             k => k.Key == ConsoleKey.PageUp, false);
         yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => PageDown(10)),
             k => k.Key == ConsoleKey.PageDown, false);
+        yield return new KeyBinding("esc", "resume stream", () =>
+        {
+            lock (_lock) { _selectedLogicalIndex = -1; }
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.Escape, false);
     }
 
     public bool HandleInput(ConsoleKeyInfo key)

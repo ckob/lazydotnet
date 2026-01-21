@@ -130,6 +130,11 @@ public class AppLayout
         var isActive = ActivePanel == 3;
         var logTab = "[green]Log[/]";
 
+        if (!LogViewer.IsStreaming)
+        {
+            logTab = isActive ? "[yellow]Log (Stopped - Esc to Stream)[/]" : "[yellow]Log (Stopped)[/]";
+        }
+
         var header = isActive
             ? $"[green][[3]][/]-{logTab}"
             : $"[dim][[3]][/]-{logTab}";
