@@ -1,9 +1,9 @@
 # Build & Test
-- Build: `dotnet clean && dotnet build`. **CRITICAL:** Fix all compiler warnings.
+- Build: `dotnet clean && dotnet build`. **CRITICAL:** Always execute clean and build and fix all compiler warnings.
 - Run: `dotnet run` (requires .sln in directory)
 
 # Code Style
-- **Framework:** .NET 10. C# 14. Use `Microsoft.Build` and `Spectre.Console`.
+- **Framework:** .NET 10. C# 14.
 - **Formatting:** 4 spaces indentation. Allman style braces (new line).
 - **Namespaces:** Use file-scoped namespaces (`namespace My.Namespace;`).
 - **Async:** Use `async/await` and append `Async` to method names.

@@ -5,8 +5,23 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <DefaultItemExcludes>$(DefaultItemExcludes);TestData/**;References/**</DefaultItemExcludes>
+
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>lazydotnet</ToolCommandName>
+    <PackageId>lazydotnet</PackageId>
+
+    <Authors>ckob</Authors>
+    <Description>A generic Terminal User Interface (TUI) for .NET. Visualize your solution, run builds and tests, and manage projects with a keyboard-driven workflow inspired by lazygit.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/ckob/lazydotnet</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ckob/lazydotnet</PackageProjectUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CliWrap" Version="3.10.0" />
