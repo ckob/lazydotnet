@@ -6,7 +6,25 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <DefaultItemExcludes>$(DefaultItemExcludes);TestData/**;References/**</DefaultItemExcludes>
+    
+    <!-- Dotnet Tool Configuration -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>lazydotnet</ToolCommandName>
+    <PackageId>lazydotnet</PackageId>
+    
+    <!-- NuGet Metadata -->
+    <Authors>ckob</Authors>
+    <Description>A lazy dotnet tool for local development automation.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/ckob/lazydotnet</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ckob/lazydotnet</PackageProjectUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CliWrap" Version="3.10.0" />
