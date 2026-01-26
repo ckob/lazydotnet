@@ -225,6 +225,10 @@ public class NuGetDetailsTab : IProjectTab
         yield return new KeyBinding("j", "down", () => Task.Run(MoveDown),
             k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
+        yield return new KeyBinding("pgup", "page up", () => Task.Run(() => { lock(_lock) { _nugetList.PageUp(10); } }),
+            k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+        yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => { lock(_lock) { _nugetList.PageDown(10); } }),
+            k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
     }
 
     private IEnumerable<KeyBinding> GetActionBindings()
@@ -243,7 +247,7 @@ public class NuGetDetailsTab : IProjectTab
 
         if (_nugetList.Items.Any(p => p.IsOutdated))
         {
-            yield return new KeyBinding("U", "update all", UpdateAllOutdatedAsync, k => k.KeyChar == 'U');
+            yield return new KeyBinding("U", "update all", UpdateAllOutdatedAsync, k => k.Key == ConsoleKey.U && (k.Modifiers & ConsoleModifiers.Shift) != 0);
         }
     }
 
@@ -259,7 +263,7 @@ public class NuGetDetailsTab : IProjectTab
             );
             RequestModal?.Invoke(modal);
             return Task.CompletedTask;
-        }, k => k.KeyChar == 'a');
+        }, k => k.Key == ConsoleKey.A);
     }
 
     private IEnumerable<KeyBinding> GetSelectedItemBindings(bool isSolution)
@@ -270,7 +274,7 @@ public class NuGetDetailsTab : IProjectTab
         {
             yield return new KeyBinding("u", "update", () =>
                     UpdatePackageAsync(pkg.Id, pkg.LatestVersion!),
-                k => k.KeyChar == 'u');
+                k => k.Key == ConsoleKey.U && (k.Modifiers & ConsoleModifiers.Shift) == 0);
         }
 
         if (!isSolution)
@@ -294,7 +298,7 @@ public class NuGetDetailsTab : IProjectTab
 
             RequestModal?.Invoke(confirm);
             return Task.CompletedTask;
-        }, k => k.KeyChar == 'd');
+        }, k => k.Key == ConsoleKey.D);
     }
 
     private KeyBinding GetVersionsBinding(NuGetPackageInfo pkg)

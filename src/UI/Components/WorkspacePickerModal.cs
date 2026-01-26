@@ -65,6 +65,18 @@ public class WorkspacePickerModal : Modal
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            _workspaceList.PageUp(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            _workspaceList.PageDown(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+
         yield return new KeyBinding("enter", "select", () =>
         {
             if (_workspaceList.SelectedItem != null)

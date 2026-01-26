@@ -35,7 +35,19 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
-        yield return new KeyBinding("a", "add", AddReferenceAsync, k => k.KeyChar == 'a');
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            PageUp(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            PageDown(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+
+        yield return new KeyBinding("a", "add", AddReferenceAsync, k => k.Key == ConsoleKey.A);
 
         if (_refsList.SelectedItem != null)
         {
@@ -44,14 +56,18 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
                 RequestSelectProject?.Invoke(_refsList.SelectedItem);
                 return Task.CompletedTask;
             }, k => k.Key == ConsoleKey.Enter);
-            yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
-            yield return new KeyBinding("d", "delete", RemoveReferenceAsync, k => k.KeyChar == 'd');
+            yield return new KeyBinding("e", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
+            yield return new KeyBinding("d", "delete", RemoveReferenceAsync, k => k.Key == ConsoleKey.D);
         }
     }
 
     public void MoveUp() => _refsList.MoveUp();
 
     public void MoveDown() => _refsList.MoveDown();
+
+    public void PageUp(int pageSize) => _refsList.PageUp(pageSize);
+
+    public void PageDown(int pageSize) => _refsList.PageDown(pageSize);
 
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
     {

@@ -26,9 +26,11 @@ public partial class LogViewer : IKeyBindable
             k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
                  (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
         yield return new KeyBinding("pgup", "page up", () => Task.Run(() => PageUp(10)),
-            k => k.Key == ConsoleKey.PageUp, false);
+            k => k.Key == ConsoleKey.PageUp ||
+                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
         yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => PageDown(10)),
-            k => k.Key == ConsoleKey.PageDown, false);
+            k => k.Key == ConsoleKey.PageDown ||
+                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
         yield return new KeyBinding("esc", "resume stream", () =>
         {
             lock (_lock) { _selectedLogicalIndex = -1; }

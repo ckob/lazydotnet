@@ -135,8 +135,8 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         yield return GetCollapseBinding(node);
         yield return GetToggleBinding(node);
         yield return GetDetailsBinding(node);
-        yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.KeyChar == 'r' || k.KeyChar == 'R');
-        yield return new KeyBinding("e/o", "open", () => OpenInEditorAsync(node), k => k.KeyChar == 'e' || k.KeyChar == 'o');
+        yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.Key == ConsoleKey.R);
+        yield return new KeyBinding("e", "open", () => OpenInEditorAsync(node), k => k.Key == ConsoleKey.E);
     }
 
     private IEnumerable<KeyBinding> GetNavigationBindings()
@@ -152,6 +152,18 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             MoveDown();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            PageUp(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            PageDown(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
     }
 
     private KeyBinding GetExpandBinding(TestNode node)
@@ -273,9 +285,9 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         if (node.FilePath != null)
         {
             modal.SetAdditionalKeyBindings([
-                new KeyBinding("e/o", "open in editor", async () => {
+                new KeyBinding("e", "open in editor", async () => {
                     await editorService.OpenFileAsync(node.FilePath, node.LineNumber);
-                }, k => k.KeyChar is 'e' or 'o' or 'E' or 'O')
+                }, k => k.Key == ConsoleKey.E)
             ]);
         }
 
@@ -321,6 +333,20 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         {
             _selectedIndex++;
         }
+    }
+
+    public void PageUp(int pageSize)
+    {
+        if (_visibleNodes.Count == 0) return;
+        if (_selectedIndex == -1) _selectedIndex = _visibleNodes.Count - 1;
+        _selectedIndex = Math.Max(0, _selectedIndex - pageSize);
+    }
+
+    public void PageDown(int pageSize)
+    {
+        if (_visibleNodes.Count == 0) return;
+        if (_selectedIndex == -1) _selectedIndex = 0;
+        _selectedIndex = Math.Min(_visibleNodes.Count - 1, _selectedIndex + pageSize);
     }
 
     private async Task OpenInEditorAsync(TestNode node)

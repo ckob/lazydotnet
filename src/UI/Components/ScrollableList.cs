@@ -47,6 +47,18 @@ public class ScrollableList<T>
         }
     }
 
+    public void PageUp(int pageSize)
+    {
+        if (_items.Count == 0) return;
+        SelectedIndex = Math.Max(0, SelectedIndex - pageSize);
+    }
+
+    public void PageDown(int pageSize)
+    {
+        if (_items.Count == 0) return;
+        SelectedIndex = Math.Min(_items.Count - 1, SelectedIndex + pageSize);
+    }
+
     public void Select(int index)
     {
         if (index >= 0 && index < _items.Count)

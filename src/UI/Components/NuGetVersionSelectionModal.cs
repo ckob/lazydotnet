@@ -120,6 +120,18 @@ public class NuGetVersionSelectionModal : Modal
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            _versionList.PageUp(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            _versionList.PageDown(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+
         yield return new KeyBinding("enter", "select", () =>
         {
             if (_versionList.SelectedItem != null)

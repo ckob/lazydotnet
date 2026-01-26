@@ -56,6 +56,18 @@ public class NuGetSearchModal : Modal
             _searchList.MoveDown();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || (k.Modifiers == ConsoleModifiers.Control && (k.Key == ConsoleKey.N || k.Key == ConsoleKey.J)), false);
+
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            _searchList.PageUp(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            _searchList.PageDown(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
     }
 
     public override async Task<bool> HandleInputAsync(ConsoleKeyInfo key)

@@ -42,6 +42,24 @@ public class SelectionModal<T> : Modal
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N },
             ShowInBottomBar: false);
 
+        yield return new KeyBinding("pgup", "page up", () =>
+            {
+                _options.PageUp(10);
+                return Task.CompletedTask;
+            },
+            k => k.Key == ConsoleKey.PageUp ||
+                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U },
+            ShowInBottomBar: false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+            {
+                _options.PageDown(10);
+                return Task.CompletedTask;
+            },
+            k => k.Key == ConsoleKey.PageDown ||
+                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.D },
+            ShowInBottomBar: false);
+
         yield return new KeyBinding("enter", "select", () =>
         {
             if (_options is not { Count: > 0, SelectedIndex: >= 0 })

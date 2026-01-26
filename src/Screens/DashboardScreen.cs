@@ -198,9 +198,9 @@ public class DashboardScreen : IScreen
         yield return new KeyBinding("0-3", "switch panel", () => Task.CompletedTask,
             k => k.Key is ConsoleKey.D0 or ConsoleKey.D1 or ConsoleKey.D2 or ConsoleKey.D3, false);
         yield return new KeyBinding("b", "build project", () => HandleBuildAsync(_layout),
-            k => k.KeyChar == 'b');
+            k => k.Key == ConsoleKey.B && (k.Modifiers & ConsoleModifiers.Shift) == 0);
         yield return new KeyBinding("B", "build solution", () => HandleBuildAsync(_layout, true),
-            k => k.KeyChar == 'B');
+            k => k.Key == ConsoleKey.B && (k.Modifiers & ConsoleModifiers.Shift) != 0);
         yield return new KeyBinding("ctrl+r", "reload", HandleReloadAsync,
             k => k is { Key: ConsoleKey.R, Modifiers: ConsoleModifiers.Control });
         yield return new KeyBinding("?", "keybindings", () =>

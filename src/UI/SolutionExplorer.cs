@@ -220,6 +220,18 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
 
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            PageUp(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            PageDown(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+
         yield return new KeyBinding("←", "collapse", () =>
         {
             Collapse();
@@ -238,7 +250,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
 
-        yield return new KeyBinding("e/o", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E || k.Key == ConsoleKey.O);
+        yield return new KeyBinding("e", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
     }
 
     private async Task OpenInEditorAsync()
@@ -275,6 +287,20 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         {
             _selectedIndex++;
         }
+    }
+
+    private void PageUp(int pageSize)
+    {
+        if (_visibleNodes.Count == 0) return;
+        if (_selectedIndex == -1) _selectedIndex = _visibleNodes.Count - 1;
+        _selectedIndex = Math.Max(0, _selectedIndex - pageSize);
+    }
+
+    private void PageDown(int pageSize)
+    {
+        if (_visibleNodes.Count == 0) return;
+        if (_selectedIndex == -1) _selectedIndex = 0;
+        _selectedIndex = Math.Min(_visibleNodes.Count - 1, _selectedIndex + pageSize);
     }
 
     private void Collapse()
