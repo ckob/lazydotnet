@@ -63,6 +63,25 @@ public class DashboardScreen : IScreen
             _isViewingRoot = false;
             _needsRefresh = true;
         };
+
+        _explorer.OnRequestRun = async p =>
+        {
+            if (!p.IsRunnable)
+            {
+                _layout.AddLog($"[yellow]Project {Markup.Escape(p.Name)} is not runnable.[/]");
+                return;
+            }
+            await ExecutionService.Instance.StartProjectAsync(p.Path, p.Name);
+            _detailsPane.ActivateExecutionTab();
+            _layout.SetActivePanel(0); // Focus details pane
+            _needsRefresh = true;
+        };
+
+        _explorer.OnRequestStop = async p =>
+        {
+            await ExecutionService.Instance.StopProjectAsync(p.Path);
+            _needsRefresh = true;
+        };
     }
 
     public void OnEnter()
@@ -159,7 +178,7 @@ public class DashboardScreen : IScreen
             {
                 try
                 {
-                    await Task.Delay(500, token);
+                    await Task.Delay(100, token);
                     if (token.IsCancellationRequested) return;
 
                     await _detailsPane.LoadProjectDataAsync(targetPath, targetName);
@@ -201,6 +220,12 @@ public class DashboardScreen : IScreen
             k => k.Key == ConsoleKey.B && (k.Modifiers & ConsoleModifiers.Shift) == 0);
         yield return new KeyBinding("B", "build solution", () => HandleBuildAsync(_layout, true),
             k => k.Key == ConsoleKey.B && (k.Modifiers & ConsoleModifiers.Shift) != 0);
+        yield return new KeyBinding("S", "stop all projects", async () =>
+        {
+            await ExecutionService.Instance.StopAllAsync();
+            _layout.AddLog("[yellow]Stopped all running projects.[/]");
+            _needsRefresh = true;
+        }, k => k.Key == ConsoleKey.S && (k.Modifiers & ConsoleModifiers.Shift) != 0);
         yield return new KeyBinding("ctrl+r", "reload", HandleReloadAsync,
             k => k is { Key: ConsoleKey.R, Modifiers: ConsoleModifiers.Control });
         yield return new KeyBinding("?", "keybindings", () =>
@@ -266,6 +291,7 @@ public class DashboardScreen : IScreen
             new("0-3", "switch panel", () => Task.CompletedTask, _ => false),
             new("b", "build project", () => Task.CompletedTask, _ => false),
             new("B", "build solution", () => Task.CompletedTask, _ => false),
+            new("S", "stop all projects", () => Task.CompletedTask, _ => false),
             new("ctrl+r", "reload", () => Task.CompletedTask, _ => false),
             new("?", "keybindings", () => Task.CompletedTask, _ => false)
         };

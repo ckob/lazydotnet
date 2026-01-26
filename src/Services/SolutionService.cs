@@ -8,6 +8,8 @@ public record ProjectInfo
     public required string Name { get; init; }
     public required string Path { get; init; }
     public required string Id { get; init; }
+    public bool IsRunnable { get; set; }
+    public bool IsRunning { get; set; }
 }
 
 public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects, bool IsSlnx = false, bool IsSlnf = false);
@@ -57,11 +59,15 @@ public class SolutionService
         var solution = SolutionFile.Parse(solutionFile);
         var projects = solution.ProjectsInOrder
             .Where(p => p.ProjectType != SolutionProjectType.SolutionFolder)
-            .Select(proj => new ProjectInfo
-            {
-                Name = proj.ProjectName,
-                Path = proj.AbsolutePath,
-                Id = proj.AbsolutePath
+            .Select(proj => {
+                var info = new ProjectInfo
+                {
+                    Name = proj.ProjectName,
+                    Path = proj.AbsolutePath,
+                    Id = proj.AbsolutePath
+                };
+                info.IsRunnable = IsProjectRunnable(proj.AbsolutePath);
+                return info;
             }).ToList();
 
         CurrentSolution = new SolutionInfo(
@@ -168,10 +174,37 @@ public class SolutionService
         {
             Name = Path.GetFileNameWithoutExtension(fullPath),
             Path = fullPath,
-            Id = fullPath
+            Id = fullPath,
+            IsRunnable = IsProjectRunnable(fullPath)
         };
 
         CurrentSolution = new SolutionInfo(project.Name, fullPath, [project]);
         return Task.FromResult<SolutionInfo?>(CurrentSolution);
+    }
+
+    private static bool IsProjectRunnable(string projectPath)
+    {
+        try
+        {
+            // Fast heuristic: check file for OutputType or Web SDK without full MSBuild evaluation
+            using var reader = new StreamReader(projectPath);
+            var lineCount = 0;
+            while (reader.ReadLine() is { } line && lineCount < 100)
+            {
+                lineCount++;
+                if (line.Contains("<OutputType>Exe</OutputType>", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("<OutputType>WinExe</OutputType>", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("Sdk=\"Microsoft.NET.Sdk.Web\"", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("Sdk=\"Microsoft.NET.Sdk.Worker\"", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

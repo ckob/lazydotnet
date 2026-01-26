@@ -17,6 +17,7 @@ public class ExplorerNode
     public int Depth { get; set; }
     public List<ExplorerNode> Children { get; } = [];
     public ExplorerNode? Parent { get; set; }
+    public ProjectInfo? ProjectInfo { get; set; }
 }
 
 public class SolutionExplorer(IEditorService editorService) : IKeyBindable
@@ -46,7 +47,8 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
                 IsProject = true,
                 ProjectPath = proj.Path,
                 IsExpanded = true,
-                Depth = 0
+                Depth = 0,
+                ProjectInfo = proj
             };
         }
 
@@ -87,7 +89,8 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
                 Name = proj.Name,
                 IsProject = true,
                 ProjectPath = proj.Path,
-                IsExpanded = true
+                IsExpanded = true,
+                ProjectInfo = proj
             };
         }
         return nodeMap;
@@ -251,7 +254,30 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
 
         yield return new KeyBinding("e", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
+
+        var selectedProject = GetSelectedProject();
+        var isRunning = selectedProject != null && ExecutionService.Instance.IsRunning(selectedProject.Path);
+
+        yield return new KeyBinding("r", isRunning ? "re-run" : "run", () => 
+        {
+            var project = GetSelectedProject();
+            if (project != null) OnRequestRun?.Invoke(project);
+            return Task.CompletedTask;
+        }, k => k.KeyChar == 'r');
+
+        if (isRunning)
+        {
+            yield return new KeyBinding("s", "stop", () => 
+            {
+                var project = GetSelectedProject();
+                if (project != null) OnRequestStop?.Invoke(project);
+                return Task.CompletedTask;
+            }, k => k.KeyChar == 's');
+        }
     }
+
+    public Action<ProjectInfo>? OnRequestRun { get; set; }
+    public Action<ProjectInfo>? OnRequestStop { get; set; }
 
     private async Task OpenInEditorAsync()
     {
@@ -429,6 +455,11 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         if (_root == null) return null;
         var node = GetSelectedNode();
 
+        if (node.ProjectInfo != null)
+        {
+            return node.ProjectInfo;
+        }
+
         if (node.ProjectPath != null)
         {
             return new ProjectInfo { Name = node.Name, Path = node.ProjectPath, Id = node.ProjectPath };
@@ -463,21 +494,27 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         var indent = new string(' ', node.Depth * 2);
         var icon = GetNodeIcon(node);
         var name = GetTruncatedName(node.Name, node.Depth, availableWidth);
+        
+        var runningStatus = "";
+        if (node.IsProject && node.ProjectPath != null && ExecutionService.Instance.IsRunning(node.ProjectPath))
+        {
+            runningStatus = " [bold green](R)[/]";
+        }
 
         if (!isSelected)
-            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}[/]");
+            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}{runningStatus}[/]");
 
         if (isActive)
         {
-            return new Markup($"{indent} [black on blue]{Markup.Remove(icon)} {Markup.Escape(name)}[/]");
+            return new Markup($"{indent} [black on blue]{Markup.Remove(icon)} {Markup.Escape(name)}[/]{runningStatus}");
         }
 
         if (suppressHighlight)
         {
-            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}[/]");
+            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}{runningStatus}[/]");
         }
 
-        return new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]");
+        return new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]{runningStatus}");
     }
 
     private static string GetNodeIcon(ExplorerNode node)

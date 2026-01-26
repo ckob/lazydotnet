@@ -22,4 +22,12 @@ public class TabbedPane
     {
         ActiveTab = (ActiveTab - 1 + _tabNames.Length) % _tabNames.Length;
     }
+
+    public void SetActiveTab(int index)
+    {
+        if (index >= 0 && index < _tabNames.Length)
+        {
+            ActiveTab = index;
+        }
+    }
 }

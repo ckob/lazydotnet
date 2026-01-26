@@ -1,5 +1,6 @@
 using Spectre.Console;
 using lazydotnet.UI;
+using lazydotnet.Services;
 
 namespace lazydotnet.Core;
 
@@ -43,6 +44,8 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                     {
                         await ProcessTickAsync(ctx);
                     }
+
+                    await ExecutionService.Instance.StopAllAsync();
                 }).GetAwaiter().GetResult();
         });
 

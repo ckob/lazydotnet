@@ -16,8 +16,8 @@ public class AppLayout
             new Layout("LeftContainer").SplitRows(
                 new Layout("Workspace").Size(3),
                 new Layout("Left")
-            ).Ratio(35),
-            new Layout("Right").Ratio(65)
+            ).Ratio(33),
+            new Layout("Right").Ratio(67)
         ).Ratio(TopRatio),
         new Layout("Bottom").Ratio(BottomRatio)
     );
@@ -132,7 +132,7 @@ public class AppLayout
 
         if (!LogViewer.IsStreaming)
         {
-            logTab = isActive ? "[yellow]Log (Stopped - Esc to Stream)[/]" : "[yellow]Log (Stopped)[/]";
+            logTab = isActive ? "[yellow]Log (Esc to resume Stream)[/]" : "[yellow]Log (Paused)[/]";
         }
 
         var header = isActive

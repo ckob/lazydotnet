@@ -11,6 +11,7 @@ public class ProjectDetailsPane : IKeyBindable
     private readonly TabbedPane _tabs;
     private readonly NuGetDetailsTab _nugetTab;
     private readonly TestDetailsTab _testsTab;
+    private readonly ExecutionTab _executionTab;
     private readonly List<IProjectTab> _tabInstances = [];
 
     private string? _currentProjectPath;
@@ -32,10 +33,12 @@ public class ProjectDetailsPane : IKeyBindable
         _nugetTab = new NuGetDetailsTab();
         var refsTab = new ProjectReferencesTab(solutionService, editorService);
         _testsTab = new TestDetailsTab(editorService);
+        _executionTab = new ExecutionTab();
 
         _tabInstances.Add(refsTab);
         _tabInstances.Add(_nugetTab);
         _tabInstances.Add(_testsTab);
+        _tabInstances.Add(_executionTab);
 
         foreach (var tab in _tabInstances)
         {
@@ -44,10 +47,16 @@ public class ProjectDetailsPane : IKeyBindable
             tab.RequestSelectProject = p => RequestSelectProject?.Invoke(p);
         }
 
-        _tabs = new TabbedPane(ProjectReferencesTab.Title, NuGetDetailsTab.Title, TestDetailsTab.Title);
+        _tabs = new TabbedPane(ProjectReferencesTab.Title, NuGetDetailsTab.Title, TestDetailsTab.Title, ExecutionTab.Title);
     }
 
     public int ActiveTab => _tabs.ActiveTab;
+
+    public void ActivateExecutionTab()
+    {
+        _tabs.SetActiveTab(3);
+        TriggerLoad();
+    }
 
     public TestNode? GetSelectedTestNode()
     {
@@ -161,8 +170,15 @@ public class ProjectDetailsPane : IKeyBindable
         var refsTab = _tabs.ActiveTab == 0 ? "[green]Project References[/]" : "[dim]Project References[/]";
         var nugetTab = _tabs.ActiveTab == 1 ? "[green]NuGets[/]" : "[dim]NuGets[/]";
         var testsTab = _tabs.ActiveTab == 2 ? "[green]Tests[/]" : "[dim]Tests[/]";
+        
+        var execTitle = "Execution";
+        if (!_executionTab.IsStreaming)
+        {
+            execTitle = _tabs.ActiveTab == 3 ? "Execution (Esc to resume Stream)" : "Execution (Paused)";
+        }
+        var execTab = _tabs.ActiveTab == 3 ? $"[green]{execTitle}[/]" : $"[dim]{execTitle}[/]";
 
-        return $"{refsTab} - {nugetTab} - {testsTab}";
+        return $"{refsTab} - {nugetTab} - {testsTab} - {execTab}";
     }
 
     public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive)
