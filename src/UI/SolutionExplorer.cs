@@ -211,73 +211,91 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("k", "up", () =>
-        {
-            MoveUp();
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
-
-        yield return new KeyBinding("j", "down", () =>
-        {
-            MoveDown();
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
-
-        yield return new KeyBinding("pgup", "page up", () =>
-        {
-            PageUp(10);
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
-
-        yield return new KeyBinding("pgdn", "page down", () =>
-        {
-            PageDown(10);
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
-
-        yield return new KeyBinding("←", "collapse", () =>
-        {
-            Collapse();
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.LeftArrow, false);
-
-        yield return new KeyBinding("→", "expand", () =>
-        {
-            Expand();
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.RightArrow, false);
-
-        yield return new KeyBinding("enter/space", "toggle", () =>
-        {
-            ToggleExpand();
-            return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
-
+        yield return new KeyBinding("k", "up", DoMoveUp, MatchUpKey, false);
+        yield return new KeyBinding("j", "down", DoMoveDown, MatchDownKey, false);
+        yield return new KeyBinding("pgup", "page up", DoPageUp, MatchPageUpKey, false);
+        yield return new KeyBinding("pgdn", "page down", DoPageDown, MatchPageDownKey, false);
+        yield return new KeyBinding("←", "collapse", DoCollapse, k => k.Key == ConsoleKey.LeftArrow, false);
+        yield return new KeyBinding("→", "expand", DoExpand, k => k.Key == ConsoleKey.RightArrow, false);
+        yield return new KeyBinding("enter/space", "toggle", DoToggle, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
         yield return new KeyBinding("e", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
+        yield return new KeyBinding("b", "build", DoBuild, k => k.KeyChar == 'b');
 
         var selectedProject = GetSelectedProject();
         var isRunning = selectedProject != null && ExecutionService.Instance.IsRunning(selectedProject.Path);
 
-        yield return new KeyBinding("r", isRunning ? "re-run" : "run", () => 
-        {
-            var project = GetSelectedProject();
-            if (project != null) OnRequestRun?.Invoke(project);
-            return Task.CompletedTask;
-        }, k => k.KeyChar == 'r');
+        yield return new KeyBinding("r", isRunning ? "re-run" : "run", DoRun, k => k.KeyChar == 'r');
 
         if (isRunning)
         {
-            yield return new KeyBinding("s", "stop", () => 
-            {
-                var project = GetSelectedProject();
-                if (project != null) OnRequestStop?.Invoke(project);
-                return Task.CompletedTask;
-            }, k => k.KeyChar == 's');
+            yield return new KeyBinding("s", "stop", DoStop, k => k.KeyChar == 's');
         }
+    }
+
+    private static bool MatchUpKey(ConsoleKeyInfo k) =>
+        k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P };
+
+    private static bool MatchDownKey(ConsoleKeyInfo k) =>
+        k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N };
+
+    private static bool MatchPageUpKey(ConsoleKeyInfo k) =>
+        k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U);
+
+    private static bool MatchPageDownKey(ConsoleKeyInfo k) =>
+        k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D);
+
+    private Task DoMoveUp() { MoveUp(); return Task.CompletedTask; }
+    private Task DoMoveDown() { MoveDown(); return Task.CompletedTask; }
+    private Task DoPageUp() { PageUp(10); return Task.CompletedTask; }
+    private Task DoPageDown() { PageDown(10); return Task.CompletedTask; }
+    private Task DoCollapse() { Collapse(); return Task.CompletedTask; }
+    private Task DoExpand() { Expand(); return Task.CompletedTask; }
+    private Task DoToggle() { ToggleExpand(); return Task.CompletedTask; }
+
+    private Task DoBuild()
+    {
+        var node = GetSelectedNode();
+        
+        // If it's a solution or project, build it directly
+        if ((node.IsSolution || node.IsProject) && node.ProjectPath != null)
+        {
+            OnRequestBuild?.Invoke(node.ProjectPath, node.Name);
+            return Task.CompletedTask;
+        }
+        
+        // For folder nodes, build all child projects
+        var projects = GetAllChildProjects(node).ToList();
+        if (projects.Count > 0) OnRequestBuildProjects?.Invoke(projects);
+        return Task.CompletedTask;
+    }
+
+    private Task DoRun()
+    {
+        var node = GetSelectedNode();
+        if (node.IsProject && node.ProjectInfo != null)
+        {
+            OnRequestRun?.Invoke(node.ProjectInfo);
+        }
+        else
+        {
+            var runnableProjects = GetAllChildProjects(node).Where(p => p.IsRunnable).ToList();
+            if (runnableProjects.Count > 0) OnRequestRunProjects?.Invoke(runnableProjects);
+        }
+        return Task.CompletedTask;
+    }
+
+    private Task DoStop()
+    {
+        var project = GetSelectedProject();
+        if (project != null) OnRequestStop?.Invoke(project);
+        return Task.CompletedTask;
     }
 
     public Action<ProjectInfo>? OnRequestRun { get; set; }
     public Action<ProjectInfo>? OnRequestStop { get; set; }
+    public Action<string, string>? OnRequestBuild { get; set; }
+    public Action<List<ProjectInfo>>? OnRequestBuildProjects { get; set; }
+    public Action<List<ProjectInfo>>? OnRequestRunProjects { get; set; }
 
     private async Task OpenInEditorAsync()
     {
@@ -465,6 +483,23 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
             return new ProjectInfo { Name = node.Name, Path = node.ProjectPath, Id = node.ProjectPath };
         }
         return null;
+    }
+
+    private static IEnumerable<ProjectInfo> GetAllChildProjects(ExplorerNode node)
+    {
+        if (node.IsProject && node.ProjectInfo != null)
+        {
+            yield return node.ProjectInfo;
+            yield break;
+        }
+
+        foreach (var child in node.Children)
+        {
+            foreach (var project in GetAllChildProjects(child))
+            {
+                yield return project;
+            }
+        }
     }
 
     public IRenderable GetContent(int availableHeight, int availableWidth, bool isActive, bool suppressHighlight = false)

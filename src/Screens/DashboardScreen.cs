@@ -40,22 +40,20 @@ public class DashboardScreen : IScreen
 
         _workspacePane = new WorkspacePane(solutionService, rootDir)
         {
-            OnWorkspaceSelected = async path => await LoadWorkspaceAsync(path),
-            RequestModal = m =>
-            {
-                _activeModal = m;
-                _needsRefresh = true;
-            },
+            OnWorkspaceSelected = path => { _ = LoadWorkspaceAsync(path); },
+            RequestModal = m => { _activeModal = m; _needsRefresh = true; },
             RequestRefresh = () => _needsRefresh = true
         };
 
+        SetupDetailsPaneHandlers();
+        SetupExplorerHandlers();
+    }
+
+    private void SetupDetailsPaneHandlers()
+    {
         _detailsPane.LogAction = msg => _layout.AddLog(msg);
         _detailsPane.RequestRefresh = () => _needsRefresh = true;
-        _detailsPane.RequestModal = m =>
-        {
-            _activeModal = m;
-            _needsRefresh = true;
-        };
+        _detailsPane.RequestModal = m => { _activeModal = m; _needsRefresh = true; };
         _detailsPane.RequestSelectProject = p =>
         {
             _explorer.SelectProjectByPath(p);
@@ -63,25 +61,101 @@ public class DashboardScreen : IScreen
             _isViewingRoot = false;
             _needsRefresh = true;
         };
+    }
 
-        _explorer.OnRequestRun = async p =>
+    private void SetupExplorerHandlers()
+    {
+        _explorer.OnRequestRun = p =>
         {
             if (!p.IsRunnable)
             {
                 _layout.AddLog($"[yellow]Project {Markup.Escape(p.Name)} is not runnable.[/]");
                 return;
             }
-            await ExecutionService.Instance.StartProjectAsync(p.Path, p.Name);
-            _detailsPane.ActivateExecutionTab();
-            _layout.SetActivePanel(0); // Focus details pane
-            _needsRefresh = true;
+            _ = RunProjectAsync(p);
         };
 
-        _explorer.OnRequestStop = async p =>
+        _explorer.OnRequestStop = p => { _ = ExecutionService.Instance.StopProjectAsync(p.Path); _needsRefresh = true; };
+        _explorer.OnRequestBuild = (path, name) => { _ = BuildSingleTargetAsync(path, name); };
+        _explorer.OnRequestBuildProjects = projects => { _ = BuildProjectsAsync(projects); };
+        _explorer.OnRequestRunProjects = projects => { _ = RunProjectsAsync(projects); };
+    }
+
+    private async Task BuildSingleTargetAsync(string path, string name)
+    {
+        _layout.AddLog($"[blue]Building {Markup.Escape(name)}...[/]");
+        try
         {
-            await ExecutionService.Instance.StopProjectAsync(p.Path);
-            _needsRefresh = true;
-        };
+            if (_buildCts != null)
+            {
+                await _buildCts.CancelAsync();
+                _buildCts.Dispose();
+            }
+
+            _buildCts = new CancellationTokenSource();
+            var result = await CommandService.BuildProjectAsync(path,
+                msg => { _layout.AddLog(Markup.Escape(msg)); }, _buildCts.Token);
+
+            _layout.AddLog(result.ExitCode == 0
+                ? $"[green]Build Succeeded: {Markup.Escape(name)}[/]"
+                : $"[red]Build Failed: {Markup.Escape(name)}[/]");
+        }
+        catch (Exception ex)
+        {
+            _layout.AddLog($"[red]Build Error: {ex.Message}[/]");
+        }
+        _needsRefresh = true;
+    }
+
+    private async Task RunProjectAsync(ProjectInfo p)
+    {
+        await ExecutionService.Instance.StartProjectAsync(p.Path, p.Name);
+        _detailsPane.ActivateExecutionTab();
+        _needsRefresh = true;
+    }
+
+    private async Task BuildProjectsAsync(List<ProjectInfo> projects)
+    {
+        var projectNames = string.Join(", ", projects.Select(p => p.Name));
+        _layout.AddLog($"[blue]Building {projects.Count} project(s): {Markup.Escape(projectNames)}...[/]");
+
+        foreach (var project in projects)
+        {
+            try
+            {
+                if (_buildCts != null)
+                {
+                    await _buildCts.CancelAsync();
+                    _buildCts.Dispose();
+                }
+
+                _buildCts = new CancellationTokenSource();
+                var result = await CommandService.BuildProjectAsync(project.Path,
+                    msg => { _layout.AddLog(Markup.Escape(msg)); }, _buildCts.Token);
+
+                _layout.AddLog(result.ExitCode == 0
+                    ? $"[green]Build Succeeded: {Markup.Escape(project.Name)}[/]"
+                    : $"[red]Build Failed: {Markup.Escape(project.Name)}[/]");
+            }
+            catch (Exception ex)
+            {
+                _layout.AddLog($"[red]Build Error for {Markup.Escape(project.Name)}: {ex.Message}[/]");
+            }
+        }
+        _needsRefresh = true;
+    }
+
+    private async Task RunProjectsAsync(List<ProjectInfo> projects)
+    {
+        var projectNames = string.Join(", ", projects.Select(p => p.Name));
+        _layout.AddLog($"[blue]Running {projects.Count} project(s) in parallel: {Markup.Escape(projectNames)}...[/]");
+
+        var tasks = projects.Select(project =>
+            ExecutionService.Instance.StartProjectAsync(project.Path, project.Name));
+
+        await Task.WhenAll(tasks);
+        _detailsPane.ActivateExecutionTab();
+        _needsRefresh = true;
     }
 
     public void OnEnter()
@@ -216,8 +290,6 @@ public class DashboardScreen : IScreen
             k => k.Key == ConsoleKey.Tab && (k.Modifiers & ConsoleModifiers.Shift) != 0, false);
         yield return new KeyBinding("0-3", "switch panel", () => Task.CompletedTask,
             k => k.Key is ConsoleKey.D0 or ConsoleKey.D1 or ConsoleKey.D2 or ConsoleKey.D3, false);
-        yield return new KeyBinding("b", "build project", () => HandleBuildAsync(_layout),
-            k => k.Key == ConsoleKey.B && (k.Modifiers & ConsoleModifiers.Shift) == 0);
         yield return new KeyBinding("B", "build solution", () => HandleBuildAsync(_layout, true),
             k => k.Key == ConsoleKey.B && (k.Modifiers & ConsoleModifiers.Shift) != 0);
         yield return new KeyBinding("S", "stop all projects", async () =>
@@ -289,7 +361,6 @@ public class DashboardScreen : IScreen
             new("tab", "next panel", () => Task.CompletedTask, _ => false),
             new("shift+tab", "prev panel", () => Task.CompletedTask, _ => false),
             new("0-3", "switch panel", () => Task.CompletedTask, _ => false),
-            new("b", "build project", () => Task.CompletedTask, _ => false),
             new("B", "build solution", () => Task.CompletedTask, _ => false),
             new("S", "stop all projects", () => Task.CompletedTask, _ => false),
             new("ctrl+r", "reload", () => Task.CompletedTask, _ => false),
