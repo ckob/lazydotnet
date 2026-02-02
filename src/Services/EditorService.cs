@@ -7,6 +7,7 @@ public interface IEditorService
 {
     string? RootPath { get; set; }
     Task OpenFileAsync(string filePath, int? lineNumber = null);
+    (string Command, List<string> Args) GetEditorLaunchCommand(string filePath, int? lineNumber = null);
 }
 
 public class EditorService : IEditorService
@@ -20,6 +21,28 @@ public class EditorService : IEditorService
     }
 
     public async Task OpenFileAsync(string filePath, int? lineNumber = null)
+    {
+        var (command, args) = GetEditorLaunchCommand(filePath, lineNumber);
+
+        try
+        {
+            await Cli.Wrap(command)
+                .WithArguments(args)
+                .WithValidation(CommandResultValidation.None)
+                .ExecuteAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to open editor '{command}': {ex.Message}");
+
+            if (command != "open" && OperatingSystem.IsMacOS())
+            {
+                await Cli.Wrap("open").WithArguments(filePath).ExecuteAsync();
+            }
+        }
+    }
+
+    public (string Command, List<string> Args) GetEditorLaunchCommand(string filePath, int? lineNumber = null)
     {
         var (command, type) = GetEditorInfo();
         var args = new List<string>();
@@ -43,22 +66,7 @@ public class EditorService : IEditorService
                 break;
         }
 
-        try
-        {
-            await Cli.Wrap(command)
-                .WithArguments(args)
-                .WithValidation(CommandResultValidation.None)
-                .ExecuteAsync();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to open editor '{command}': {ex.Message}");
-
-            if (command != "open" && OperatingSystem.IsMacOS())
-            {
-                await Cli.Wrap("open").WithArguments(filePath).ExecuteAsync();
-            }
-        }
+        return (command, args);
     }
 
     private static IEnumerable<string> GetVsCodeStyleArgs(string filePath, int? lineNumber)

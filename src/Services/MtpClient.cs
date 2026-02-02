@@ -66,17 +66,19 @@ public class MtpClient : IAsyncDisposable
     private readonly TcpClient _tcpClient;
     private readonly TcpListener _listener;
     private readonly string _targetPath;
+    private readonly Task<CommandResult> _processTask;
 
     private readonly Channel<MtpTestNodeUpdate> _updates = Channel.CreateUnbounded<MtpTestNodeUpdate>();
     private readonly ConcurrentDictionary<Guid, List<MtpTestNode>> _runResults = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _completionSources = new();
 
-    private MtpClient(TcpListener listener, TcpClient tcpClient, JsonRpc jsonRpc, string targetPath)
+    private MtpClient(TcpListener listener, TcpClient tcpClient, JsonRpc jsonRpc, string targetPath, Task<CommandResult> processTask)
     {
         _listener = listener;
         _tcpClient = tcpClient;
         _jsonRpc = jsonRpc;
         _targetPath = targetPath;
+        _processTask = processTask;
 
         _jsonRpc.AddLocalRpcTarget(this, new JsonRpcTargetOptions { MethodNameTransform = CommonMethodNameTransforms.CamelCase });
         _jsonRpc.StartListening();
@@ -100,7 +102,7 @@ public class MtpClient : IAsyncDisposable
             ? Cli.Wrap("dotnet").WithArguments(args)
             : Cli.Wrap(targetPath).WithArguments(args);
 
-        _ = command.ExecuteAsync(ct);
+        var processTask = command.ExecuteAsync(ct).Task;
 
         try
         {
@@ -115,7 +117,7 @@ public class MtpClient : IAsyncDisposable
 
             var jsonRpc = new JsonRpc(new HeaderDelimitedMessageHandler(tcpClient.GetStream(), tcpClient.GetStream(), formatter));
 
-            var client = new MtpClient(listener, tcpClient, jsonRpc, targetPath);
+            var client = new MtpClient(listener, tcpClient, jsonRpc, targetPath, processTask);
 
             await jsonRpc.InvokeWithParameterObjectAsync("initialize", new MtpInitializeRequest(
                 Environment.ProcessId,
@@ -194,12 +196,17 @@ public class MtpClient : IAsyncDisposable
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
-            await tcs.Task.WaitAsync(linkedCts.Token);
+            var completionTask = tcs.Task;
+            var waitTask = Task.WhenAny(completionTask, _processTask);
+
+            await waitTask.WaitAsync(linkedCts.Token);
 
             if (_runResults.TryGetValue(runId, out var nodes))
             {
                 return nodes
                     .Where(n => n.NodeType is "test" or "action" or null)
+                    .GroupBy(n => n.Uid)
+                    .Select(g => g.First())
                     .Select(MapToDiscoveredTest).ToList();
             }
             return [];
@@ -274,37 +281,72 @@ public class MtpClient : IAsyncDisposable
         // Start running tests
         var runTask = _jsonRpc.InvokeWithParameterObjectAsync("testing/runTests", new MtpRunRequest(mtpTests, runId), ct);
 
-        while (!tcs.Task.IsCompleted || _updates.Reader.Count > 0)
-
+        try
         {
-            MtpTestNodeUpdate? update = null;
-            try
+            await foreach (var result in GetTestRunResultsAsync(tcs.Task, ct))
             {
-                if (await _updates.Reader.WaitToReadAsync(ct))
-                {
-                    _updates.Reader.TryRead(out update);
-                }
-            }
-            catch (OperationCanceledException) { break; }
-
-            if (update is { Node.ExecutionState: "passed" or "failed" or "skipped" })
-            {
-                yield return new TestRunResult(
-                    update.Node.Uid,
-                    update.Node.ExecutionState,
-                    (long?)(update.Node.Duration),
-                    ToAsyncEnumerable(update.Node.StackTrace),
-                    update.Node.Message != null ? [update.Node.Message] : [],
-                    ToAsyncEnumerable(update.Node.StandardOutput)
-                );
+                yield return result;
             }
 
-            if (tcs.Task.IsCompleted && _updates.Reader.Count == 0) break;
+            await runTask;
         }
+        finally
+        {
+            _completionSources.TryRemove(runId, out _);
+            _runResults.TryRemove(runId, out _);
+        }
+    }
 
-        await runTask;
-        _completionSources.TryRemove(runId, out _);
-        _runResults.TryRemove(runId, out _);
+    private async IAsyncEnumerable<TestRunResult> GetTestRunResultsAsync(Task completionTask, [EnumeratorCancellation] CancellationToken ct)
+    {
+        while (true)
+        {
+            if ((completionTask.IsCompleted || _processTask.IsCompleted) && _updates.Reader.Count == 0) break;
+
+            var update = await ReadNextUpdateAsync(completionTask, ct);
+
+            if (update != null && update.Node.ExecutionState is "passed" or "failed" or "skipped")
+            {
+                yield return MapToTestRunResult(update.Node);
+            }
+        }
+    }
+
+    private async Task<MtpTestNodeUpdate?> ReadNextUpdateAsync(Task completionTask, CancellationToken ct)
+    {
+        try
+        {
+            using var loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _ = completionTask.ContinueWith(_ => loopCts.Cancel(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            _ = _processTask.ContinueWith(_ => loopCts.Cancel(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(loopCts.Token, timeoutCts.Token);
+
+            if (await _updates.Reader.WaitToReadAsync(combinedCts.Token))
+            {
+                _updates.Reader.TryRead(out var update);
+                return update;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (ct.IsCancellationRequested) throw;
+        }
+        return null;
+    }
+
+    private static TestRunResult MapToTestRunResult(MtpTestNode node)
+    {
+        return new TestRunResult(
+            node.Uid,
+            node.ExecutionState!,
+            (long?)(node.Duration),
+            ToAsyncEnumerable(node.StackTrace),
+            node.Message != null ? [node.Message] : [],
+            ToAsyncEnumerable(node.StandardOutput),
+            node.DisplayName
+        );
     }
 
     private static async IAsyncEnumerable<string> ToAsyncEnumerable(string? text)

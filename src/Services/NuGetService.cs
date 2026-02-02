@@ -39,7 +39,7 @@ public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string
         if (current == null || latest == null)
             return VersionUpdateType.Major;
 
-        if (latest.Value.IsPreRelease)
+        if (latest.Value.IsPreRelease || current.Value.IsPreRelease)
             return VersionUpdateType.Major;
 
         if (latest.Value.Major > current.Value.Major)

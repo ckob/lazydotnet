@@ -1,0 +1,36 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleLibrary", "SimpleLibrary/SimpleLibrary.csproj", "{3A7C7A7A-7A7A-4A7A-8A7A-7A7A7A7A7A7A}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleApp", "SimpleApp/SimpleApp.csproj", "{4B8D8B8B-8B8B-4B8B-9B8B-8B8B8B8B8B8B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XUnit2Project", "XUnit2Project/XUnit2Project.csproj", "{5C7D9D9D-9D9D-4D9D-9D9D-9D9D9D9D9D9D}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XUnit3Project", "XUnit3Project/XUnit3Project.csproj", "{6D8EAEAE-AEAE-4EAE-AEAE-AEAEAEAEAEAE}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NUnitProject", "NUnitProject/NUnitProject.csproj", "{7E9FBFBF-BFBF-4FBF-BFBF-BFBFBFBFBFBF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MSTestProject", "MSTestProject/MSTestProject.csproj", "{8FA0C0C0-C0C0-40C0-C0C0-C0C0C0C0C0C0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3A7C7A7A-7A7A-4A7A-8A7A-7A7A7A7A7A7A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A7C7A7A-7A7A-4A7A-8A7A-7A7A7A7A7A7A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B8D8B8B-8B8B-4B8B-9B8B-8B8B8B8B8B8B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B8D8B8B-8B8B-4B8B-9B8B-8B8B8B8B8B8B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5C7D9D9D-9D9D-4D9D-9D9D-9D9D9D9D9D9D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5C7D9D9D-9D9D-4D9D-9D9D-9D9D9D9D9D9D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D8EAEAE-AEAE-4EAE-AEAE-AEAEAEAEAEAE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D8EAEAE-AEAE-4EAE-AEAE-AEAEAEAEAEAE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7E9FBFBF-BFBF-4FBF-BFBF-BFBFBFBFBFBF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7E9FBFBF-BFBF-4FBF-BFBF-BFBFBFBFBFBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8FA0C0C0-C0C0-40C0-C0C0-C0C0C0C0C0C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8FA0C0C0-C0C0-40C0-C0C0-C0C0C0C0C0C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="src/lazydotnet.csproj" />
+  <Project Path="tests/lazydotnet.UnitTests/lazydotnet.UnitTests.csproj" />
+  <Project Path="tests/lazydotnet.IntegrationTests/lazydotnet.IntegrationTests.csproj" />
 </Solution>

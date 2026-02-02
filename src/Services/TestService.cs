@@ -33,7 +33,8 @@ public record TestRunResult(
     long? Duration,
     IAsyncEnumerable<string> StackTrace,
     string[] ErrorMessage,
-    IAsyncEnumerable<string> StdOut
+    IAsyncEnumerable<string> StdOut,
+    string? DisplayName = null
 );
 
 internal record ProjectMetadata(
@@ -90,53 +91,54 @@ public enum TestStatus
 public class TestService
 {
     private static readonly SemaphoreSlim VstestLock = new(1, 1);
+    private static readonly Lock MsBuildLock = new();
 
     public static async Task<List<DiscoveredTest>> DiscoverTestsAsync(string path, CancellationToken cancellationToken = default)
     {
-        await VstestLock.WaitAsync(cancellationToken);
-        try
+        return await Task.Run(async () =>
         {
-            return await Task.Run(async () =>
+            try
             {
-                try
+                var projects = GetRelevantProjects(path);
+                if (projects.Count == 0) return [];
+
+                var vstestSources = projects
+                    .Where(p => !p.IsMtp && p.TargetPath != null && File.Exists(p.TargetPath))
+                    .Select(p => p.TargetPath!)
+                    .ToList();
+
+                var mtpProjects = projects
+                    .Where(p => p.IsMtp && p.TargetPath != null && File.Exists(p.TargetPath))
+                    .ToList();
+
+                var allTests = new List<DiscoveredTest>();
+                if (vstestSources.Count > 0)
                 {
-                    var projects = GetRelevantProjects(path);
-                    if (projects.Count == 0) return [];
-
-                    var vstestSources = projects
-                        .Where(p => !p.IsMtp && p.TargetPath != null && File.Exists(p.TargetPath))
-                        .Select(p => p.TargetPath!)
-                        .ToList();
-
-                    var mtpProjects = projects
-                        .Where(p => p.IsMtp && p.TargetPath != null && File.Exists(p.TargetPath))
-                        .ToList();
-
-                    var allTests = new List<DiscoveredTest>();
-                    if (vstestSources.Count > 0)
+                    await VstestLock.WaitAsync(cancellationToken);
+                    try
                     {
                         allTests.AddRange(await DiscoverVsTestsAsync(vstestSources, cancellationToken));
                     }
-
-                    if (mtpProjects.Count > 0)
+                    finally
                     {
-                        var mtpResults = await Task.WhenAll(mtpProjects.Select(p => DiscoverMtpTestsAsync(p.TargetPath!, cancellationToken)));
-                        allTests.AddRange(mtpResults.SelectMany(r => r));
+                        VstestLock.Release();
                     }
+                }
 
-                    return allTests;
-                }
-                catch (Exception ex)
+                if (mtpProjects.Count > 0)
                 {
-                    AppCli.Log($"[red]Discovery error: {ex.Message}[/]");
-                    return [];
+                    var mtpResults = await Task.WhenAll(mtpProjects.Select(p => DiscoverMtpTestsAsync(p.TargetPath!, cancellationToken)));
+                    allTests.AddRange(mtpResults.SelectMany(r => r));
                 }
-            }, cancellationToken);
-        }
-        finally
-        {
-            VstestLock.Release();
-        }
+
+                return allTests.GroupBy(t => t.Id).Select(g => g.First()).ToList();
+            }
+            catch (Exception ex)
+            {
+                AppCli.Log($"[red]Discovery error: {ex.Message}[/]");
+                return [];
+            }
+        }, cancellationToken);
     }
 
     private static List<ProjectMetadata> GetRelevantProjects(string path)
@@ -166,7 +168,7 @@ public class TestService
             var meta = GetProjectMetadata(path);
             if (meta.IsTestProject) projects.Add(meta);
         }
-        return projects;
+        return projects.GroupBy(p => p.ProjectPath).Select(g => g.First()).ToList();
     }
 
     private static async Task<List<DiscoveredTest>> DiscoverVsTestsAsync(List<string> targetPaths, CancellationToken ct)
@@ -198,16 +200,19 @@ public class TestService
 
                 handler.CompletionTask.Wait(ct);
 
-                return handler.Tests.Select(tc => new DiscoveredTest(
-                    tc.Id.ToString(),
-                    null,
-                    tc.FullyQualifiedName,
-                    tc.DisplayName,
-                    tc.CodeFilePath,
-                    tc.LineNumber > 0 ? tc.LineNumber : null,
-                    tc.Source,
-                    false
-                )).ToList();
+                return handler.Tests
+                    .GroupBy(tc => tc.Id)
+                    .Select(g => g.First())
+                    .Select(tc => new DiscoveredTest(
+                        tc.Id.ToString(),
+                        null,
+                        tc.FullyQualifiedName,
+                        tc.DisplayName,
+                        tc.CodeFilePath,
+                        tc.LineNumber > 0 ? tc.LineNumber : null,
+                        tc.Source,
+                        false
+                    )).ToList();
             }, ct);
         }
         catch (Exception ex)
@@ -225,10 +230,11 @@ public class TestService
     {
         try
         {
-            var project = ProjectCollection.GlobalProjectCollection.LoadedProjects.FirstOrDefault(p => p.FullPath == projectPath);
-            if (project == null)
+            Project project;
+            lock (MsBuildLock)
             {
-                project = ProjectCollection.GlobalProjectCollection.LoadProject(projectPath);
+                project = ProjectCollection.GlobalProjectCollection.LoadedProjects.FirstOrDefault(p => p.FullPath == projectPath)
+                          ?? ProjectCollection.GlobalProjectCollection.LoadProject(projectPath);
             }
 
             var isTestProject = project.GetPropertyValue("IsTestProject");
@@ -319,25 +325,102 @@ public class TestService
     private static void AddTestToTree(TestNode root, DiscoveredTest test)
     {
         var fqn = test.Name;
-        var parts = fqn.Split('.');
+        var parts = SplitFqn(fqn);
         var current = root;
 
-        for (var i = 0; i < parts.Length - 1; i++)
+        for (var i = 0; i < parts.Count - 1; i++)
         {
             current = GetOrCreateContainer(current, parts[i], parts.Take(i + 1), test);
         }
 
-        var methodName = parts[^1];
-        var shortDisplayName = GetShortDisplayName(test.DisplayName, fqn);
+        var methodNameWithArgs = parts[^1];
+        var openParenIndex = methodNameWithArgs.IndexOf('(');
 
-        if (shortDisplayName == methodName)
+        if (openParenIndex > 0 && methodNameWithArgs.EndsWith(')'))
         {
-            AddTestNode(current, methodName, fqn, test);
+            var methodName = methodNameWithArgs[..openParenIndex];
+            var args = methodNameWithArgs[openParenIndex..];
+            AddTheoryNode(current, methodName, args, fqn, test);
         }
         else
         {
-            AddTheoryNode(current, methodName, shortDisplayName, fqn, test);
+            var methodName = methodNameWithArgs;
+            var shortDisplayName = GetShortDisplayName(test.DisplayName, fqn);
+
+            if (shortDisplayName == methodName)
+            {
+                AddTestNode(current, methodName, fqn, test);
+            }
+            else
+            {
+                AddTheoryNode(current, methodName, shortDisplayName, fqn, test);
+            }
         }
+    }
+
+    private static string GetShortDisplayName(string displayName, string fqn)
+    {
+        if (displayName.StartsWith(fqn) && displayName.Length > fqn.Length)
+        {
+            var suffix = displayName[fqn.Length..];
+            if (suffix.StartsWith('(') || suffix.StartsWith('['))
+                return suffix;
+        }
+
+        var parts = SplitFqn(fqn);
+        var methodName = parts[^1];
+        if (displayName.StartsWith(methodName) && displayName.Length > methodName.Length)
+        {
+             var suffix = displayName[methodName.Length..];
+             if (suffix.StartsWith('(') || suffix.StartsWith('['))
+                return suffix;
+        }
+
+        if (string.IsNullOrEmpty(displayName))
+            return fqn;
+
+        if (displayName == fqn || displayName == methodName)
+        {
+            return methodName;
+        }
+
+        return displayName;
+    }
+
+    private static List<string> SplitFqn(string fqn)
+    {
+        var parts = new List<string>();
+        var currentPart = new System.Text.StringBuilder();
+        var parenDepth = 0;
+
+        foreach (var c in fqn)
+        {
+            switch (c)
+            {
+                case '(':
+                    parenDepth++;
+                    currentPart.Append(c);
+                    break;
+                case ')':
+                    parenDepth--;
+                    currentPart.Append(c);
+                    break;
+                case '.' when parenDepth == 0:
+                    parts.Add(currentPart.ToString());
+                    currentPart.Clear();
+                    break;
+                default:
+                    currentPart.Append(c);
+                    break;
+            }
+        }
+
+        if (currentPart.Length > 0)
+        {
+            parts.Add(currentPart.ToString());
+        }
+
+        return parts;
     }
 
     private static TestNode GetOrCreateContainer(TestNode current, string part, IEnumerable<string> fullPathParts, DiscoveredTest test)
@@ -441,34 +524,6 @@ public class TestService
         return node.TestCount;
     }
 
-    private static string GetShortDisplayName(string displayName, string fqn)
-    {
-        if (displayName.StartsWith(fqn) && displayName.Length > fqn.Length)
-        {
-            var suffix = displayName[fqn.Length..];
-            if (suffix.StartsWith('(') || suffix.StartsWith('['))
-                return suffix;
-        }
-
-        var methodName = fqn.Split('.')[^1];
-        if (displayName.StartsWith(methodName) && displayName.Length > methodName.Length)
-        {
-             var suffix = displayName[methodName.Length..];
-             if (suffix.StartsWith('(') || suffix.StartsWith('['))
-                return suffix;
-        }
-
-        if (string.IsNullOrEmpty(displayName))
-            return fqn;
-
-        if (displayName == fqn || displayName == methodName)
-        {
-            return methodName;
-        }
-
-        return displayName;
-    }
-
     private static void CompactTree(TestNode node)
     {
         var changed = true;
@@ -565,7 +620,7 @@ public class TestService
         try
         {
             var mtpClient = await MtpClient.CreateAsync(targetPath, CancellationToken.None);
-            return mtpClient.RunTestsAsync(filter, CancellationToken.None);
+            return RunMtpTestsAndDisposeAsync(mtpClient, filter);
         }
         catch (Exception ex)
         {
@@ -574,35 +629,48 @@ public class TestService
         }
     }
 
-    private static async Task<IAsyncEnumerable<TestRunResult>> RunVsTestsAsync(string targetPath, RunRequestNode[] filter)
+    private static async IAsyncEnumerable<TestRunResult> RunMtpTestsAndDisposeAsync(MtpClient client, RunRequestNode[] filter)
     {
-        await VstestLock.WaitAsync();
         try
         {
-            var vstestPath = VsTestConsoleLocator.GetVsTestConsolePath();
-            if (vstestPath == null) return EmptyRun();
-
-            var wrapper = new VsTestConsoleWrapper(vstestPath);
-            var handler = new RunHandler();
-
-            _ = Task.Run(() =>
+            await foreach (var result in client.RunTestsAsync(filter, CancellationToken.None))
             {
-                try
-                {
-                    ExecuteVsTestRun(wrapper, targetPath, filter, handler);
-                }
-                catch (Exception ex)
-                {
-                    handler.Fail(ex);
-                }
-            });
-
-            return handler.GetResultsAsync();
+                yield return result;
+            }
         }
         finally
         {
-            VstestLock.Release();
+            await client.DisposeAsync();
         }
+    }
+
+    private static async Task<IAsyncEnumerable<TestRunResult>> RunVsTestsAsync(string targetPath, RunRequestNode[] filter)
+    {
+        var vstestPath = VsTestConsoleLocator.GetVsTestConsolePath();
+        if (vstestPath == null) return EmptyRun();
+
+        var wrapper = new VsTestConsoleWrapper(vstestPath);
+        var handler = new RunHandler();
+
+        _ = Task.Run(async () =>
+        {
+            await VstestLock.WaitAsync();
+            try
+            {
+                ExecuteVsTestRun(wrapper, targetPath, filter, handler);
+            }
+            catch (Exception ex)
+            {
+                handler.Fail(ex);
+            }
+            finally
+            {
+                wrapper.EndSession();
+                VstestLock.Release();
+            }
+        });
+
+        return handler.GetResultsAsync();
     }
 
     private static void ExecuteVsTestRun(VsTestConsoleWrapper wrapper, string targetPath, RunRequestNode[] filter, RunHandler handler)
@@ -659,7 +727,8 @@ public class TestService
                     (long?)result.Duration.TotalMilliseconds,
                     ToAsyncEnumerable(result.ErrorStackTrace),
                     result.ErrorMessage != null ? [result.ErrorMessage] : [],
-                    ToAsyncEnumerable(GetStdOut(result))
+                    ToAsyncEnumerable(GetStdOut(result)),
+                    result.TestCase.DisplayName
                 ));
             }
         }

@@ -567,16 +567,61 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
         var results = await TestService.RunTestsAsync(_currentPath!, filter);
 
+        var reportedUids = new HashSet<string>();
+
         await foreach (var res in results)
         {
-            var targetNode = testsToRun.FirstOrDefault(t => t.Uid == res.Id);
-            if (targetNode != null)
+            var targets = testsToRun.Where(t => t.Uid == res.Id).ToList();
+            
+            if (targets.Count == 0 && res.DisplayName != null)
             {
+                // Fuzzy matching for dynamic test names
+                var fuzzyMatch = testsToRun.FirstOrDefault(t => t.Status == TestStatus.Running && IsFuzzyMatch(t, res));
+                if (fuzzyMatch != null) targets = [fuzzyMatch];
+            }
+
+            foreach (var targetNode in targets)
+            {
+                reportedUids.Add(targetNode.Uid ?? string.Empty);
                 await UpdateTestNodeWithResultAsync(targetNode, res);
                 UpdateParentStatus(targetNode);
-                RequestRefresh?.Invoke();
+            }
+            RequestRefresh?.Invoke();
+        }
+
+        // Cleanup: any test that was requested but didn't report a terminal result should be marked as failed
+        foreach (var test in testsToRun)
+        {
+            if (test.Status == TestStatus.Running)
+            {
+                test.Status = TestStatus.Failed;
+                test.ErrorMessage = "Test did not report a result.";
+                UpdateParentStatus(test);
             }
         }
+        RequestRefresh?.Invoke();
+    }
+
+    private static bool IsFuzzyMatch(TestNode node, TestRunResult res)
+    {
+        if (string.IsNullOrEmpty(res.DisplayName)) return false;
+
+        // Strip arguments from node.FullName to get the pure FQN of the method
+        var nodeFqn = node.FullName;
+        var parenIndex = nodeFqn.IndexOf('(');
+        if (parenIndex > 0) nodeFqn = nodeFqn[..parenIndex];
+
+        // 1. Exact match on method name part
+        var lastDot = nodeFqn.LastIndexOf('.');
+        var methodName = lastDot >= 0 ? nodeFqn[(lastDot + 1)..] : nodeFqn;
+
+        // Result display name might be "Method(args)" or "Namespace.Class.Method(args)"
+        if (res.DisplayName.StartsWith(methodName) || res.DisplayName.Contains("." + methodName + "(")) return true;
+
+        // 2. Full name containment (stripped)
+        if (res.DisplayName.Contains(nodeFqn)) return true;
+
+        return false;
     }
 
     private static async Task UpdateTestNodeWithResultAsync(TestNode targetNode, TestRunResult res)
@@ -590,6 +635,16 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         targetNode.Duration = res.Duration ?? 0;
         targetNode.ErrorMessage = string.Join(Environment.NewLine, res.ErrorMessage);
 
+        // Update name for dynamic tests (e.g. theories with timestamps)
+        if (res.DisplayName != null && targetNode.Parent?.IsTheoryContainer == true)
+        {
+            var openParen = res.DisplayName.IndexOf('(');
+            if (openParen >= 0)
+            {
+                targetNode.Name = res.DisplayName[openParen..];
+            }
+        }
+
         var stackTrace = new List<string>();
         await foreach (var line in res.StackTrace) stackTrace.Add(line);
 
@@ -599,6 +654,12 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         lock (targetNode.OutputLock)
         {
             targetNode.Output.Clear();
+            if (res.DisplayName != null && res.DisplayName != targetNode.FullName)
+            {
+                targetNode.Output.Add(new TestOutputLine($"Run name: {res.DisplayName}", "dim"));
+                targetNode.Output.Add(new TestOutputLine(""));
+            }
+
             if (res.ErrorMessage.Length > 0)
             {
                 targetNode.Output.Add(new TestOutputLine("Error:", "red"));
