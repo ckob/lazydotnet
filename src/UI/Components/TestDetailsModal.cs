@@ -5,12 +5,26 @@ using lazydotnet.Services;
 
 namespace lazydotnet.UI.Components;
 
-public class TestDetailsModal(string title, List<TestOutputLine> details, Action onClose) : Modal(title, new Markup(""), onClose)
+public class TestDetailsModal(TestNode node, Action onClose) : Modal(node.Name, new Markup(""), onClose)
 {
-    private readonly List<TestOutputLine> _lines = details;
     private int _scrollOffset;
     private int _selectedLogicalIndex = -1;
     private readonly Lock _lock = new();
+    private int _lastFrameIndex = -1;
+
+    public override bool OnTick()
+    {
+        if (node.Status == TestStatus.Running)
+        {
+            var currentFrame = SpinnerHelper.GetCurrentFrameIndex(Spinner.Known.Dots);
+            if (currentFrame != _lastFrameIndex)
+            {
+                _lastFrameIndex = currentFrame;
+                return true;
+            }
+        }
+        return false;
+    }
 
     public override IEnumerable<KeyBinding> GetKeyBindings()
     {
@@ -24,14 +38,86 @@ public class TestDetailsModal(string title, List<TestOutputLine> details, Action
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
     }
 
+    private List<TestOutputLine> BuildAllLines()
+    {
+        var lines = new List<TestOutputLine>();
+
+        // Build metadata lines
+        var statusColor = TestDetailsTab.GetStatusColor(node.Status);
+        var statusIcon = TestDetailsTab.GetStatusIcon(node.Status);
+        lines.Add(new TestOutputLine($"Status: {statusIcon} {node.Status}", statusColor));
+
+        if (node.IsTest)
+        {
+            lines.Add(new TestOutputLine($"Duration: {node.Duration}ms"));
+            if (node.FilePath != null)
+            {
+                var relativePath = PathHelper.GetRelativePath(node.FilePath);
+                lines.Add(new TestOutputLine($"File: {relativePath}", "blue"));
+                if (node.LineNumber != null)
+                {
+                    lines.Add(new TestOutputLine($"Line: {node.LineNumber}"));
+                }
+            }
+        }
+        else
+        {
+            var passedCount = GetCountByStatus(node, TestStatus.Passed);
+            var failedCount = GetCountByStatus(node, TestStatus.Failed);
+            var maxDuration = GetMaxDuration(node);
+
+            lines.Add(new TestOutputLine($"Total Tests: {node.TestCount}"));
+            lines.Add(new TestOutputLine($"Passed: {passedCount}", "green"));
+            lines.Add(new TestOutputLine($"Failed: {failedCount}", "red"));
+            lines.Add(new TestOutputLine($"Max Duration: {maxDuration}ms"));
+        }
+
+        lines.Add(new TestOutputLine(""));
+
+        // Build output/error lines
+        var output = node.GetOutputSnapshot();
+        if (output.Count > 0)
+        {
+            lines.Add(new TestOutputLine("Output/Error", "bold underline"));
+            lines.Add(new TestOutputLine(""));
+            lines.AddRange(output);
+        }
+        else if (node.IsTest)
+        {
+            if (node.Status == TestStatus.Passed)
+                lines.Add(new TestOutputLine("Test passed successfully.", "green"));
+            else if (node.Status == TestStatus.Failed)
+                lines.Add(new TestOutputLine("Test failed but no output was captured.", "red"));
+            else if (node.Status == TestStatus.Running)
+                lines.Add(new TestOutputLine("Test is currently running...", "yellow"));
+            else
+                lines.Add(new TestOutputLine("Test has not been run yet.", "dim"));
+        }
+
+        return lines;
+    }
+
+    private static int GetCountByStatus(TestNode node, TestStatus status)
+    {
+        if (node.IsTest) return node.Status == status ? 1 : 0;
+        return node.Children.Sum(c => GetCountByStatus(c, status));
+    }
+
+    private static double GetMaxDuration(TestNode node)
+    {
+        if (node.IsTest) return node.Duration;
+        return node.Children.Count > 0 ? node.Children.Max(GetMaxDuration) : 0;
+    }
+
     private void MoveUp()
     {
         lock (_lock)
         {
-            if (_lines.Count == 0) return;
+            var lines = BuildAllLines();
+            if (lines.Count == 0) return;
             if (_selectedLogicalIndex == -1)
             {
-                _selectedLogicalIndex = _lines.Count - 1;
+                _selectedLogicalIndex = lines.Count - 1;
                 return;
             }
 
@@ -39,7 +125,7 @@ public class TestDetailsModal(string title, List<TestOutputLine> details, Action
             while (index > 0)
             {
                 index--;
-                if (!string.IsNullOrWhiteSpace(_lines[index].Text))
+                if (!string.IsNullOrWhiteSpace(lines[index].Text))
                 {
                     _selectedLogicalIndex = index;
                     return;
@@ -53,7 +139,8 @@ public class TestDetailsModal(string title, List<TestOutputLine> details, Action
     {
         lock (_lock)
         {
-            if (_lines.Count == 0) return;
+            var lines = BuildAllLines();
+            if (lines.Count == 0) return;
 
             if (_selectedLogicalIndex == -1)
             {
@@ -62,10 +149,10 @@ public class TestDetailsModal(string title, List<TestOutputLine> details, Action
             }
 
             var index = _selectedLogicalIndex;
-            while (index < _lines.Count - 1)
+            while (index < lines.Count - 1)
             {
                 index++;
-                if (!string.IsNullOrWhiteSpace(_lines[index].Text))
+                if (!string.IsNullOrWhiteSpace(lines[index].Text))
                 {
                     _selectedLogicalIndex = index;
                     return;
@@ -90,7 +177,8 @@ public class TestDetailsModal(string title, List<TestOutputLine> details, Action
             var renderWidth = modalWidth - 8;
             var visibleRows = modalHeight - 4;
 
-            var physicalLines = BuildPhysicalLines(renderWidth);
+            var allLines = BuildAllLines();
+            var physicalLines = BuildPhysicalLines(allLines, renderWidth);
             UpdateScrollOffset(physicalLines, visibleRows);
 
             var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
@@ -110,12 +198,12 @@ public class TestDetailsModal(string title, List<TestOutputLine> details, Action
         }
     }
 
-    private List<PhysicalLine> BuildPhysicalLines(int renderWidth)
+    private List<PhysicalLine> BuildPhysicalLines(List<TestOutputLine> lines, int renderWidth)
     {
         var physicalLines = new List<PhysicalLine>();
-        for (var i = 0; i < _lines.Count; i++)
+        for (var i = 0; i < lines.Count; i++)
         {
-            var logical = _lines[i];
+            var logical = lines[i];
             var wrapped = WrapText(logical.Text, renderWidth);
             physicalLines.AddRange(wrapped.Select(w =>
                 new PhysicalLine { Text = w, LogicalIndex = i, Style = logical.Style }));

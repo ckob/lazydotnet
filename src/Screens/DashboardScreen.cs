@@ -545,6 +545,20 @@ public class DashboardScreen : IScreen
     {
         layout.SetDetailsActiveTab(_detailsPane.ActiveTab);
 
+        var bottomH = AppLayout.GetBottomHeight(height);
+        var mainHeight = height - 1;
+        var topH = mainHeight - bottomH;
+
+        var contentTopH = Math.Max(1, topH - 2);
+
+        var w = width / 3;
+        var dw = width * 6 / 10;
+
+        layout.UpdateWorkspace(_workspacePane.GetContent(layout.ActivePanel == 1));
+        layout.UpdateLeft(_explorer.GetContent(contentTopH - 3, w - 2, layout.ActivePanel == 2, suppressHighlight: _isViewingRoot));
+        layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2, layout.ActivePanel == 0), _detailsPane.GetHeader());
+        layout.UpdateBottom(width, bottomH);
+
         if (_activeModal != null)
         {
             layout.UpdateModal(_activeModal.GetRenderable(width, height));
@@ -552,20 +566,6 @@ public class DashboardScreen : IScreen
         else
         {
             layout.UpdateModal(null);
-
-            var bottomH = AppLayout.GetBottomHeight(height);
-            var mainHeight = height - 1;
-            var topH = mainHeight - bottomH;
-
-            var contentTopH = Math.Max(1, topH - 2);
-
-            var w = width / 3;
-            var dw = width * 6 / 10;
-
-            layout.UpdateWorkspace(_workspacePane.GetContent(layout.ActivePanel == 1));
-            layout.UpdateLeft(_explorer.GetContent(contentTopH - 3, w - 2, layout.ActivePanel == 2, suppressHighlight: _isViewingRoot));
-            layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2, layout.ActivePanel == 0), _detailsPane.GetHeader());
-            layout.UpdateBottom(width, bottomH);
         }
     }
 }

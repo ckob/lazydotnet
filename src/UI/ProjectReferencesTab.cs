@@ -17,7 +17,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public static string Title => "Project References";
+    public string Title => "Project References";
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {

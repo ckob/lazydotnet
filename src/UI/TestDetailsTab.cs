@@ -6,6 +6,13 @@ using lazydotnet.UI.Components;
 
 namespace lazydotnet.UI;
 
+public enum TestFilter
+{
+    All,
+    Passed,
+    Failed
+}
+
 public class TestDetailsTab(IEditorService editorService) : IProjectTab
 {
     private TestNode? _root;
@@ -14,22 +21,25 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     private int _scrollOffset;
     private int _lastFrameIndex = -1;
     private string? _currentPath;
+    private TestFilter _filter = TestFilter.All;
 
-    private readonly Lock _lock = new();
-
-    private bool _isLoading;
-    private const bool IsRunningTests = false;
-    private string? _statusMessage;
-
-    private int _runningTestCount;
-
-    private CancellationTokenSource? _discoveryCts;
+    public string Title => _filter switch
+    {
+        TestFilter.Passed => "Tests (passing)",
+        TestFilter.Failed => "Tests (failing)",
+        _ => "Tests"
+    };
 
     public Action? RequestRefresh { get; set; }
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public static string Title => "Tests";
+    private readonly Lock _lock = new();
+    private bool _isLoading;
+    private string? _statusMessage;
+    private int _runningTestCount;
+    private CancellationTokenSource? _discoveryCts;
+
 
     public async Task LoadAsync(string projectPath, string projectName, bool force = false)
     {
@@ -123,9 +133,11 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        if (_isLoading || IsRunningTests) yield break;
+        if (_isLoading) yield break;
 
         foreach (var b in GetNavigationBindings()) yield return b;
+
+        yield return new KeyBinding("f", "filter", CycleFilterAsync, k => k.Key == ConsoleKey.F);
 
         if (_visibleNodes.Count == 0) yield break;
 
@@ -173,7 +185,10 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             if (node is { IsContainer: true, IsExpanded: false })
             {
                 node.IsExpanded = true;
-                RefreshVisibleNodes();
+                lock (_lock)
+                {
+                    RefreshVisibleNodes();
+                }
             }
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.RightArrow, false);
@@ -186,17 +201,23 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             if (node is { IsContainer: true, IsExpanded: true })
             {
                 node.IsExpanded = false;
-                RefreshVisibleNodes();
+                lock (_lock)
+                {
+                    RefreshVisibleNodes();
+                }
             }
             else if (node.Parent != null)
             {
-                var idx = _visibleNodes.IndexOf(node.Parent);
-                if (idx != -1)
+                lock (_lock)
                 {
-                    _selectedIndex = idx;
-                    if (_selectedIndex < _scrollOffset)
+                    var idx = _visibleNodes.IndexOf(node.Parent);
+                    if (idx != -1)
                     {
-                        _scrollOffset = _selectedIndex;
+                        _selectedIndex = idx;
+                        if (_selectedIndex < _scrollOffset)
+                        {
+                            _scrollOffset = _selectedIndex;
+                        }
                     }
                 }
             }
@@ -211,7 +232,10 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             if (node.IsContainer)
             {
                 node.IsExpanded = !node.IsExpanded;
-                RefreshVisibleNodes();
+                lock (_lock)
+                {
+                    RefreshVisibleNodes();
+                }
             }
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Spacebar, false);
@@ -228,59 +252,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
     private void ShowTestDetails(TestNode node)
     {
-        var lines = new List<TestOutputLine>();
-
-        // Build metadata lines
-        var statusColor = GetStatusColor(node.Status);
-        var statusIcon = GetStatusIcon(node.Status);
-        lines.Add(new TestOutputLine($"Status: {statusIcon} {node.Status}", statusColor));
-
-        if (node.IsTest)
-        {
-            lines.Add(new TestOutputLine($"Duration: {node.Duration}ms"));
-            if (node.FilePath != null)
-            {
-                var relativePath = PathHelper.GetRelativePath(node.FilePath);
-                lines.Add(new TestOutputLine($"File: {relativePath}", "blue"));
-                if (node.LineNumber != null)
-                {
-                    lines.Add(new TestOutputLine($"Line: {node.LineNumber}"));
-                }
-            }
-        }
-        else
-        {
-            var passedCount = GetCountByStatus(node, TestStatus.Passed);
-            var failedCount = GetCountByStatus(node, TestStatus.Failed);
-            var maxDuration = GetMaxDuration(node);
-
-            lines.Add(new TestOutputLine($"Total Tests: {node.TestCount}"));
-            lines.Add(new TestOutputLine($"Passed: {passedCount}", "green"));
-            lines.Add(new TestOutputLine($"Failed: {failedCount}", "red"));
-            lines.Add(new TestOutputLine($"Max Duration: {maxDuration}ms"));
-        }
-
-        lines.Add(new TestOutputLine(""));
-
-        // Build output/error lines
-        var output = node.GetOutputSnapshot();
-        if (output.Count > 0)
-        {
-            lines.Add(new TestOutputLine("Output/Error", "bold underline"));
-            lines.Add(new TestOutputLine(""));
-            lines.AddRange(output);
-        }
-        else if (node.IsTest)
-        {
-            if (node.Status == TestStatus.Passed)
-                lines.Add(new TestOutputLine("Test passed successfully.", "green"));
-            else if (node.Status == TestStatus.Failed)
-                lines.Add(new TestOutputLine("Test failed but no output was captured.", "red"));
-            else
-                lines.Add(new TestOutputLine("Test has not been run yet.", "dim"));
-        }
-
-        var modal = new TestDetailsModal(node.Name, lines, () => RequestModal?.Invoke(null!));
+        var modal = new TestDetailsModal(node, () => RequestModal?.Invoke(null!));
 
         if (node.FilePath != null)
         {
@@ -308,45 +280,57 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
     public void MoveUp()
     {
-        switch (_selectedIndex)
+        lock (_lock)
         {
-            case -1 when _visibleNodes.Count > 0:
-                _selectedIndex = _visibleNodes.Count - 1;
-                return;
-            case > 0:
+            switch (_selectedIndex)
             {
-                _selectedIndex--;
-                if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
-                break;
+                case -1 when _visibleNodes.Count > 0:
+                    _selectedIndex = _visibleNodes.Count - 1;
+                    return;
+                case > 0:
+                {
+                    _selectedIndex--;
+                    if (_selectedIndex < _scrollOffset) _scrollOffset = _selectedIndex;
+                    break;
+                }
             }
         }
     }
 
     public void MoveDown()
     {
-        if (_selectedIndex == -1 && _visibleNodes.Count > 0)
+        lock (_lock)
         {
-            _selectedIndex = 0;
-            return;
-        }
-        if (_selectedIndex < _visibleNodes.Count - 1)
-        {
-            _selectedIndex++;
+            if (_selectedIndex == -1 && _visibleNodes.Count > 0)
+            {
+                _selectedIndex = 0;
+                return;
+            }
+            if (_selectedIndex < _visibleNodes.Count - 1)
+            {
+                _selectedIndex++;
+            }
         }
     }
 
     public void PageUp(int pageSize)
     {
-        if (_visibleNodes.Count == 0) return;
-        if (_selectedIndex == -1) _selectedIndex = _visibleNodes.Count - 1;
-        _selectedIndex = Math.Max(0, _selectedIndex - pageSize);
+        lock (_lock)
+        {
+            if (_visibleNodes.Count == 0) return;
+            if (_selectedIndex == -1) _selectedIndex = _visibleNodes.Count - 1;
+            _selectedIndex = Math.Max(0, _selectedIndex - pageSize);
+        }
     }
 
     public void PageDown(int pageSize)
     {
-        if (_visibleNodes.Count == 0) return;
-        if (_selectedIndex == -1) _selectedIndex = 0;
-        _selectedIndex = Math.Min(_visibleNodes.Count - 1, _selectedIndex + pageSize);
+        lock (_lock)
+        {
+            if (_visibleNodes.Count == 0) return;
+            if (_selectedIndex == -1) _selectedIndex = 0;
+            _selectedIndex = Math.Min(_visibleNodes.Count - 1, _selectedIndex + pageSize);
+        }
     }
 
     private async Task OpenInEditorAsync(TestNode node)
@@ -393,7 +377,18 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         {
             if (_visibleNodes.Count == 0)
             {
-                 return new Markup(_statusMessage ?? "[dim]No tests available.[/]");
+                if (_runningTestCount > 0)
+                {
+                    var spinner = Spinner.Known.Dots;
+                    return new Markup($"[yellow]{SpinnerHelper.GetFrame(spinner)}[/] {_statusMessage}");
+                }
+
+                if (_filter != TestFilter.All && _root != null && _root.TestCount > 0)
+                {
+                    var filterName = _filter == TestFilter.Passed ? "passing" : "failing";
+                    return new Markup($"[dim]No {filterName} tests found.[/]");
+                }
+                return new Markup(_statusMessage ?? "[dim]No tests available.[/]");
             }
 
             var treeGrid = new Grid();
@@ -473,7 +468,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         return node.Children.Count > 0 ? node.Children.Max(GetMaxDuration) : 0;
     }
 
-    private static string GetStatusColor(TestStatus status) => status switch
+    public static string GetStatusColor(TestStatus status) => status switch
     {
         TestStatus.Passed => "green",
         TestStatus.Failed => "red",
@@ -481,7 +476,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         _ => "dim"
     };
 
-    private static string GetStatusIcon(TestStatus status) => status switch
+    public static string GetStatusIcon(TestStatus status) => status switch
     {
         TestStatus.Passed => "✓",
         TestStatus.Failed => "✗",
@@ -719,9 +714,9 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             if (childStatus == TestStatus.None) anyNone = true;
         }
 
+        if (anyRunning) return TestStatus.Running;
         if (anyFailed) return TestStatus.Failed;
         if (allPassed && !anyNone) return TestStatus.Passed;
-        if (anyRunning) return parent.Status == TestStatus.Running ? TestStatus.Running : TestStatus.None;
 
         return TestStatus.None;
     }
@@ -730,6 +725,26 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     {
         node.Status = status;
         foreach(var child in node.Children) SetStatusRecursive(child, status);
+    }
+
+    private Task CycleFilterAsync()
+    {
+        _filter = _filter switch
+        {
+            TestFilter.All => TestFilter.Failed,
+            TestFilter.Failed => TestFilter.Passed,
+            TestFilter.Passed => TestFilter.All,
+            _ => TestFilter.All
+        };
+
+        lock (_lock)
+        {
+            RefreshVisibleNodes();
+            _selectedIndex = _visibleNodes.Count > 0 ? 0 : -1;
+            _scrollOffset = 0;
+        }
+        RequestRefresh?.Invoke();
+        return Task.CompletedTask;
     }
 
     private void RefreshVisibleNodes()
@@ -742,6 +757,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     {
         if (node != _root)
         {
+            if (!ShouldShow(node)) return;
             _visibleNodes.Add(node);
         }
 
@@ -754,5 +770,27 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         {
             Traverse(child);
         }
+    }
+
+    private bool ShouldShow(TestNode node)
+    {
+        if (_filter == TestFilter.All) return true;
+
+        if (node.IsTest)
+        {
+            return _filter switch
+            {
+                TestFilter.Passed => node.Status == TestStatus.Passed,
+                TestFilter.Failed => node.Status == TestStatus.Failed,
+                _ => true
+            };
+        }
+
+        return _filter switch
+        {
+            TestFilter.Passed => GetCountByStatus(node, TestStatus.Passed) > 0,
+            TestFilter.Failed => GetCountByStatus(node, TestStatus.Failed) > 0,
+            _ => true
+        };
     }
 }

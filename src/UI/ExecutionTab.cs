@@ -15,7 +15,14 @@ public class ExecutionTab : IProjectTab
     private int _selectedIndex = -1;
     private bool _needsFinalRefresh;
 
-    public static string Title => "Execution";
+    public string Title 
+    {
+        get
+        {
+            if (IsStreaming) return "Execution";
+            return "Execution (Paused)";
+        }
+    }
 
 
     public Action<Modal>? RequestModal { get; set; }

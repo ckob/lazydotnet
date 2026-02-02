@@ -34,7 +34,7 @@ public class NuGetDetailsTab : IProjectTab
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public static string Title => "NuGets";
+    public string Title => "NuGets";
 
     public void MoveUp()
     {

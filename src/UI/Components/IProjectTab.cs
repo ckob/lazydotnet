@@ -5,6 +5,7 @@ namespace lazydotnet.UI.Components;
 
 public interface IProjectTab : IKeyBindable
 {
+    string Title { get; }
     Action<Modal>? RequestModal { get; set; }
     Action? RequestRefresh { get; set; }
     Action<string>? RequestSelectProject { get; set; }

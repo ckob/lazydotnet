@@ -2,7 +2,6 @@
   "profiles": {
     "lazydotnet": {
       "commandName": "Project",
-      "commandLineArgs": "",
       "workingDirectory": "$(ProjectDir)"
     }
   }
