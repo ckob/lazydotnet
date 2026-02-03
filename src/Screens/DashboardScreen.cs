@@ -333,39 +333,23 @@ public class DashboardScreen : IScreen
 
     private void ShowHelpModal()
     {
+        var localBindings = GetPanelSpecificBindings().ToList();
+        var globalBindings = GetGlobalBindings().ToList();
+
         var panelName = _layout.ActivePanel switch
         {
-            0 => "Details",
+            0 => _detailsPane.ActiveTabTitle,
             1 => "Workspace",
             2 => "Explorer",
-            3 => _layout.BottomActiveTab switch
-            {
-                0 => "Log",
-                _ => "Bottom"
-            },
-            _ => "Local"
+            3 => "Log",
+            _ => "Panel"
         };
 
-        var localBindings = (_layout.ActivePanel switch
+        if (_activeModal != null)
         {
-            0 => _detailsPane.GetKeyBindings(),
-            1 => _workspacePane.GetKeyBindings(),
-            2 => _explorer.GetKeyBindings(),
-            3 => [.. _layout.LogViewer.GetKeyBindings()],
-            _ => []
-        }).ToList();
-
-        var globalBindings = new List<KeyBinding>
-        {
-            new("q", "quit", () => Task.CompletedTask, _ => false),
-            new("tab", "next panel", () => Task.CompletedTask, _ => false),
-            new("shift+tab", "prev panel", () => Task.CompletedTask, _ => false),
-            new("0-3", "switch panel", () => Task.CompletedTask, _ => false),
-            new("B", "build solution", () => Task.CompletedTask, _ => false),
-            new("S", "stop all projects", () => Task.CompletedTask, _ => false),
-            new("ctrl+r", "reload", () => Task.CompletedTask, _ => false),
-            new("?", "keybindings", () => Task.CompletedTask, _ => false)
-        };
+            localBindings = _activeModal.GetKeyBindings().ToList();
+            panelName = "Modal";
+        }
 
         var allBindings = localBindings.Concat(globalBindings).ToList();
         var maxLabelWidth = allBindings.Select(b => b.Label.Length).DefaultIfEmpty(0).Max();
@@ -382,7 +366,10 @@ public class DashboardScreen : IScreen
         grid.AddColumn(new GridColumn().Width(maxLabelWidth).Padding(0, 0, 4, 0).NoWrap().RightAligned());
         grid.AddColumn(new GridColumn().Width(maxDescWidth).NoWrap());
 
-        AddSection(panelName, localBindings);
+        if (localBindings.Count > 0)
+        {
+            AddSection(panelName, localBindings);
+        }
         AddSection("Global", globalBindings);
 
         _activeModal = new Modal("Keybindings", grid, () => _activeModal = null);

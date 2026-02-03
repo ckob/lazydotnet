@@ -50,6 +50,7 @@ public class ProjectDetailsPane : IKeyBindable
     }
 
     public int ActiveTab => _tabs.ActiveTab;
+    public string ActiveTabTitle => _tabInstances[_tabs.ActiveTab].Title;
 
     public void ActivateExecutionTab()
     {

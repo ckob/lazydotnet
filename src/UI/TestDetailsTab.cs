@@ -148,7 +148,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         yield return GetToggleBinding(node);
         yield return GetDetailsBinding(node);
         yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k.Key == ConsoleKey.R);
-        yield return new KeyBinding("e", "open", () => OpenInEditorAsync(node), k => k.Key == ConsoleKey.E);
+        yield return new KeyBinding("e", "edit", () => OpenInEditorAsync(node), k => k.Key == ConsoleKey.E);
     }
 
     private IEnumerable<KeyBinding> GetNavigationBindings()
@@ -257,7 +257,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         if (node.FilePath != null)
         {
             modal.SetAdditionalKeyBindings([
-                new KeyBinding("e", "open in editor", async () => {
+                new KeyBinding("e", "edit", async () => {
                     await editorService.OpenFileAsync(node.FilePath, node.LineNumber);
                 }, k => k.Key == ConsoleKey.E)
             ]);

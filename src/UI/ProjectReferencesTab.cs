@@ -56,7 +56,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
                 RequestSelectProject?.Invoke(_refsList.SelectedItem);
                 return Task.CompletedTask;
             }, k => k.Key == ConsoleKey.Enter);
-            yield return new KeyBinding("e", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
+            yield return new KeyBinding("e", "edit", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
             yield return new KeyBinding("d", "delete", RemoveReferenceAsync, k => k.Key == ConsoleKey.D);
         }
     }

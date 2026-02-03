@@ -218,7 +218,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         yield return new KeyBinding("←", "collapse", DoCollapse, k => k.Key == ConsoleKey.LeftArrow, false);
         yield return new KeyBinding("→", "expand", DoExpand, k => k.Key == ConsoleKey.RightArrow, false);
         yield return new KeyBinding("enter/space", "toggle", DoToggle, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
-        yield return new KeyBinding("e", "open", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
+        yield return new KeyBinding("e", "edit", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
         yield return new KeyBinding("b", "build", DoBuild, k => k.KeyChar == 'b');
 
         var selectedProject = GetSelectedProject();
