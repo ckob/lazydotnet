@@ -10,7 +10,8 @@ public enum TestFilter
 {
     All,
     Passed,
-    Failed
+    Failed,
+    Running
 }
 
 public class TestDetailsTab(IEditorService editorService) : IProjectTab
@@ -27,6 +28,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     {
         TestFilter.Passed => "Tests (passing)",
         TestFilter.Failed => "Tests (failing)",
+        TestFilter.Running => "Tests (running)",
         _ => "Tests"
     };
 
@@ -377,7 +379,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         {
             if (_visibleNodes.Count == 0)
             {
-                if (_runningTestCount > 0)
+                if (_runningTestCount > 0 && _filter == TestFilter.Running)
                 {
                     var spinner = Spinner.Known.Dots;
                     return new Markup($"[yellow]{SpinnerHelper.GetFrame(spinner)}[/] {_statusMessage}");
@@ -385,7 +387,13 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
                 if (_filter != TestFilter.All && _root != null && _root.TestCount > 0)
                 {
-                    var filterName = _filter == TestFilter.Passed ? "passing" : "failing";
+                    var filterName = _filter switch
+                    {
+                        TestFilter.Passed => "passing",
+                        TestFilter.Failed => "failing",
+                        TestFilter.Running => "running",
+                        _ => "" // Should not happen
+                    };
                     return new Markup($"[dim]No {filterName} tests found.[/]");
                 }
                 return new Markup(_statusMessage ?? "[dim]No tests available.[/]");
@@ -581,6 +589,11 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
                 await UpdateTestNodeWithResultAsync(targetNode, res);
                 UpdateParentStatus(targetNode);
             }
+
+            lock (_lock)
+            {
+                RefreshVisibleNodes();
+            }
             RequestRefresh?.Invoke();
         }
 
@@ -593,6 +606,11 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
                 test.ErrorMessage = "Test did not report a result.";
                 UpdateParentStatus(test);
             }
+        }
+        
+        lock (_lock)
+        {
+            RefreshVisibleNodes();
         }
         RequestRefresh?.Invoke();
     }
@@ -731,7 +749,8 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     {
         _filter = _filter switch
         {
-            TestFilter.All => TestFilter.Failed,
+            TestFilter.All => TestFilter.Running,
+            TestFilter.Running => TestFilter.Failed,
             TestFilter.Failed => TestFilter.Passed,
             TestFilter.Passed => TestFilter.All,
             _ => TestFilter.All
@@ -782,6 +801,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             {
                 TestFilter.Passed => node.Status == TestStatus.Passed,
                 TestFilter.Failed => node.Status == TestStatus.Failed,
+                TestFilter.Running => node.Status == TestStatus.Running,
                 _ => true
             };
         }
@@ -790,6 +810,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         {
             TestFilter.Passed => GetCountByStatus(node, TestStatus.Passed) > 0,
             TestFilter.Failed => GetCountByStatus(node, TestStatus.Failed) > 0,
+            TestFilter.Running => GetCountByStatus(node, TestStatus.Running) > 0,
             _ => true
         };
     }
