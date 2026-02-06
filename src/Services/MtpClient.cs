@@ -275,15 +275,15 @@ public class MtpClient : IAsyncDisposable
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _completionSources[runId] = tcs;
 
-        // Map generic RunRequestNode to MtpRunRequestNode
+        var expectedUids = filter.Select(t => t.Uid).ToHashSet();
+
         var mtpTests = filter.Select(t => new MtpRunRequestNode(t.Uid, t.DisplayName)).ToArray();
 
-        // Start running tests
         var runTask = _jsonRpc.InvokeWithParameterObjectAsync("testing/runTests", new MtpRunRequest(mtpTests, runId), ct);
 
         try
         {
-            await foreach (var result in GetTestRunResultsAsync(tcs.Task, ct))
+            await foreach (var result in GetTestRunResultsAsync(tcs.Task, expectedUids, ct))
             {
                 yield return result;
             }
@@ -297,43 +297,76 @@ public class MtpClient : IAsyncDisposable
         }
     }
 
-    private async IAsyncEnumerable<TestRunResult> GetTestRunResultsAsync(Task completionTask, [EnumeratorCancellation] CancellationToken ct)
+    private async IAsyncEnumerable<TestRunResult> GetTestRunResultsAsync(
+        Task completionTask,
+        HashSet<string> expectedUids,
+        [EnumeratorCancellation] CancellationToken ct)
     {
-        while (true)
+        var receivedUids = new HashSet<string>();
+        
+        using var completionCts = new CancellationTokenSource();
+        _ = completionTask.ContinueWith(
+            _ => completionCts.Cancel(),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        _ = _processTask.ContinueWith(
+            _ => completionCts.Cancel(),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        while (receivedUids.Count < expectedUids.Count && !ct.IsCancellationRequested)
         {
-            if ((completionTask.IsCompleted || _processTask.IsCompleted) && _updates.Reader.Count == 0) break;
+            var (update, shouldBreak) = await TryReadNextUpdateAsync(ct, completionCts);
+            if (shouldBreak) break;
 
-            var update = await ReadNextUpdateAsync(completionTask, ct);
-
-            if (update != null && update.Node.ExecutionState is "passed" or "failed" or "skipped")
+            if (update?.Node.ExecutionState is "passed" or "failed" or "skipped")
             {
+                receivedUids.Add(update.Node.Uid);
                 yield return MapToTestRunResult(update.Node);
             }
         }
+
+        foreach (var result in DrainRemainingUpdates())
+        {
+            yield return result;
+        }
     }
 
-    private async Task<MtpTestNodeUpdate?> ReadNextUpdateAsync(Task completionTask, CancellationToken ct)
+    private async Task<(MtpTestNodeUpdate? Update, bool ShouldBreak)> TryReadNextUpdateAsync(
+        CancellationToken ct,
+        CancellationTokenSource completionCts)
     {
         try
         {
-            using var loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            _ = completionTask.ContinueWith(_ => loopCts.Cancel(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            _ = _processTask.ContinueWith(_ => loopCts.Cancel(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-            using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(loopCts.Token, timeoutCts.Token);
-
-            if (await _updates.Reader.WaitToReadAsync(combinedCts.Token))
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                ct, timeoutCts.Token, completionCts.Token);
+            
+            if (await _updates.Reader.WaitToReadAsync(linkedCts.Token))
             {
                 _updates.Reader.TryRead(out var update);
-                return update;
+                return (update, false);
             }
         }
         catch (OperationCanceledException)
         {
             if (ct.IsCancellationRequested) throw;
+            if (completionCts.IsCancellationRequested) return (null, true);
         }
-        return null;
+        return (null, false);
+    }
+
+    private IEnumerable<TestRunResult> DrainRemainingUpdates()
+    {
+        while (_updates.Reader.TryRead(out var remainingUpdate))
+        {
+            if (remainingUpdate.Node.ExecutionState is "passed" or "failed" or "skipped")
+            {
+                yield return MapToTestRunResult(remainingUpdate.Node);
+            }
+        }
     }
 
     private static TestRunResult MapToTestRunResult(MtpTestNode node)

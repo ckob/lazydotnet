@@ -604,7 +604,17 @@ public class TestService
             }
         });
 
-        _ = Task.WhenAll(tasks).ContinueWith(_ => channel.Writer.TryComplete());
+        _ = Task.WhenAll(tasks).ContinueWith(t =>
+        {
+            if (t.Exception != null)
+            {
+                channel.Writer.TryComplete(t.Exception.InnerException ?? t.Exception);
+            }
+            else
+            {
+                channel.Writer.TryComplete();
+            }
+        }, TaskScheduler.Default);
 
         while (await channel.Reader.WaitToReadAsync())
         {
@@ -619,8 +629,9 @@ public class TestService
     {
         try
         {
-            var mtpClient = await MtpClient.CreateAsync(targetPath, CancellationToken.None);
-            return RunMtpTestsAndDisposeAsync(mtpClient, filter);
+            var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var mtpClient = await MtpClient.CreateAsync(targetPath, timeoutCts.Token);
+            return RunMtpTestsAndDisposeAsync(mtpClient, filter, timeoutCts);
         }
         catch (Exception ex)
         {
@@ -629,11 +640,14 @@ public class TestService
         }
     }
 
-    private static async IAsyncEnumerable<TestRunResult> RunMtpTestsAndDisposeAsync(MtpClient client, RunRequestNode[] filter)
+    private static async IAsyncEnumerable<TestRunResult> RunMtpTestsAndDisposeAsync(
+        MtpClient client,
+        RunRequestNode[] filter,
+        CancellationTokenSource timeoutCts)
     {
         try
         {
-            await foreach (var result in client.RunTestsAsync(filter, CancellationToken.None))
+            await foreach (var result in client.RunTestsAsync(filter, timeoutCts.Token))
             {
                 yield return result;
             }
@@ -641,6 +655,7 @@ public class TestService
         finally
         {
             await client.DisposeAsync();
+            timeoutCts.Dispose();
         }
     }
 
