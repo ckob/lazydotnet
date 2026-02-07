@@ -8,10 +8,10 @@ namespace lazydotnet.UI.Components;
 public class ProjectPickerModal : Modal
 {
     private readonly ScrollableList<ProjectInfo> _projectList = new();
-    private readonly Action<ProjectInfo> _onSelected;
+    private readonly Func<ProjectInfo, Task> _onSelected;
     private readonly string? _rootPath;
 
-    public ProjectPickerModal(string title, List<ProjectInfo> projects, string? rootPath, Action<ProjectInfo> onSelected, Action onClose)
+    public ProjectPickerModal(string title, List<ProjectInfo> projects, string? rootPath, Func<ProjectInfo, Task> onSelected, Action onClose)
         : base(title, new Markup("Loading..."), onClose)
     {
         _projectList.SetItems(projects);
@@ -48,13 +48,12 @@ public class ProjectPickerModal : Modal
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
 
-        yield return new KeyBinding("enter", "select", () =>
+        yield return new KeyBinding("enter", "select", async () =>
         {
             if (_projectList.SelectedItem != null)
             {
-                _onSelected(_projectList.SelectedItem);
+                await _onSelected(_projectList.SelectedItem);
             }
-            return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter);
     }
 
@@ -99,7 +98,7 @@ public class ProjectPickerModal : Modal
         return Math.Max(modalWidth, 40);
     }
 
-    private IRenderable RenderProjectRow(ProjectInfo project, bool isSelected, int availableWidth)
+    private Markup RenderProjectRow(ProjectInfo project, bool isSelected, int availableWidth)
     {
         var displayPath = _rootPath != null ? Path.GetRelativePath(_rootPath, project.Path) : project.Path;
         var name = project.Name;

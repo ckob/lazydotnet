@@ -8,28 +8,25 @@ namespace lazydotnet.UI.Components;
 public class WorkspacePickerModal : Modal
 {
     private readonly string _rootPath;
-    private readonly SolutionService _solutionService;
     private readonly Action<string> _onSelected;
     private readonly Action _requestRefresh;
-    
+
     private readonly ScrollableList<SolutionInfo> _workspaceList = new();
     private bool _isLoading = true;
     private int _lastFrameIndex = -1;
 
     public WorkspacePickerModal(
-        string rootPath, 
-        SolutionService solutionService, 
-        Action<string> onSelected, 
+        string rootPath,
+        Action<string> onSelected,
         Action onClose,
         Action requestRefresh)
         : base("Select Workspace", new Markup("Searching..."), onClose)
     {
         _rootPath = rootPath;
-        _solutionService = solutionService;
         _onSelected = onSelected;
         _requestRefresh = requestRefresh;
         Width = 100;
-        
+
         _ = LoadWorkspacesAsync();
     }
 
@@ -37,7 +34,7 @@ public class WorkspacePickerModal : Modal
     {
         try
         {
-            var workspaces = await _solutionService.DiscoverWorkspacesAsync(_rootPath);
+            var workspaces = await SolutionService.DiscoverWorkspacesAsync(_rootPath);
             _workspaceList.SetItems(workspaces);
         }
         finally
@@ -121,7 +118,7 @@ public class WorkspacePickerModal : Modal
         // Calculate needed width instead of taking all available
         var maxNameLen = _workspaceList.Items.Select(w => w.Name.Length).DefaultIfEmpty(0).Max();
         var maxPathLen = _workspaceList.Items.Select(w => GetDisplayPath(w.Path).Length).DefaultIfEmpty(0).Max();
-        
+
         var contentWidth = 6 + maxNameLen + 4 + maxPathLen + 4;
         Width = Math.Clamp(contentWidth + 8, 60, width - 8);
 
@@ -157,7 +154,7 @@ public class WorkspacePickerModal : Modal
         var displayPath = GetDisplayPath(workspace.Path);
         var name = workspace.Name;
         var ext = Path.GetExtension(workspace.Path).ToLower();
-        
+
         string icon = ext switch
         {
             ".slnx" => "[dodgerblue1]SLNX[/]",

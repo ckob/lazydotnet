@@ -88,7 +88,7 @@ public enum TestStatus
     Failed
 }
 
-public class TestService
+public static class TestService
 {
     private static readonly SemaphoreSlim VstestLock = new(1, 1);
     private static readonly Lock MsBuildLock = new();
@@ -578,7 +578,7 @@ public class TestService
         {
             foreach (var group in vstestTests.GroupBy(t => t.Source))
             {
-                resultChannels.Add(await RunVsTestsAsync(group.Key, [.. group]));
+                resultChannels.Add(RunVsTests(group.Key, [.. group]));
             }
         }
 
@@ -659,7 +659,7 @@ public class TestService
         }
     }
 
-    private static async Task<IAsyncEnumerable<TestRunResult>> RunVsTestsAsync(string targetPath, RunRequestNode[] filter)
+    private static IAsyncEnumerable<TestRunResult> RunVsTests(string targetPath, RunRequestNode[] filter)
     {
         var vstestPath = VsTestConsoleLocator.GetVsTestConsolePath();
         if (vstestPath == null) return EmptyRun();
@@ -712,6 +712,7 @@ public class TestService
 
     private static async IAsyncEnumerable<TestRunResult> EmptyRun()
     {
+        await Task.CompletedTask;
         yield break;
     }
 
@@ -750,12 +751,16 @@ public class TestService
 
         private static string? GetStdOut(TestResult result)
         {
-            return result.Messages.FirstOrDefault(m => m.Category == TestMessageLevel.Informational.ToString())?.Text;
+            return result.Messages.FirstOrDefault(m => m.Category == nameof(TestMessageLevel.Informational))?.Text;
         }
 
         private static async IAsyncEnumerable<string> ToAsyncEnumerable(string? text)
         {
-            if (!string.IsNullOrEmpty(text)) yield return text;
+            if (string.IsNullOrEmpty(text)) yield break;
+
+            await Task.CompletedTask;
+
+            yield return text;
         }
 
         public void HandleTestRunComplete(TestRunCompleteEventArgs testRunCompleteArgs, TestRunChangedEventArgs? lastChunkArgs, ICollection<AttachmentSet>? runContextAttachments, ICollection<string>? executorUris)

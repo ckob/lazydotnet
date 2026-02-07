@@ -218,18 +218,19 @@ public class TestDetailsModal(TestNode node, Action onClose) : Modal(node.Name, 
             var first = physicalLines.FindIndex(p => p.LogicalIndex == _selectedLogicalIndex);
             var last = physicalLines.FindLastIndex(p => p.LogicalIndex == _selectedLogicalIndex);
 
-        if (first != -1)
-        {
-            if (first < _scrollOffset) _scrollOffset = first;
-            if (last >= _scrollOffset + visibleRows) _scrollOffset = last - visibleRows + 1;
+            if (first != -1)
+            {
+                if (first < _scrollOffset) _scrollOffset = first;
+                if (last >= _scrollOffset + visibleRows) _scrollOffset = last - visibleRows + 1;
+            }
         }
+        else
+        {
+            _scrollOffset = 0;
+        }
+
+        _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, physicalLines.Count - visibleRows)));
     }
-    else
-    {
-        _scrollOffset = 0;
-    }
-    _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, Math.Max(0, physicalLines.Count - visibleRows)));
-}
 
 
     private void RenderPhysicalLines(Table table, List<PhysicalLine> physicalLines, int visibleRows)

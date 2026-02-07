@@ -1,7 +1,7 @@
 using FluentAssertions;
 using lazydotnet.Services;
 
-namespace lazydotnet.Tests;
+namespace lazydotnet.UnitTests;
 
 public class ExecutionServiceTests
 {

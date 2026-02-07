@@ -15,7 +15,7 @@ public class ExecutionTab : IProjectTab
     private int _selectedIndex = -1;
     private bool _needsFinalRefresh;
 
-    public string Title 
+    public string Title
     {
         get
         {
@@ -55,7 +55,7 @@ public class ExecutionTab : IProjectTab
         return Task.CompletedTask;
     }
 
-    public bool IsStreaming => _selectedIndex == -1;
+    private bool IsStreaming => _selectedIndex == -1;
 
     public bool OnTick()
     {
@@ -78,7 +78,7 @@ public class ExecutionTab : IProjectTab
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("r", "run project", async () => 
+        yield return new KeyBinding("r", "run project", async () =>
         {
             if (_currentProjectPath != null && _currentProjectName != null)
             {
@@ -87,7 +87,7 @@ public class ExecutionTab : IProjectTab
             }
         }, k => k.KeyChar == 'r');
 
-        yield return new KeyBinding("s", "stop project", async () => 
+        yield return new KeyBinding("s", "stop project", async () =>
         {
             if (_currentProjectPath != null)
             {
@@ -96,7 +96,7 @@ public class ExecutionTab : IProjectTab
             }
         }, k => k.KeyChar == 's');
 
-        yield return new KeyBinding("c", "clear logs", () => 
+        yield return new KeyBinding("c", "clear logs", () =>
         {
             if (_currentProjectPath != null && _currentProjectName != null)
             {
@@ -107,29 +107,29 @@ public class ExecutionTab : IProjectTab
             return Task.CompletedTask;
         }, k => k.KeyChar == 'c');
 
-        yield return new KeyBinding("k", "up", () => 
+        yield return new KeyBinding("k", "up", () =>
         {
             MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K, false);
+        }, k => k.Key is ConsoleKey.UpArrow or ConsoleKey.K, false);
 
-        yield return new KeyBinding("j", "down", () => 
+        yield return new KeyBinding("j", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J, false);
+        }, k => k.Key is ConsoleKey.DownArrow or ConsoleKey.J, false);
 
         yield return new KeyBinding("pgup", "page up", () =>
         {
             PageUp(10);
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+        }, k => k.Key == ConsoleKey.PageUp || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U }, false);
 
         yield return new KeyBinding("pgdn", "page down", () =>
         {
             PageDown(10);
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+        }, k => k.Key == ConsoleKey.PageDown || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.D }, false);
 
         yield return new KeyBinding("esc", "resume stream", () =>
         {

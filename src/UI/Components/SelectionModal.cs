@@ -7,9 +7,9 @@ namespace lazydotnet.UI.Components;
 public class SelectionModal<T> : Modal
 {
     private readonly ScrollableList<(string Label, T Value)> _options = new();
-    private readonly Action<T> _onSelected;
+    private readonly Func<T, Task> _onSelected;
 
-    public SelectionModal(string title, string prompt, List<(string Label, T Value)> options, Action<T> onSelected,
+    public SelectionModal(string title, string prompt, List<(string Label, T Value)> options, Func<T, Task> onSelected,
         Action onClose)
         : base(title, new Markup(prompt), onClose)
     {
@@ -60,15 +60,13 @@ public class SelectionModal<T> : Modal
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.D },
             ShowInBottomBar: false);
 
-        yield return new KeyBinding("enter", "select", () =>
+        yield return new KeyBinding("enter", "select", async () =>
         {
             if (_options is not { Count: > 0, SelectedIndex: >= 0 })
-                return Task.CompletedTask;
+                return;
 
-            _onSelected(_options.SelectedItem.Value);
+            await _onSelected(_options.SelectedItem.Value);
             OnClose();
-
-            return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter);
     }
 

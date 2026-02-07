@@ -8,9 +8,9 @@ namespace lazydotnet.UI;
 
 public class WorkspacePane(SolutionService solutionService, string rootDir) : IKeyBindable
 {
-    public Action<string>? OnWorkspaceSelected { get; set; }
-    public Action<Modal>? RequestModal { get; set; }
-    public Action? RequestRefresh { get; set; }
+    public Action<string>? OnWorkspaceSelected { get; init; }
+    public Action<Modal>? RequestModal { get; init; }
+    public Action? RequestRefresh { get; init; }
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
@@ -20,10 +20,9 @@ public class WorkspacePane(SolutionService solutionService, string rootDir) : IK
     private async Task OpenPickerAsync()
     {
         RequestRefresh?.Invoke();
-        
+
         var picker = new WorkspacePickerModal(
             rootDir,
-            solutionService,
             path => OnWorkspaceSelected?.Invoke(path),
             () => RequestModal?.Invoke(null!),
             () => RequestRefresh?.Invoke()

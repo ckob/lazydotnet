@@ -12,7 +12,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
 
     public async Task RunAsync()
     {
-        Console.CancelKeyPress += (sender, e) =>
+        Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
             _isRunning = false;

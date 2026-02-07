@@ -1,8 +1,7 @@
 using FluentAssertions;
 using lazydotnet.Services;
-using Spectre.Console;
 
-namespace lazydotnet.Tests;
+namespace lazydotnet.UnitTests;
 
 public class CommandServiceTests
 {
@@ -17,7 +16,7 @@ public class CommandServiceTests
         // Act
         // We use a non-existent project to keep it fast, or a dummy one.
         // BuildProjectAsync will fail but we want to see if it starts.
-        try 
+        try
         {
             await CommandService.BuildProjectAsync("non-existent.csproj", _ => {}, ct);
         }

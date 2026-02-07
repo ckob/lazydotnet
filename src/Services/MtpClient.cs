@@ -121,7 +121,7 @@ public class MtpClient : IAsyncDisposable
 
             await jsonRpc.InvokeWithParameterObjectAsync("initialize", new MtpInitializeRequest(
                 Environment.ProcessId,
-                new MtpClientInfo("lazydotnet", "1.0.0"),
+                new MtpClientInfo("lazydotnet"),
                 new MtpClientCapabilities(new MtpClientTestingCapabilities(false))
             ), linkedCts.Token);
 
@@ -303,8 +303,8 @@ public class MtpClient : IAsyncDisposable
         [EnumeratorCancellation] CancellationToken ct)
     {
         var receivedUids = new HashSet<string>();
-        
-        using var completionCts = new CancellationTokenSource();
+
+        var completionCts = new CancellationTokenSource();
         _ = completionTask.ContinueWith(
             _ => completionCts.Cancel(),
             CancellationToken.None,
@@ -315,6 +315,7 @@ public class MtpClient : IAsyncDisposable
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
+        _ = Task.WhenAll(completionTask, _processTask).ContinueWith(_ => completionCts.Dispose(), ct);
 
         while (receivedUids.Count < expectedUids.Count && !ct.IsCancellationRequested)
         {
@@ -343,7 +344,7 @@ public class MtpClient : IAsyncDisposable
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                 ct, timeoutCts.Token, completionCts.Token);
-            
+
             if (await _updates.Reader.WaitToReadAsync(linkedCts.Token))
             {
                 _updates.Reader.TryRead(out var update);
@@ -384,6 +385,7 @@ public class MtpClient : IAsyncDisposable
 
     private static async IAsyncEnumerable<string> ToAsyncEnumerable(string? text)
     {
+        await Task.CompletedTask;
         if (!string.IsNullOrEmpty(text)) yield return text;
     }
 
@@ -393,5 +395,6 @@ public class MtpClient : IAsyncDisposable
         _jsonRpc.Dispose();
         _tcpClient.Dispose();
         _listener.Stop();
+        GC.SuppressFinalize(this);
     }
 }

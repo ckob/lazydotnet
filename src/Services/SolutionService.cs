@@ -16,6 +16,11 @@ public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects,
 
 public class SolutionService
 {
+    private const string SlnFileExtension = ".sln";
+    private const string SlnxFileExtension = ".slnx";
+    private const string SlnfFileExtension = ".slnf";
+    private const string CsprojFileExtension = ".csproj";
+
     public SolutionInfo? CurrentSolution { get; private set; }
 
     public async Task<SolutionInfo?> FindAndParseSolutionAsync(string path)
@@ -25,14 +30,14 @@ public class SolutionService
 
         if (Directory.Exists(path))
         {
-            solutionFile = Directory.GetFiles(path, "*.sln").FirstOrDefault()
-                           ?? Directory.GetFiles(path, "*.slnx").FirstOrDefault()
-                           ?? Directory.GetFiles(path, "*.slnf").FirstOrDefault();
+            solutionFile = Directory.GetFiles(path, $"*{SlnFileExtension}").FirstOrDefault()
+                           ?? Directory.GetFiles(path, $"*{SlnxFileExtension}").FirstOrDefault()
+                           ?? Directory.GetFiles(path, $"*{SlnfFileExtension}").FirstOrDefault();
             rootDir = Path.GetFullPath(path);
 
             if (solutionFile == null)
             {
-                var csproj = Directory.GetFiles(path, "*.csproj").FirstOrDefault();
+                var csproj = Directory.GetFiles(path, $"*{CsprojFileExtension}").FirstOrDefault();
                 if (csproj != null)
                 {
                     return await ParseProjectAsSolutionAsync(csproj);
@@ -41,14 +46,14 @@ public class SolutionService
         }
         else if (File.Exists(path))
         {
-            if (path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".slnf", StringComparison.OrdinalIgnoreCase))
+            if (path.EndsWith(SlnFileExtension, StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(SlnxFileExtension, StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(SlnfFileExtension, StringComparison.OrdinalIgnoreCase))
             {
                 solutionFile = Path.GetFullPath(path);
                 rootDir = Path.GetDirectoryName(solutionFile);
             }
-            else if (path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            else if (path.EndsWith(CsprojFileExtension, StringComparison.OrdinalIgnoreCase))
             {
                 return await ParseProjectAsSolutionAsync(path);
             }
@@ -64,9 +69,9 @@ public class SolutionService
                 {
                     Name = proj.ProjectName,
                     Path = proj.AbsolutePath,
-                    Id = proj.AbsolutePath
+                    Id = proj.AbsolutePath,
+                    IsRunnable = IsProjectRunnable(proj.AbsolutePath)
                 };
-                info.IsRunnable = IsProjectRunnable(proj.AbsolutePath);
                 return info;
             }).ToList();
 
@@ -74,23 +79,31 @@ public class SolutionService
             Path.GetFileNameWithoutExtension(solutionFile),
             solutionFile,
             projects,
-            IsSlnx: solutionFile.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase),
-            IsSlnf: solutionFile.EndsWith(".slnf", StringComparison.OrdinalIgnoreCase));
+            IsSlnx: solutionFile.EndsWith(SlnxFileExtension, StringComparison.OrdinalIgnoreCase),
+            IsSlnf: solutionFile.EndsWith(SlnfFileExtension, StringComparison.OrdinalIgnoreCase));
 
         return CurrentSolution;
     }
 
-    public async Task<List<SolutionInfo>> DiscoverWorkspacesAsync(string rootPath)
+    public static async Task<List<SolutionInfo>> DiscoverWorkspacesAsync(string rootPath)
     {
         return await Task.Run(() =>
         {
             var results = new ConcurrentBag<SolutionInfo>();
             var options = new EnumerationOptions { RecurseSubdirectories = true, MaxRecursionDepth = 5 };
-            
-            var ignoredDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
-            { 
-                "bin", "obj", ".git", ".vs", ".vscode", "node_modules", "TestResults" 
+
+            var ignoredDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "bin", "obj", ".git", ".vs", ".vscode", "node_modules", "TestResults"
             };
+
+            ScanDirectory(rootPath, 0);
+
+            return results
+                .OrderByDescending(w => IsSolution(w.Path))
+                .ThenBy(w => GetDepth(rootPath, w.Path))
+                .ThenBy(w => w.Name)
+                .ToList();
 
             void ScanDirectory(string currentPath, int depth)
             {
@@ -110,14 +123,6 @@ public class SolutionService
                     // Ignore missing directories
                 }
             }
-
-            ScanDirectory(rootPath, 0);
-
-            return results
-                .OrderByDescending(w => IsSolution(w.Path))
-                .ThenBy(w => GetDepth(rootPath, w.Path))
-                .ThenBy(w => w.Name)
-                .ToList();
         });
 
         static void ProcessFiles(string currentPath, ConcurrentBag<SolutionInfo> results)
@@ -125,18 +130,19 @@ public class SolutionService
             foreach (var file in Directory.GetFiles(currentPath, "*.*"))
             {
                 var ext = Path.GetExtension(file).ToLower();
-                if (ext is ".sln" or ".slnx" or ".slnf")
+                switch (ext)
                 {
-                    results.Add(new SolutionInfo(
-                        Path.GetFileName(file),
-                        file,
-                        [],
-                        IsSlnx: ext == ".slnx",
-                        IsSlnf: ext == ".slnf"));
-                }
-                else if (ext == ".csproj")
-                {
-                    results.Add(new SolutionInfo(Path.GetFileName(file), file, []));
+                    case SlnFileExtension or SlnxFileExtension or SlnfFileExtension:
+                        results.Add(new SolutionInfo(
+                            Path.GetFileName(file),
+                            file,
+                            [],
+                            IsSlnx: ext == SlnxFileExtension,
+                            IsSlnf: ext == SlnfFileExtension));
+                        break;
+                    case CsprojFileExtension:
+                        results.Add(new SolutionInfo(Path.GetFileName(file), file, []));
+                        break;
                 }
             }
         }
@@ -155,9 +161,9 @@ public class SolutionService
         }
 
         static bool IsSolution(string path) =>
-            path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith(".slnf", StringComparison.OrdinalIgnoreCase);
+            path.EndsWith(SlnFileExtension, StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(SlnxFileExtension, StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(SlnfFileExtension, StringComparison.OrdinalIgnoreCase);
 
         static int GetDepth(string root, string path)
         {

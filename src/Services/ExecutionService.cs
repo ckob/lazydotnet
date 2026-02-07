@@ -14,9 +14,12 @@ public enum ExecutionStatus
     Crashed
 }
 
-public class ProjectExecutionState
+public partial class ProjectExecutionState
 {
-    private static readonly Regex AnsiRegex = new(@"\x1B\[[^@-~]*[@-~]", RegexOptions.Compiled);
+    [GeneratedRegex(@"\x1B\[[^@-~]*[@-~]", RegexOptions.Compiled)]
+    private static partial Regex GetAnsiRegex();
+
+    private static readonly Regex AnsiRegex = GetAnsiRegex();
 
     public string ProjectPath { get; init; } = string.Empty;
     public string ProjectName { get; init; } = string.Empty;
@@ -48,8 +51,8 @@ public class ProjectExecutionState
 
 public class ExecutionService
 {
-    private static readonly Lazy<ExecutionService> _instance = new(() => new ExecutionService());
-    public static ExecutionService Instance => _instance.Value;
+    private static readonly Lazy<ExecutionService> LazyInstance = new(() => new ExecutionService());
+    public static ExecutionService Instance => LazyInstance.Value;
 
     private readonly ConcurrentDictionary<string, ProjectExecutionState> _states = new(StringComparer.OrdinalIgnoreCase);
 
@@ -58,24 +61,24 @@ public class ExecutionService
 
     public ProjectExecutionState GetOrCreateState(string projectPath, string projectName)
     {
-        return _states.GetOrAdd(projectPath, path => new ProjectExecutionState 
-        { 
-            ProjectPath = path, 
-            ProjectName = projectName 
+        return _states.GetOrAdd(projectPath, path => new ProjectExecutionState
+        {
+            ProjectPath = path,
+            ProjectName = projectName
         });
     }
 
     public bool IsRunning(string projectPath)
     {
-        return _states.TryGetValue(projectPath, out var state) && 
-               (state.Status == ExecutionStatus.Running || state.Status == ExecutionStatus.Building);
+        return _states.TryGetValue(projectPath, out var state) &&
+               state.Status is ExecutionStatus.Running or ExecutionStatus.Building;
     }
 
     public async Task StartProjectAsync(string projectPath, string projectName)
     {
         var state = GetOrCreateState(projectPath, projectName);
-        
-        if (state.Status == ExecutionStatus.Running || state.Status == ExecutionStatus.Building)
+
+        if (state.Status is ExecutionStatus.Running or ExecutionStatus.Building)
         {
             await StopProjectAsync(projectPath);
         }
@@ -95,11 +98,11 @@ public class ExecutionService
                 var buildCmd = Cli.Wrap("dotnet")
                     .WithArguments($"build \"{projectPath}\"")
                     .WithValidation(CommandResultValidation.None)
-                    .WithStandardOutputPipe(PipeTarget.ToDelegate(line => 
+                    .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
                     {
                         state.AddLog($"[dim]{Markup.Escape(line)}[/]");
                     }))
-                    .WithStandardErrorPipe(PipeTarget.ToDelegate(line => 
+                    .WithStandardErrorPipe(PipeTarget.ToDelegate(line =>
                     {
                         state.AddLog($"[red]{Markup.Escape(line)}[/]");
                     }));
@@ -121,12 +124,12 @@ public class ExecutionService
                 var runCmd = Cli.Wrap("dotnet")
                     .WithArguments($"run --project \"{projectPath}\" --no-build")
                     .WithValidation(CommandResultValidation.None)
-                    .WithStandardOutputPipe(PipeTarget.ToDelegate(line => 
+                    .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
                     {
                         state.AddLog(Markup.Escape(line));
                         OnLogReceived?.Invoke(projectPath, line);
                     }))
-                    .WithStandardErrorPipe(PipeTarget.ToDelegate(line => 
+                    .WithStandardErrorPipe(PipeTarget.ToDelegate(line =>
                     {
                         var msg = $"[red]{Markup.Escape(line)}[/]";
                         state.AddLog(msg);
@@ -134,11 +137,11 @@ public class ExecutionService
                     }));
 
                 var result = await runCmd.ExecuteAsync(state.Cts.Token);
-                
+
                 state.Status = ExecutionStatus.Stopped;
                 state.ExitCode = result.ExitCode;
-                state.AddLog(result.ExitCode == 0 
-                    ? "[green]Process finished successfully.[/]" 
+                state.AddLog(result.ExitCode == 0
+                    ? "[green]Process finished successfully.[/]"
                     : $"[red]Process exited with code {result.ExitCode}.[/]");
             }
             catch (OperationCanceledException)
@@ -195,7 +198,7 @@ public class ExecutionService
         var tasks = _states.Values
             .Where(s => s.Status == ExecutionStatus.Running)
             .Select(s => StopProjectAsync(s.ProjectPath));
-        
+
         await Task.WhenAll(tasks);
     }
 }

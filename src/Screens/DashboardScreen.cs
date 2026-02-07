@@ -530,8 +530,6 @@ public class DashboardScreen : IScreen
 
     public void Render(AppLayout layout, int width, int height)
     {
-        layout.SetDetailsActiveTab(_detailsPane.ActiveTab);
-
         var bottomH = AppLayout.GetBottomHeight(height);
         var mainHeight = height - 1;
         var topH = mainHeight - bottomH;
@@ -546,13 +544,6 @@ public class DashboardScreen : IScreen
         layout.UpdateRight(_detailsPane.GetContent(contentTopH, dw - 2, layout.ActivePanel == 0), _detailsPane.GetHeader());
         layout.UpdateBottom(width, bottomH);
 
-        if (_activeModal != null)
-        {
-            layout.UpdateModal(_activeModal.GetRenderable(width, height));
-        }
-        else
-        {
-            layout.UpdateModal(null);
-        }
+        layout.UpdateModal(_activeModal?.GetRenderable(width, height));
     }
 }

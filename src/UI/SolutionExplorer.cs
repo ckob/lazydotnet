@@ -7,17 +7,17 @@ namespace lazydotnet.UI;
 
 public class ExplorerNode
 {
-    public string Name { get; set; } = string.Empty;
-    public string? ProjectPath { get; set; }
-    public bool IsProject { get; set; }
-    public bool IsSolution { get; set; }
-    public bool IsSlnx { get; set; }
-    public bool IsSlnf { get; set; }
+    public string Name { get; init; } = string.Empty;
+    public string? ProjectPath { get; init; }
+    public bool IsProject { get; init; }
+    public bool IsSolution { get; init; }
+    public bool IsSlnx { get; init; }
+    public bool IsSlnf { get; init; }
     public bool IsExpanded { get; set; } = true;
     public int Depth { get; set; }
     public List<ExplorerNode> Children { get; } = [];
     public ExplorerNode? Parent { get; set; }
-    public ProjectInfo? ProjectInfo { get; set; }
+    public ProjectInfo? ProjectInfo { get; init; }
 }
 
 public class SolutionExplorer(IEditorService editorService) : IKeyBindable
@@ -217,7 +217,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         yield return new KeyBinding("pgdn", "page down", DoPageDown, MatchPageDownKey, false);
         yield return new KeyBinding("←", "collapse", DoCollapse, k => k.Key == ConsoleKey.LeftArrow, false);
         yield return new KeyBinding("→", "expand", DoExpand, k => k.Key == ConsoleKey.RightArrow, false);
-        yield return new KeyBinding("enter/space", "toggle", DoToggle, k => k.Key == ConsoleKey.Enter || k.Key == ConsoleKey.Spacebar, false);
+        yield return new KeyBinding("enter/space", "toggle", DoToggle, k => k.Key is ConsoleKey.Enter or ConsoleKey.Spacebar, false);
         yield return new KeyBinding("e", "edit", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
         yield return new KeyBinding("b", "build", DoBuild, k => k.KeyChar == 'b');
 
@@ -239,10 +239,10 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N };
 
     private static bool MatchPageUpKey(ConsoleKeyInfo k) =>
-        k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U);
+        k.Key == ConsoleKey.PageUp || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U };
 
     private static bool MatchPageDownKey(ConsoleKeyInfo k) =>
-        k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D);
+        k.Key == ConsoleKey.PageDown || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.D };
 
     private Task DoMoveUp() { MoveUp(); return Task.CompletedTask; }
     private Task DoMoveDown() { MoveDown(); return Task.CompletedTask; }
@@ -255,14 +255,14 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
     private Task DoBuild()
     {
         var node = GetSelectedNode();
-        
+
         // If it's a solution or project, build it directly
         if ((node.IsSolution || node.IsProject) && node.ProjectPath != null)
         {
             OnRequestBuild?.Invoke(node.ProjectPath, node.Name);
             return Task.CompletedTask;
         }
-        
+
         // For folder nodes, build all child projects
         var projects = GetAllChildProjects(node).ToList();
         if (projects.Count > 0) OnRequestBuildProjects?.Invoke(projects);
@@ -272,7 +272,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
     private Task DoRun()
     {
         var node = GetSelectedNode();
-        if (node.IsProject && node.ProjectInfo != null)
+        if (node is { IsProject: true, ProjectInfo: not null })
         {
             OnRequestRun?.Invoke(node.ProjectInfo);
         }
@@ -380,18 +380,6 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         RefreshVisibleNodes();
     }
 
-    public bool HandleInput(ConsoleKeyInfo key)
-    {
-        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding != null)
-        {
-            _ = binding.Action();
-            return true;
-        }
-        return false;
-    }
-
-
     private void EnsureVisible(int height)
     {
         var contentHeight = Math.Max(1, height);
@@ -487,18 +475,15 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
 
     private static IEnumerable<ProjectInfo> GetAllChildProjects(ExplorerNode node)
     {
-        if (node.IsProject && node.ProjectInfo != null)
+        if (node is { IsProject: true, ProjectInfo: not null })
         {
             yield return node.ProjectInfo;
             yield break;
         }
 
-        foreach (var child in node.Children)
+        foreach (var project in node.Children.SelectMany(GetAllChildProjects))
         {
-            foreach (var project in GetAllChildProjects(child))
-            {
-                yield return project;
-            }
+            yield return project;
         }
     }
 
@@ -529,9 +514,9 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         var indent = new string(' ', node.Depth * 2);
         var icon = GetNodeIcon(node);
         var name = GetTruncatedName(node.Name, node.Depth, availableWidth);
-        
+
         var runningStatus = "";
-        if (node.IsProject && node.ProjectPath != null && ExecutionService.Instance.IsRunning(node.ProjectPath))
+        if (node is { IsProject: true, ProjectPath: not null } && ExecutionService.Instance.IsRunning(node.ProjectPath))
         {
             runningStatus = " [bold green](R)[/]";
         }

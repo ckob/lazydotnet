@@ -1,6 +1,4 @@
-using System.IO;
-
-namespace lazydotnet.Tests;
+namespace lazydotnet.IntegrationTests;
 
 public static class TestUtils
 {
@@ -82,7 +80,7 @@ public static class TestUtils
         var content = new System.Text.StringBuilder();
         content.AppendLine("Microsoft Visual Studio Solution File, Format Version 12.00");
         content.AppendLine("# Visual Studio Version 17");
-        
+
         foreach (var path in projectPaths)
         {
             var name = Path.GetFileNameWithoutExtension(path);
@@ -90,7 +88,7 @@ public static class TestUtils
             content.AppendLine($@"Project(""{{9A19103F-16F7-4668-BE54-9A1E7A4F7556}}"") = ""{name}"", ""{Path.GetRelativePath(directory, path)}"", ""{guid}""");
             content.AppendLine("EndProject");
         }
-        
+
         File.WriteAllText(solutionPath, content.ToString());
         return solutionPath;
     }

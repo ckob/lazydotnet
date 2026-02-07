@@ -27,25 +27,25 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         {
             MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
 
         yield return new KeyBinding("j", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
 
         yield return new KeyBinding("pgup", "page up", () =>
         {
             PageUp(10);
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+        }, k => k.Key == ConsoleKey.PageUp || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U }, false);
 
         yield return new KeyBinding("pgdn", "page down", () =>
         {
             PageDown(10);
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+        }, k => k.Key == ConsoleKey.PageDown || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.D }, false);
 
         yield return new KeyBinding("a", "add", AddReferenceAsync, k => k.Key == ConsoleKey.A);
 
@@ -61,30 +61,13 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
         }
     }
 
-    public void MoveUp() => _refsList.MoveUp();
+    private void MoveUp() => _refsList.MoveUp();
 
-    public void MoveDown() => _refsList.MoveDown();
+    private void MoveDown() => _refsList.MoveDown();
 
-    public void PageUp(int pageSize) => _refsList.PageUp(pageSize);
+    private void PageUp(int pageSize) => _refsList.PageUp(pageSize);
 
-    public void PageDown(int pageSize) => _refsList.PageDown(pageSize);
-
-    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
-    {
-        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding != null)
-        {
-            await binding.Action();
-            return true;
-        }
-        return false;
-    }
-
-    public string? GetScrollIndicator()
-    {
-        if (_currentProjectPath == null || _isLoading || _refsList.Count == 0) return null;
-        return $"{_refsList.SelectedIndex + 1} of {_refsList.Count}";
-    }
+    private void PageDown(int pageSize) => _refsList.PageDown(pageSize);
 
     public void ClearData()
     {

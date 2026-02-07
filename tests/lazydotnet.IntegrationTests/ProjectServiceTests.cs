@@ -2,9 +2,9 @@ using FluentAssertions;
 using lazydotnet.Services;
 using Microsoft.Build.Locator;
 
-namespace lazydotnet.Tests;
+namespace lazydotnet.IntegrationTests;
 
-public class ProjectServiceTests : IDisposable
+public sealed class ProjectServiceTests : IDisposable
 {
     private readonly string _testDir;
 
@@ -50,12 +50,12 @@ public class ProjectServiceTests : IDisposable
         // Arrange
         TestUtils.CopyFixture("SimpleApp", _testDir);
         TestUtils.CopyFixture("SimpleLibrary", _testDir);
-        
+
         // We'll create a third project dynamically just for this test to have 2 refs
         var lib2 = TestUtils.CreateTestProject(_testDir, "Lib2");
         var mainProj = Path.Combine(_testDir, "SimpleApp", "SimpleApp.csproj");
         var lib1 = Path.Combine(_testDir, "SimpleLibrary", "SimpleLibrary.csproj");
-        
+
         await ProjectService.AddProjectReferenceAsync(mainProj, lib1);
         await ProjectService.AddProjectReferenceAsync(mainProj, lib2);
 

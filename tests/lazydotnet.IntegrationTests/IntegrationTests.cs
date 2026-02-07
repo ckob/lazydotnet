@@ -1,12 +1,11 @@
 using FluentAssertions;
 using lazydotnet.Services;
 using Microsoft.Build.Locator;
-using Xunit;
 
-namespace lazydotnet.Tests;
+namespace lazydotnet.IntegrationTests;
 
 [Trait("Category", "Integration")]
-public class IntegrationTests : IDisposable
+public sealed class IntegrationTests : IDisposable
 {
     private readonly string _testDir;
 
@@ -58,7 +57,7 @@ public class IntegrationTests : IDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var runResults = new List<TestRunResult>();
         var filter = discoveredTests.Select(t => new RunRequestNode(t.Id, t.DisplayName, t.Source, t.IsMtp)).ToArray();
-        
+
         var resultsEnumerable = await TestService.RunTestsAsync(projectPath, filter);
         await foreach (var result in resultsEnumerable.WithCancellation(cts.Token))
         {
@@ -98,7 +97,7 @@ public class IntegrationTests : IDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         var runResults = new List<TestRunResult>();
         var filter = discoveredTests.Select(t => new RunRequestNode(t.Id, t.DisplayName, t.Source, t.IsMtp)).ToArray();
-        
+
         var resultsEnumerable = await TestService.RunTestsAsync(projectPath, filter);
         await foreach (var result in resultsEnumerable.WithCancellation(cts.Token))
         {
@@ -152,7 +151,7 @@ public class IntegrationTests : IDisposable
         TestUtils.CopyFixture("SimpleLibrary", _testDir); // Not a test project
 
         // Act
-        // Since they are not built, results will be empty, but we want to ensure it doesn't crash 
+        // Since they are not built, results will be empty, but we want to ensure it doesn't crash
         // during MSBuild evaluation.
         var results = await TestService.DiscoverTestsAsync(_testDir, TestContext.Current.CancellationToken);
 

@@ -1,8 +1,8 @@
+using CliWrap;
 using FluentAssertions;
 using lazydotnet.Services;
-using CliWrap;
 
-namespace lazydotnet.Tests;
+namespace lazydotnet.UnitTests;
 
 public class AppCliTests
 {

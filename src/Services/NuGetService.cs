@@ -72,6 +72,8 @@ public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string
 
 public static class NuGetService
 {
+    private const string DotnetBaseCommand = "dotnet";
+
     public static async Task<List<SearchResult>> SearchPackagesAsync(string query, Action<string>? logger = null, CancellationToken ct = default)
     {
         try
@@ -97,7 +99,7 @@ public static class NuGetService
                 }
                 catch
                 {
-                    return Enumerable.Empty<IPackageSearchMetadata>();
+                    return [];
                 }
             });
 
@@ -172,7 +174,7 @@ public static class NuGetService
 
         try
         {
-            var command = Cli.Wrap("dotnet")
+            var command = Cli.Wrap(DotnetBaseCommand)
                 .WithArguments(["list", projectPath, "package", "--format", "json"])
                 .WithValidation(CommandResultValidation.None);
 
@@ -206,7 +208,7 @@ public static class NuGetService
     {
         try
         {
-            var command = Cli.Wrap("dotnet")
+            var command = Cli.Wrap(DotnetBaseCommand)
                 .WithArguments(["list", projectPath, "package", "--outdated", "--format", "json"])
                 .WithValidation(CommandResultValidation.None);
 
@@ -249,7 +251,7 @@ public static class NuGetService
             args.Add("--no-restore");
         }
 
-        var command = Cli.Wrap("dotnet")
+        var command = Cli.Wrap(DotnetBaseCommand)
             .WithArguments(args)
             .WithValidation(CommandResultValidation.None)
             .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
@@ -284,7 +286,7 @@ public static class NuGetService
             args.Add("--no-restore");
         }
 
-        var command = Cli.Wrap("dotnet")
+        var command = Cli.Wrap(DotnetBaseCommand)
             .WithArguments(args)
             .WithValidation(CommandResultValidation.None)
             .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
@@ -311,7 +313,7 @@ public static class NuGetService
             args.Add(versionLock.ToString());
         }
 
-        var command = Cli.Wrap("dotnet")
+        var command = Cli.Wrap(DotnetBaseCommand)
             .WithArguments(args)
             .WithValidation(CommandResultValidation.None)
             .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
@@ -322,7 +324,7 @@ public static class NuGetService
 
     public static async Task RemovePackageAsync (string projectPath, string packageId, Action<string>? logger = null)
     {
-        var command = Cli.Wrap("dotnet")
+        var command = Cli.Wrap(DotnetBaseCommand)
             .WithArguments($"remove \"{projectPath}\" package \"{packageId}\"")
             .WithValidation(CommandResultValidation.None)
             .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))

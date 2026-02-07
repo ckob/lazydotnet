@@ -10,7 +10,7 @@ public class NuGetVersionSelectionModal : Modal
     private readonly string _packageId;
     private readonly string _currentVersion;
     private readonly string? _latestVersion;
-    private readonly Action<string> _onSelected;
+    private readonly Func<string, Task> _onSelected;
     private readonly Action<string>? _logAction;
     private readonly Action _requestRefresh;
 
@@ -23,7 +23,7 @@ public class NuGetVersionSelectionModal : Modal
         string packageId,
         string currentVersion,
         string? latestVersion,
-        Action<string> onSelected,
+        Func<string, Task> onSelected,
         Action onClose,
         Action<string>? logAction,
         Action requestRefresh)
@@ -132,14 +132,13 @@ public class NuGetVersionSelectionModal : Modal
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
 
-        yield return new KeyBinding("enter", "select", () =>
+        yield return new KeyBinding("enter", "select", async () =>
         {
             if (_versionList.SelectedItem != null)
             {
-                _onSelected(_versionList.SelectedItem);
+                await _onSelected(_versionList.SelectedItem);
                 OnClose();
             }
-            return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter);
     }
 

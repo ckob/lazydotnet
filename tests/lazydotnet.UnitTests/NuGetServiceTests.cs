@@ -2,7 +2,7 @@ using FluentAssertions;
 using lazydotnet.Services;
 using Microsoft.Build.Locator;
 
-namespace lazydotnet.Tests;
+namespace lazydotnet.UnitTests;
 
 public class NuGetServiceTests
 {

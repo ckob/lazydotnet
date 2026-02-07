@@ -268,19 +268,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         RequestModal?.Invoke(modal);
     }
 
-    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
-    {
-        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding == null)
-        {
-            return false;
-        }
-
-        await binding.Action();
-        return true;
-    }
-
-    public void MoveUp()
+    private void MoveUp()
     {
         lock (_lock)
         {
@@ -299,7 +287,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
     }
 
-    public void MoveDown()
+    private void MoveDown()
     {
         lock (_lock)
         {
@@ -315,7 +303,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
     }
 
-    public void PageUp(int pageSize)
+    private void PageUp(int pageSize)
     {
         lock (_lock)
         {
@@ -325,7 +313,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
     }
 
-    public void PageDown(int pageSize)
+    private void PageDown(int pageSize)
     {
         lock (_lock)
         {
@@ -385,7 +373,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
                     return new Markup($"[yellow]{SpinnerHelper.GetFrame(spinner)}[/] {_statusMessage}");
                 }
 
-                if (_filter != TestFilter.All && _root != null && _root.TestCount > 0)
+                if (_filter != TestFilter.All && _root is { TestCount: > 0 })
                 {
                     var filterName = _filter switch
                     {
@@ -464,16 +452,6 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
 
         return node.Children.Sum(c => GetCountByStatus(c, status));
-    }
-
-    private static double GetMaxDuration(TestNode node)
-    {
-        if (node.IsTest)
-        {
-            return node.Duration;
-        }
-
-        return node.Children.Count > 0 ? node.Children.Max(GetMaxDuration) : 0;
     }
 
     public static string GetStatusColor(TestStatus status) => status switch
@@ -564,18 +542,16 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
     private async Task ExecuteTestRunAsync(List<TestNode> testsToRun)
     {
         var filter = testsToRun
-            .Where(t => t.Uid != null && t.Source != null)
+            .Where(t => t is { Uid: not null, Source: not null })
             .Select(t => new RunRequestNode(t.Uid!, t.Name, t.Source!, t.IsMtp))
             .ToArray();
 
         var results = await TestService.RunTestsAsync(_currentPath!, filter);
 
-        var reportedUids = new HashSet<string>();
-
         await foreach (var res in results)
         {
             var targets = testsToRun.Where(t => t.Uid == res.Id).ToList();
-            
+
             if (targets.Count == 0 && res.DisplayName != null)
             {
                 // Fuzzy matching for dynamic test names
@@ -585,7 +561,6 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
 
             foreach (var targetNode in targets)
             {
-                reportedUids.Add(targetNode.Uid ?? string.Empty);
                 await UpdateTestNodeWithResultAsync(targetNode, res);
                 UpdateParentStatus(targetNode);
             }
@@ -607,7 +582,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
                 UpdateParentStatus(test);
             }
         }
-        
+
         lock (_lock)
         {
             RefreshVisibleNodes();

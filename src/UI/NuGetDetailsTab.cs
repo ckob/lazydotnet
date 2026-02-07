@@ -36,7 +36,7 @@ public class NuGetDetailsTab : IProjectTab
 
     public string Title => "NuGets";
 
-    public void MoveUp()
+    private void MoveUp()
     {
         lock (_lock)
         {
@@ -44,7 +44,7 @@ public class NuGetDetailsTab : IProjectTab
         }
     }
 
-    public void MoveDown()
+    private void MoveDown()
     {
         lock (_lock)
         {
@@ -219,16 +219,35 @@ public class NuGetDetailsTab : IProjectTab
 
     private IEnumerable<KeyBinding> GetNavigationBindings()
     {
-        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp),
-            k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
-                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
-        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown),
-            k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
-                 k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
-        yield return new KeyBinding("pgup", "page up", () => Task.Run(() => { lock(_lock) { _nugetList.PageUp(10); } }),
-            k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
-        yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => { lock(_lock) { _nugetList.PageDown(10); } }),
-            k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+        yield return new KeyBinding("k", "up", () =>
+        {
+            MoveUp();
+            return Task.CompletedTask;
+        },
+        k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
+             k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
+
+        yield return new KeyBinding("j", "down", () =>
+        {
+            MoveDown();
+            return Task.CompletedTask;
+        },
+        k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
+             k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
+
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            lock (_lock) { _nugetList.PageUp(10); }
+            return Task.CompletedTask;
+        },
+        k => k.Key == ConsoleKey.PageUp || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U }, false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            lock (_lock) { _nugetList.PageDown(10); }
+            return Task.CompletedTask;
+        },
+        k => k.Key == ConsoleKey.PageDown || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.D }, false);
     }
 
     private IEnumerable<KeyBinding> GetActionBindings()
@@ -317,16 +336,6 @@ public class NuGetDetailsTab : IProjectTab
             RequestModal?.Invoke(modal);
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter);
-    }
-
-    public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key)
-    {
-        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding == null)
-            return false;
-
-        await binding.Action();
-        return true;
     }
 
 

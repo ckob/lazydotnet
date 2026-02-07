@@ -57,16 +57,9 @@ public class AppLayout
 
     public int ActivePanel { get; private set; } = 2;
 
-    public int BottomActiveTab { get; }
-
     public void SetActivePanel(int panel)
     {
         ActivePanel = Math.Clamp(panel, 0, 3);
-    }
-
-    public void SetDetailsActiveTab(int _)
-    {
-        // No longer using internal tab state for header
     }
 
     public void UpdateWorkspace(IRenderable renderable)

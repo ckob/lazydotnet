@@ -1,9 +1,9 @@
 using FluentAssertions;
 using lazydotnet.Services;
 
-namespace lazydotnet.Tests;
+namespace lazydotnet.IntegrationTests;
 
-public class SolutionServiceTests : IDisposable
+public sealed class SolutionServiceTests : IDisposable
 {
     private readonly string _testDir;
     private readonly SolutionService _service;
@@ -70,7 +70,7 @@ public class SolutionServiceTests : IDisposable
         TestUtils.CopyFixture("SimpleApp", _testDir);
 
         // Act
-        var results = await _service.DiscoverWorkspacesAsync(_testDir);
+        var results = await SolutionService.DiscoverWorkspacesAsync(_testDir);
 
         // Assert
         results.Should().HaveCountGreaterThanOrEqualTo(2);

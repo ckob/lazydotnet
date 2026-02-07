@@ -19,35 +19,43 @@ public partial class LogViewer : IKeyBindable
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("k", "up", () => Task.Run(MoveUp),
-            k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
-                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
-        yield return new KeyBinding("j", "down", () => Task.Run(MoveDown),
-            k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
-                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
-        yield return new KeyBinding("pgup", "page up", () => Task.Run(() => PageUp(10)),
-            k => k.Key == ConsoleKey.PageUp ||
-                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
-        yield return new KeyBinding("pgdn", "page down", () => Task.Run(() => PageDown(10)),
-            k => k.Key == ConsoleKey.PageDown ||
-                 (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+        yield return new KeyBinding("k", "up", () =>
+        {
+            MoveUp();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
+                k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
+
+        yield return new KeyBinding("j", "down", () =>
+        {
+            MoveDown();
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
+                k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
+
+        yield return new KeyBinding("pgup", "page up", () =>
+        {
+            PageUp(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageUp ||
+                k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U }, false);
+
+        yield return new KeyBinding("pgdn", "page down", () =>
+        {
+            PageDown(10);
+            return Task.CompletedTask;
+        }, k => k.Key == ConsoleKey.PageDown ||
+                k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.D }, false);
+
         yield return new KeyBinding("esc", "resume stream", () =>
         {
-            lock (_lock) { _selectedLogicalIndex = -1; }
+            lock (_lock)
+            {
+                _selectedLogicalIndex = -1;
+            }
+
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Escape, false);
-    }
-
-    public bool HandleInput(ConsoleKeyInfo key)
-    {
-        var binding = GetKeyBindings().FirstOrDefault(b => b.Match(key));
-        if (binding != null)
-        {
-            _ = binding.Action();
-            return true;
-        }
-
-        return false;
     }
 
     public void AddLog(string message)
@@ -63,7 +71,7 @@ public partial class LogViewer : IKeyBindable
         }
     }
 
-    public void MoveUp()
+    private void MoveUp()
     {
         lock (_lock)
         {
@@ -88,7 +96,7 @@ public partial class LogViewer : IKeyBindable
         }
     }
 
-    public void MoveDown()
+    private void MoveDown()
     {
         lock (_lock)
         {
@@ -109,7 +117,7 @@ public partial class LogViewer : IKeyBindable
         }
     }
 
-    public void PageUp(int pageSize)
+    private void PageUp(int pageSize)
     {
         lock (_lock)
         {
@@ -119,7 +127,7 @@ public partial class LogViewer : IKeyBindable
         }
     }
 
-    public void PageDown(int pageSize)
+    private void PageDown(int pageSize)
     {
         lock (_lock)
         {
@@ -207,15 +215,13 @@ public partial class LogViewer : IKeyBindable
         return (first, last);
     }
 
-    private static Table CreateLogTable(int renderWidth)
-    {
-        return new Table()
+    private static Table CreateLogTable(int renderWidth) =>
+        new Table()
             .Border(TableBorder.None)
             .HideHeaders()
             .NoSafeBorder()
             .Expand()
             .AddColumn(new TableColumn("Log").NoWrap().Width(renderWidth));
-    }
 
     private void RenderPhysicalLines(Table table, List<PhysicalLine> physicalLines, int visibleRows, bool isActive)
     {

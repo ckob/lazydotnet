@@ -7,7 +7,7 @@ namespace lazydotnet.UI.Components;
 
 public class NuGetSearchModal : Modal
 {
-    private readonly Action<SearchResult> _onSelected;
+    private readonly Func<SearchResult, Task> _onSelected;
     private readonly Action<string>? _logAction;
     private readonly Action _requestRefresh;
 
@@ -19,7 +19,7 @@ public class NuGetSearchModal : Modal
     private CancellationTokenSource? _searchCts;
 
     public NuGetSearchModal(
-        Action<SearchResult> onSelected,
+        Func<SearchResult, Task> onSelected,
         Action onClose,
         Action<string>? logAction,
         Action requestRefresh)
