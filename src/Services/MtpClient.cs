@@ -7,6 +7,7 @@ using System.Text.Json;
 using StreamJsonRpc;
 using System.Threading.Channels;
 using CliWrap;
+using lazydotnet.Core;
 
 namespace lazydotnet.Services;
 
@@ -93,7 +94,8 @@ public class MtpClient : IAsyncDisposable
         var args = new List<string>();
         if (targetPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
         {
-            args.Add(targetPath);
+            var relativePath = PathHelper.GetRelativePath(targetPath);
+            args.Add(relativePath);
         }
 
         args.AddRange(["--server", "--client-host", "localhost", "--client-port", port.ToString()]);

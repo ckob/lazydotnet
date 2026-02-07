@@ -1,5 +1,6 @@
 using Microsoft.Build.Evaluation;
 using CliWrap;
+using lazydotnet.Core;
 
 namespace lazydotnet.Services;
 
@@ -34,8 +35,10 @@ public static class ProjectService
     {
         try
         {
+            var relativeProjectPath = PathHelper.GetRelativePath(projectPath);
+            var relativeTargetPath = PathHelper.GetRelativePath(targetPath);
             var command = Cli.Wrap("dotnet")
-                .WithArguments(["add", projectPath, "reference", targetPath])
+                .WithArguments(["add", relativeProjectPath, "reference", relativeTargetPath])
                 .WithValidation(CommandResultValidation.None);
 
             await AppCli.RunAsync(command);
@@ -50,8 +53,10 @@ public static class ProjectService
     {
         try
         {
+            var relativeProjectPath = PathHelper.GetRelativePath(projectPath);
+            var relativeTargetPath = PathHelper.GetRelativePath(targetPath);
             var command = Cli.Wrap("dotnet")
-                .WithArguments(["remove", projectPath, "reference", targetPath])
+                .WithArguments(["remove", relativeProjectPath, "reference", relativeTargetPath])
                 .WithValidation(CommandResultValidation.None);
 
             await AppCli.RunAsync(command);

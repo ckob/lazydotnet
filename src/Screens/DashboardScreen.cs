@@ -168,7 +168,8 @@ public class DashboardScreen : IScreen
     {
         try
         {
-            _layout.AddLog($"[blue]Loading workspace {path}...[/]");
+            var relativePath = PathHelper.GetRelativePath(path);
+            _layout.AddLog($"[blue]Loading workspace {relativePath}[/]");
             var solution = await _solutionService.FindAndParseSolutionAsync(path);
             if (solution != null)
             {
@@ -178,7 +179,7 @@ public class DashboardScreen : IScreen
             }
             else
             {
-                _layout.AddLog($"[red]No solution found at {path}[/]");
+                _layout.AddLog($"[red]No solution found at {relativePath}[/]");
             }
         }
         catch (Exception ex)

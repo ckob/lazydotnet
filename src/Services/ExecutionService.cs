@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CliWrap;
 using Spectre.Console;
+using lazydotnet.Core;
 
 namespace lazydotnet.Services;
 
@@ -90,13 +91,14 @@ public class ExecutionService
 
         state.AddLog($"[blue]Building project {Markup.Escape(projectName)}...[/]");
 
+        var relativePath = PathHelper.GetRelativePath(projectPath);
         state.ExecutionTask = Task.Run(async () =>
         {
             try
             {
                 // Build phase
                 var buildCmd = Cli.Wrap("dotnet")
-                    .WithArguments($"build \"{projectPath}\"")
+                    .WithArguments($"build \"{relativePath}\"")
                     .WithValidation(CommandResultValidation.None)
                     .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
                     {
@@ -122,7 +124,7 @@ public class ExecutionService
                 state.AddLog($"[blue]Starting project {Markup.Escape(projectName)}...[/]");
 
                 var runCmd = Cli.Wrap("dotnet")
-                    .WithArguments($"run --project \"{projectPath}\" --no-build")
+                    .WithArguments($"run --project \"{relativePath}\" --no-build")
                     .WithValidation(CommandResultValidation.None)
                     .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
                     {

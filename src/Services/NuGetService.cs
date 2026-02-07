@@ -6,6 +6,7 @@ using NuGet.Configuration;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using System.Text.Json;
+using lazydotnet.Core;
 
 namespace lazydotnet.Services;
 
@@ -174,8 +175,9 @@ public static class NuGetService
 
         try
         {
+            var relativePath = PathHelper.GetRelativePath(projectPath);
             var command = Cli.Wrap(DotnetBaseCommand)
-                .WithArguments(["list", projectPath, "package", "--format", "json"])
+                .WithArguments(["list", relativePath, "package", "--format", "json"])
                 .WithValidation(CommandResultValidation.None);
 
             var result = await AppCli.RunBufferedAsync(command, ct);
@@ -208,8 +210,9 @@ public static class NuGetService
     {
         try
         {
+            var relativePath = PathHelper.GetRelativePath(projectPath);
             var command = Cli.Wrap(DotnetBaseCommand)
-                .WithArguments(["list", projectPath, "package", "--outdated", "--format", "json"])
+                .WithArguments(["list", relativePath, "package", "--outdated", "--format", "json"])
                 .WithValidation(CommandResultValidation.None);
 
             var result = await AppCli.RunBufferedAsync(command, ct);
@@ -238,7 +241,8 @@ public static class NuGetService
 
     public static async Task InstallPackageAsync(string projectPath, string packageId, string? version = null, bool noRestore = false, Action<string>? logger = null)
     {
-        var args = new List<string> { "add", projectPath, "package", packageId };
+        var relativePath = PathHelper.GetRelativePath(projectPath);
+        var args = new List<string> { "add", relativePath, "package", packageId };
 
         if (!string.IsNullOrEmpty(version))
         {
@@ -262,7 +266,8 @@ public static class NuGetService
 
     public static async Task UpdatePackageAsync(string projectPath, string packageId, string version, bool noRestore = false, Action<string>? logger = null)
     {
-        var args = new List<string> { "outdated", projectPath, "-u:Auto", "--include", packageId };
+        var relativePath = PathHelper.GetRelativePath(projectPath);
+        var args = new List<string> { "outdated", relativePath, "-u:Auto", "--include", packageId };
 
         if (!string.IsNullOrEmpty(version))
         {
@@ -297,7 +302,8 @@ public static class NuGetService
 
     public static async Task UpdateAllPackagesAsync(string projectPath, VersionLock versionLock, bool noRestore = false, Action<string>? logger = null)
     {
-        var args = new List<string> { "outdated", projectPath, "-u:Auto" };
+        var relativePath = PathHelper.GetRelativePath(projectPath);
+        var args = new List<string> { "outdated", relativePath, "-u:Auto" };
 
         if (noRestore)
         {
@@ -324,8 +330,9 @@ public static class NuGetService
 
     public static async Task RemovePackageAsync (string projectPath, string packageId, Action<string>? logger = null)
     {
+        var relativePath = PathHelper.GetRelativePath(projectPath);
         var command = Cli.Wrap(DotnetBaseCommand)
-            .WithArguments($"remove \"{projectPath}\" package \"{packageId}\"")
+            .WithArguments($"remove \"{relativePath}\" package \"{packageId}\"")
             .WithValidation(CommandResultValidation.None)
             .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
             .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")));

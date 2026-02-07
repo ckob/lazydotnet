@@ -2,8 +2,6 @@ namespace lazydotnet.Core;
 
 public static class PathHelper
 {
-    private static readonly string CurrentDirectory = Directory.GetCurrentDirectory();
-
     public static string GetRelativePath(string? absolutePath)
     {
         if (string.IsNullOrEmpty(absolutePath))
@@ -15,7 +13,11 @@ public static class PathHelper
         {
             if (Path.IsPathRooted(absolutePath))
             {
-                return Path.GetRelativePath(CurrentDirectory, absolutePath);
+                var currentDirectory = Directory.GetCurrentDirectory();
+                var relativePath = Path.GetRelativePath(currentDirectory, absolutePath);
+                return relativePath == "."
+                    ? Path.GetFileName(absolutePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                    : relativePath;
             }
         }
         catch
