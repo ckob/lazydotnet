@@ -211,10 +211,10 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        yield return new KeyBinding("k", "up", DoMoveUp, MatchUpKey, false);
-        yield return new KeyBinding("j", "down", DoMoveDown, MatchDownKey, false);
-        yield return new KeyBinding("pgup", "page up", DoPageUp, MatchPageUpKey, false);
-        yield return new KeyBinding("pgdn", "page down", DoPageDown, MatchPageDownKey, false);
+        yield return new KeyBinding("k/↑/ctrl+p", "up", DoMoveUp, MatchUpKey, false);
+        yield return new KeyBinding("j/↓/ctrl+n", "down", DoMoveDown, MatchDownKey, false);
+        yield return new KeyBinding("pgup/ctrl+u", "page up", DoPageUp, MatchPageUpKey, false);
+        yield return new KeyBinding("pgdn/ctrl+d", "page down", DoPageDown, MatchPageDownKey, false);
         yield return new KeyBinding("←", "collapse", DoCollapse, k => k.Key == ConsoleKey.LeftArrow, false);
         yield return new KeyBinding("→", "expand", DoExpand, k => k.Key == ConsoleKey.RightArrow, false);
         yield return new KeyBinding("enter/space", "toggle", DoToggle, k => k.Key is ConsoleKey.Enter or ConsoleKey.Spacebar, false);

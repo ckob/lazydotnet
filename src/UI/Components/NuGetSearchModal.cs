@@ -45,29 +45,29 @@ public class NuGetSearchModal : Modal
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Enter);
 
-        yield return new KeyBinding("up", "up", () =>
+        yield return new KeyBinding("↑/ctrl+p", "up", () =>
         {
             _searchList.MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.UpArrow || (k.Modifiers == ConsoleModifiers.Control && (k.Key == ConsoleKey.P || k.Key == ConsoleKey.K)), false);
+        }, k => k.Key == ConsoleKey.UpArrow || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), true);
 
-        yield return new KeyBinding("down", "down", () =>
+        yield return new KeyBinding("↓/ctrl+n", "down", () =>
         {
             _searchList.MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.DownArrow || (k.Modifiers == ConsoleModifiers.Control && (k.Key == ConsoleKey.N || k.Key == ConsoleKey.J)), false);
+        }, k => k.Key == ConsoleKey.DownArrow || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), true);
 
-        yield return new KeyBinding("pgup", "page up", () =>
+        yield return new KeyBinding("pgup/ctrl+u", "page up", () =>
         {
             _searchList.PageUp(10);
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
+        }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), true);
 
-        yield return new KeyBinding("pgdn", "page down", () =>
+        yield return new KeyBinding("pgdn/ctrl+d", "page down", () =>
         {
             _searchList.PageDown(10);
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), false);
+        }, k => k.Key == ConsoleKey.PageDown || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), true);
     }
 
     public override async Task<bool> HandleInputAsync(ConsoleKeyInfo key)

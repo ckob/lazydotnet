@@ -219,7 +219,7 @@ public class NuGetDetailsTab : IProjectTab
 
     private IEnumerable<KeyBinding> GetNavigationBindings()
     {
-        yield return new KeyBinding("k", "up", () =>
+        yield return new KeyBinding("k/↑/ctrl+p", "up", () =>
         {
             MoveUp();
             return Task.CompletedTask;
@@ -227,7 +227,7 @@ public class NuGetDetailsTab : IProjectTab
         k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K ||
              k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
 
-        yield return new KeyBinding("j", "down", () =>
+        yield return new KeyBinding("j/↓/ctrl+n", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
@@ -235,14 +235,14 @@ public class NuGetDetailsTab : IProjectTab
         k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J ||
              k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
 
-        yield return new KeyBinding("pgup", "page up", () =>
+        yield return new KeyBinding("pgup/ctrl+u", "page up", () =>
         {
             lock (_lock) { _nugetList.PageUp(10); }
             return Task.CompletedTask;
         },
         k => k.Key == ConsoleKey.PageUp || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U }, false);
 
-        yield return new KeyBinding("pgdn", "page down", () =>
+        yield return new KeyBinding("pgdn/ctrl+d", "page down", () =>
         {
             lock (_lock) { _nugetList.PageDown(10); }
             return Task.CompletedTask;

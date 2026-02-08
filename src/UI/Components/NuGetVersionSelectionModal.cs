@@ -108,25 +108,25 @@ public class NuGetVersionSelectionModal : Modal
         if (_isLoading || _versionList.Count <= 0)
             yield break;
 
-        yield return new KeyBinding("k", "up", () =>
+        yield return new KeyBinding("k/↑/ctrl+p", "up", () =>
         {
             _versionList.MoveUp();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
 
-        yield return new KeyBinding("j", "down", () =>
+        yield return new KeyBinding("j/↓/ctrl+n", "down", () =>
         {
             _versionList.MoveDown();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
-        yield return new KeyBinding("pgup", "page up", () =>
+        yield return new KeyBinding("pgup/ctrl+u", "page up", () =>
         {
             _versionList.PageUp(10);
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
 
-        yield return new KeyBinding("pgdn", "page down", () =>
+        yield return new KeyBinding("pgdn/ctrl+d", "page down", () =>
         {
             _versionList.PageDown(10);
             return Task.CompletedTask;

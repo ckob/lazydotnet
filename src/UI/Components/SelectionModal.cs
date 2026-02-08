@@ -22,7 +22,7 @@ public class SelectionModal<T> : Modal
     {
         foreach (var b in base.GetKeyBindings()) yield return b;
 
-        yield return new KeyBinding("k", "up", () =>
+        yield return new KeyBinding("k/↑/ctrl+p", "up", () =>
             {
                 _options.MoveUp();
                 return Task.CompletedTask;
@@ -32,7 +32,7 @@ public class SelectionModal<T> : Modal
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P },
             ShowInBottomBar: false);
 
-        yield return new KeyBinding("j", "down", () =>
+        yield return new KeyBinding("j/↓/ctrl+n", "down", () =>
             {
                 _options.MoveDown();
                 return Task.CompletedTask;
@@ -42,7 +42,7 @@ public class SelectionModal<T> : Modal
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N },
             ShowInBottomBar: false);
 
-        yield return new KeyBinding("pgup", "page up", () =>
+        yield return new KeyBinding("pgup/ctrl+u", "page up", () =>
             {
                 _options.PageUp(10);
                 return Task.CompletedTask;
@@ -51,7 +51,7 @@ public class SelectionModal<T> : Modal
                  k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U },
             ShowInBottomBar: false);
 
-        yield return new KeyBinding("pgdn", "page down", () =>
+        yield return new KeyBinding("pgdn/ctrl+d", "page down", () =>
             {
                 _options.PageDown(10);
                 return Task.CompletedTask;

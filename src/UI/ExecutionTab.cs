@@ -107,25 +107,25 @@ public class ExecutionTab : IProjectTab
             return Task.CompletedTask;
         }, k => k.KeyChar == 'c');
 
-        yield return new KeyBinding("k", "up", () =>
+        yield return new KeyBinding("k/↑/ctrl+p", "up", () =>
         {
             MoveUp();
             return Task.CompletedTask;
-        }, k => k.Key is ConsoleKey.UpArrow or ConsoleKey.K, false);
+        }, k => k.Key is ConsoleKey.UpArrow or ConsoleKey.K || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.P }, false);
 
-        yield return new KeyBinding("j", "down", () =>
+        yield return new KeyBinding("j/↓/ctrl+n", "down", () =>
         {
             MoveDown();
             return Task.CompletedTask;
-        }, k => k.Key is ConsoleKey.DownArrow or ConsoleKey.J, false);
+        }, k => k.Key is ConsoleKey.DownArrow or ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N }, false);
 
-        yield return new KeyBinding("pgup", "page up", () =>
+        yield return new KeyBinding("pgup/ctrl+u", "page up", () =>
         {
             PageUp(10);
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.PageUp || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U }, false);
 
-        yield return new KeyBinding("pgdn", "page down", () =>
+        yield return new KeyBinding("pgdn/ctrl+d", "page down", () =>
         {
             PageDown(10);
             return Task.CompletedTask;

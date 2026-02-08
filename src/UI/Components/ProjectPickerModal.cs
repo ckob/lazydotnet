@@ -24,25 +24,25 @@ public class ProjectPickerModal : Modal
     {
         foreach (var b in base.GetKeyBindings()) yield return b;
 
-        yield return new KeyBinding("k", "up", () =>
+        yield return new KeyBinding("k/↑/ctrl+p", "up", () =>
         {
             _projectList.MoveUp();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.UpArrow || k.Key == ConsoleKey.K || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.P), false);
 
-        yield return new KeyBinding("j", "down", () =>
+        yield return new KeyBinding("j/↓/ctrl+n", "down", () =>
         {
             _projectList.MoveDown();
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.N), false);
 
-        yield return new KeyBinding("pgup", "page up", () =>
+        yield return new KeyBinding("pgup/ctrl+u", "page up", () =>
         {
             _projectList.PageUp(10);
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.PageUp || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.U), false);
 
-        yield return new KeyBinding("pgdn", "page down", () =>
+        yield return new KeyBinding("pgdn/ctrl+d", "page down", () =>
         {
             _projectList.PageDown(10);
             return Task.CompletedTask;
