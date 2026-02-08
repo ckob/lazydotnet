@@ -5,6 +5,8 @@ A terminal-based UI for managing .NET solutions and projects, inspired by [lazyg
 lazydotnet provides an interactive, keyboard-driven interface for common .NET development tasks. Navigate your solution structure, build and run projects, manage NuGet packages, and run tests—all without leaving your terminal.
 
 
+![Test Details](docs/assets/tests.png)
+
 https://github.com/user-attachments/assets/758228fc-582a-4820-9672-97bda2050562
 
 
@@ -27,6 +29,10 @@ To update to the latest version:
 dotnet tool update --global lazydotnet
 ```
 
+
+### Optional Dependencies
+
+For the NuGet package update features (checking for outdated packages and updating all packages), install [dotnet-outdated](https://github.com/dotnet-outdated/dotnet-outdated):
 
 ```bash
 dotnet tool install --global dotnet-outdated-tool
