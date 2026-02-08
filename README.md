@@ -4,7 +4,8 @@ A terminal-based UI for managing .NET solutions and projects, inspired by [lazyg
 
 lazydotnet provides an interactive, keyboard-driven interface for common .NET development tasks. Navigate your solution structure, build and run projects, manage NuGet packages, and run tests—all without leaving your terminal.
 
-![Tests Tab](docs/screenshots/tests.png)
+
+![Quick Demo](docs/assets/quick-demo.gif)
 
 **Important:** This project does **not** include LSP (Language Server Protocol) functionality or debugging capabilities. It focuses on solution/project management and execution tasks.
 
@@ -24,9 +25,6 @@ To update to the latest version:
 dotnet tool update --global lazydotnet
 ```
 
-### Optional Dependencies
-
-For the NuGet package update features (checking for outdated packages and updating all packages), install [dotnet-outdated](https://github.com/dotnet-outdated/dotnet-outdated):
 
 ```bash
 dotnet tool install --global dotnet-outdated-tool
@@ -70,7 +68,7 @@ lazydotnet -s MySolution.sln
 
 ### Project References Tab
 
-![Project References Tab](docs/screenshots/references.png)
+![Project References Tab](docs/assets/references.png)
 
 - View all project references for the selected project
 - **Add** new project references from a picker dialog (`a`)
@@ -80,7 +78,7 @@ lazydotnet -s MySolution.sln
 
 ### NuGet Packages Tab
 
-![NuGet Packages Tab](docs/screenshots/nugets.png)
+![NuGet Packages Tab](docs/assets/nugets.png)
 
 - View all NuGet packages with current and latest versions
 - **Color-coded version indicators:**
@@ -98,7 +96,7 @@ lazydotnet -s MySolution.sln
 
 ### Tests Tab
 
-![Test Details](docs/screenshots/test-detail.png)
+![Test Details](docs/assets/test-detail.png)
 
 - **Automatic test discovery** for all test providers (xUnit, NUnit, MSTest, etc.)
 - **Dual protocol support**: VSTest (legacy) and Microsoft Testing Platform (MTP)
@@ -110,7 +108,7 @@ lazydotnet -s MySolution.sln
 
 ### Execution Tab
 
-![Execution Tab](docs/screenshots/execution.png)
+![Execution Tab](docs/assets/execution.png)
 
 - **Live log streaming** from running projects
 - Auto-scroll to latest output (can be paused)
@@ -122,7 +120,7 @@ lazydotnet -s MySolution.sln
 
 ### Workspace Management
 
-![Workspace Selector](docs/screenshots/workspace-selector.png)
+![Workspace Selector](docs/assets/workspace-selector.png)
 
 - Switch between different solutions in the same directory
 - Solution picker dialog for directories with multiple `.sln` files
@@ -136,7 +134,7 @@ lazydotnet -s MySolution.sln
 
 ### Global Features
 
-![Keybindings Help](docs/screenshots/keybindings.png)
+![Keybindings Help](docs/assets/keybindings.png)
 
 - **Panel navigation:** `Tab` / `Shift+Tab` or number keys `0-3`
 - **Reload** current project/solution data (`Ctrl+R`)
