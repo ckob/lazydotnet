@@ -147,14 +147,25 @@ public class AppLayout
     public void UpdateFooter(IEnumerable<KeyBinding> bindings)
     {
         var footerBindings = bindings.Where(b => b.ShowInBottomBar).ToList();
+
+        var rawVersion = ThisAssembly.Info.InformationalVersion;
+        var version = rawVersion.Contains('+') ? rawVersion.Split('+')[0] : rawVersion;
+        var versionText = $"v{version}";
+
         if (footerBindings.Count == 0)
         {
-            _rootLayout["Footer"].Update(new Markup(""));
+            _rootLayout["Footer"].Update(new Markup(versionText));
             return;
         }
 
         var segments = footerBindings.Select(b => $"{Markup.Escape(b.Description)}: [blue]{Markup.Escape(b.Label)}[/]");
-        var footerMarkup = " " + string.Join(" [dim]|[/] ", segments);
-        _rootLayout["Footer"].Update(new Markup(footerMarkup));
+        var keybindingsText = " " + string.Join(" [dim]|[/] ", segments);
+
+        var consoleWidth = Console.WindowWidth;
+        var visibleLength = Markup.Remove(keybindingsText).Length;
+        var paddingSize = Math.Max(0, consoleWidth - visibleLength - versionText.Length - 1);
+
+        var footerContent = keybindingsText + new string(' ', paddingSize) + versionText + " ";
+        _rootLayout["Footer"].Update(new Markup(footerContent));
     }
 }
