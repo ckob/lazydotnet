@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -28,12 +30,14 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
       - name: dotnet pack
-        run: dotnet pack src/lazydotnet.csproj -c Release -o artifacts/package/release /p:Version=${{ github.ref_name }}
+        run: dotnet pack src/lazydotnet.csproj -c Release -o artifacts/package/release
 
       - name: NuGet login (OIDC → temp API key)
         uses: NuGet/login@v1
