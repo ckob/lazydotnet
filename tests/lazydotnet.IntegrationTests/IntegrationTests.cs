@@ -1,21 +1,13 @@
 using FluentAssertions;
 using lazydotnet.Services;
-using Microsoft.Build.Locator;
 
 namespace lazydotnet.IntegrationTests;
 
+[Collection("MSBuild")]
 [Trait("Category", "Integration")]
 public sealed class IntegrationTests : IDisposable
 {
     private readonly string _testDir;
-
-    static IntegrationTests()
-    {
-        if (!MSBuildLocator.IsRegistered)
-        {
-            MSBuildLocator.RegisterDefaults();
-        }
-    }
 
     public IntegrationTests()
     {
@@ -150,13 +142,22 @@ public sealed class IntegrationTests : IDisposable
         TestUtils.CopyFixture("MSTestProject", _testDir);
         TestUtils.CopyFixture("SimpleLibrary", _testDir); // Not a test project
 
-        // Act
-        // Since they are not built, results will be empty, but we want to ensure it doesn't crash
-        // during MSBuild evaluation.
-        var results = await TestService.DiscoverTestsAsync(_testDir, TestContext.Current.CancellationToken);
+        // Act - Should not throw even when projects are not built
+        var act = async () => await TestService.DiscoverTestsAsync(_testDir, TestContext.Current.CancellationToken);
 
         // Assert
-        results.Should().BeEmpty();
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task NuGet_SearchPackagesAsync_ShouldReturnResults()
+    {
+        // Act
+        var results = await NuGetService.SearchPackagesAsync("Newtonsoft.Json", ct: TestContext.Current.CancellationToken);
+
+        // Assert
+        results.Should().NotBeEmpty();
+        results.Any(r => r.Id == "Newtonsoft.Json").Should().BeTrue();
     }
 
     public void Dispose()

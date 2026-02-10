@@ -1,21 +1,13 @@
 using FluentAssertions;
 using lazydotnet.Services;
-using Microsoft.Build.Locator;
 
 namespace lazydotnet.IntegrationTests;
 
+[Collection("MSBuild")]
 public sealed class SolutionServiceTests : IDisposable
 {
     private readonly string _testDir;
     private readonly SolutionService _service;
-
-    static SolutionServiceTests()
-    {
-        if (!MSBuildLocator.IsRegistered)
-        {
-            MSBuildLocator.RegisterDefaults();
-        }
-    }
 
     public SolutionServiceTests()
     {
