@@ -90,7 +90,7 @@ public class NuGetSearchModal : Modal
                 changed = true;
             }
         }
-        else if (!char.IsControl(key.KeyChar) && key.Modifiers == 0)
+        else if (!char.IsControl(key.KeyChar))
         {
             _searchQuery += key.KeyChar;
             changed = true;
@@ -174,6 +174,85 @@ public class NuGetSearchModal : Modal
         return false;
     }
 
+    private static int GetMaxVersionLength(ScrollableList<SearchResult> searchList, int start, int end)
+    {
+        var maxLength = 0;
+        for (var i = start; i < end; i++)
+        {
+            var item = searchList.Items[i];
+            if (item.LatestVersion.Length > maxLength)
+            {
+                maxLength = item.LatestVersion.Length;
+            }
+        }
+        return maxLength;
+    }
+
+    private static void AddSearchResultRow(Table table, SearchResult item, bool isSelected, int idColWidth)
+    {
+        var id = item.Id;
+        var version = item.LatestVersion;
+
+        if (id.Length > idColWidth - 3)
+        {
+            id = id[..(idColWidth - 3)] + "...";
+        }
+
+        var idMarkup = isSelected
+            ? new Markup($"[black on blue]{Markup.Escape(id)}[/]")
+            : new Markup(Markup.Escape(id));
+
+        var versionMarkup = isSelected
+            ? new Markup($"[black on blue]{Markup.Escape(version)}[/]")
+            : new Markup($"[dim]{Markup.Escape(version)}[/]");
+
+        table.AddRow(idMarkup, versionMarkup);
+    }
+
+    private Table CreateResultsTable(int height)
+    {
+        var modalWidth = Width ?? 80;
+        var gridAvailableWidth = modalWidth - 8;
+        var visibleRows = Math.Min(15, height - 10);
+        var (start, end) = _searchList.GetVisibleRange(visibleRows);
+        var maxVersionLength = GetMaxVersionLength(_searchList, start, end);
+        var versionColWidth = maxVersionLength;
+        var idColWidth = gridAvailableWidth - versionColWidth - 3;
+
+        var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Width(gridAvailableWidth);
+        table.AddColumn(new TableColumn("Id").Width(idColWidth));
+        table.AddColumn(new TableColumn("Version").RightAligned().Width(versionColWidth));
+
+        for (var i = start; i < end; i++)
+        {
+            var item = _searchList.Items[i];
+            var isSelected = i == _searchList.SelectedIndex;
+            AddSearchResultRow(table, item, isSelected, idColWidth);
+        }
+
+        return table;
+    }
+
+    private IRenderable GetContent(int height)
+    {
+        if (_isSearching)
+        {
+            return new Markup($"[yellow]{SpinnerHelper.GetFrame()} Searching...[/]");
+        }
+
+        if (_searchList.Count > 0)
+        {
+            return CreateResultsTable(height);
+        }
+
+        if (!string.IsNullOrEmpty(_statusMessage))
+        {
+            return new Markup($"[yellow]{Markup.Escape(_statusMessage)}[/]");
+        }
+
+        return new Markup("[dim]Type to search packages...[/]");
+    }
+
     public override IRenderable GetRenderable(int width, int height)
     {
         var grid = new Grid();
@@ -181,62 +260,7 @@ public class NuGetSearchModal : Modal
 
         grid.AddRow(new Markup($"[blue]Search: [/] {Markup.Escape(_searchQuery)}_"));
         grid.AddRow(Text.Empty);
-
-        if (_isSearching)
-        {
-            grid.AddRow(new Markup($"[yellow]{SpinnerHelper.GetFrame()} Searching...[/]"));
-        }
-        else if (_searchList.Count > 0)
-        {
-            var modalWidth = Width ?? 80;
-            var gridAvailableWidth = modalWidth - 8;
-
-            var visibleRows = Math.Min(15, height - 10);
-            var (start, end) = _searchList.GetVisibleRange(visibleRows);
-
-            var table = new Table().Border(TableBorder.None).HideHeaders().NoSafeBorder().Expand();
-            table.AddColumn("Id");
-            table.AddColumn("Version");
-
-            for (var i = start; i < end; i++)
-            {
-                var item = _searchList.Items[i];
-                var isSelected = i == _searchList.SelectedIndex;
-
-                var id = item.Id;
-                var version = item.LatestVersion;
-
-                var maxIdWidth = gridAvailableWidth - version.Length - 4;
-                if (id.Length > maxIdWidth)
-                {
-                    id = id[..(maxIdWidth - 3)] + "...";
-                }
-
-                if (isSelected)
-                {
-                    table.AddRow(
-                        new Markup($"[black on blue]{Markup.Escape(id)}[/]"),
-                        new Markup($"[black on blue]{Markup.Escape(version)}[/]")
-                    );
-                }
-                else
-                {
-                    table.AddRow(
-                        new Markup(Markup.Escape(id)),
-                        new Markup($"[dim]{Markup.Escape(version)}[/]")
-                    );
-                }
-            }
-            grid.AddRow(table);
-        }
-        else if (!string.IsNullOrEmpty(_statusMessage))
-        {
-            grid.AddRow(new Markup($"[yellow]{Markup.Escape(_statusMessage)}[/]"));
-        }
-        else
-        {
-            grid.AddRow(new Markup("[dim]Type to search packages...[/]"));
-        }
+        grid.AddRow(GetContent(height));
 
         var panel = new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
         {
