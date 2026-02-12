@@ -1,10 +1,6 @@
-using System.Text.RegularExpressions;
 using CliWrap;
 using Spectre.Console;
-using NuGet.Common;
-using NuGet.Configuration;
-using NuGet.Protocol;
-using NuGet.Protocol.Core.Types;
+using NuGet.Versioning;
 using System.Text.Json;
 using lazydotnet.Core;
 
@@ -25,7 +21,7 @@ public enum VersionLock
     Minor
 }
 
-public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string? LatestVersion)
+public record NuGetPackageInfo(string Id, string ResolvedVersion, string? LatestVersion)
 {
     public bool IsOutdated => LatestVersion != null && LatestVersion != ResolvedVersion;
 
@@ -34,41 +30,24 @@ public partial record NuGetPackageInfo(string Id, string ResolvedVersion, string
         if (!IsOutdated || LatestVersion == null)
             return VersionUpdateType.None;
 
-        var current = ParseVersion(ResolvedVersion);
-        var latest = ParseVersion(LatestVersion);
+        if (!NuGetVersion.TryParse(ResolvedVersion, out var current) ||
+            !NuGetVersion.TryParse(LatestVersion, out var latest))
+        {
+            return VersionUpdateType.Major;
+        }
 
-        if (current == null || latest == null)
+        if (latest.IsPrerelease || current.IsPrerelease)
             return VersionUpdateType.Major;
 
-        if (latest.Value.IsPreRelease || current.Value.IsPreRelease)
+        if (latest.Major > current.Major)
             return VersionUpdateType.Major;
-
-        if (latest.Value.Major > current.Value.Major)
-            return VersionUpdateType.Major;
-        if (latest.Value.Minor > current.Value.Minor)
+        if (latest.Minor > current.Minor)
             return VersionUpdateType.Minor;
-        if (latest.Value.Patch > current.Value.Patch)
+        if (latest.Patch > current.Patch)
             return VersionUpdateType.Patch;
 
         return VersionUpdateType.None;
     }
-
-    private static (int Major, int Minor, int Patch, bool IsPreRelease)? ParseVersion(string version)
-    {
-        var match = VersionRegex().Match(version);
-        if (!match.Success)
-            return null;
-
-        var major = int.Parse(match.Groups[1].Value);
-        var minor = int.Parse(match.Groups[2].Value);
-        var patch = match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0;
-        var isPreRelease = version.Contains('-');
-
-        return (major, minor, patch, isPreRelease);
-    }
-
-    [GeneratedRegex(@"^(\d+)\.(\d+)(?:\.(\d+))?(?:[\.\-].*)?$")]
-    private static partial Regex VersionRegex();
 }
 
 public static class NuGetService
@@ -79,46 +58,34 @@ public static class NuGetService
     {
         try
         {
-            var provider = Repository.Provider.GetCoreV3();
-            var sourceProvider = new PackageSourceProvider(Settings.LoadDefaultSettings(null));
-            var allSources = sourceProvider.LoadPackageSources().Where(s => s.IsEnabled);
+            var command = Cli.Wrap(DotnetBaseCommand)
+                .WithArguments(["package", "search", query, "--format", "json"])
+                .WithValidation(CommandResultValidation.None);
 
-            var tasks = allSources.Select(async source =>
+            var result = await AppCli.RunBufferedAsync(command, ct);
+            if (string.IsNullOrEmpty(result.StandardOutput))
             {
-                try
-                {
-                    var repo = new SourceRepository(source, provider);
-                    var search = await repo.GetResourceAsync<PackageSearchResource>(ct);
+                return [];
+            }
 
-                    return await search.SearchAsync(
-                        query,
-                        new SearchFilter(includePrerelease: false),
-                        skip: 0,
-                        take: 20,
-                        log: NullLogger.Instance,
-                        cancellationToken: ct);
-                }
-                catch
-                {
-                    return [];
-                }
-            });
+            var data = JsonSerializer.Deserialize<DotnetPackageSearchOutput>(result.StandardOutput, JsonOptions);
+            if (data?.SearchResult == null) return [];
 
-            var results = await Task.WhenAll(tasks);
-            return results.SelectMany(r => r)
-                .GroupBy(p => p.Identity.Id)
+            return [.. data.SearchResult
+                .SelectMany(sr => sr.Packages ?? [])
+                .Where(p => !string.IsNullOrEmpty(p.Id))
+                .GroupBy(p => p.Id!)
                 .Select(g =>
                 {
                     var p = g.First();
                     return new SearchResult
                     {
-                        Id = p.Identity.Id,
-                        LatestVersion = p.Identity.Version.ToNormalizedString(),
-                        Description = p.Description,
-                        Versions = [new SearchVersion { Version = p.Identity.Version.ToNormalizedString() }]
+                        Id = p.Id!,
+                        LatestVersion = p.LatestVersion ?? "",
+                        Description = p.Owners,
+                        Versions = [new SearchVersion { Version = p.LatestVersion ?? "" }]
                     };
-                })
-                .ToList();
+                })];
         }
         catch (Exception ex)
         {
@@ -132,31 +99,34 @@ public static class NuGetService
     {
         try
         {
-            var cache = new SourceCacheContext();
-            var sourceProvider = new PackageSourceProvider(Settings.LoadDefaultSettings(null));
-            var allSources = sourceProvider.LoadPackageSources().Where(s => s.IsEnabled);
+            var command = Cli.Wrap(DotnetBaseCommand)
+                .WithArguments(["package", "search", packageId, "--exact-match", "--format", "json"])
+                .WithValidation(CommandResultValidation.None);
 
-            var tasks = allSources.Select(async source =>
+            var result = await AppCli.RunBufferedAsync(command, ct);
+            if (string.IsNullOrEmpty(result.StandardOutput))
             {
-                try
-                {
-                    var repo = Repository.Factory.GetCoreV3(source.Source);
-                    var resource = await repo.GetResourceAsync<FindPackageByIdResource>(ct);
-                    var versions = await resource.GetAllVersionsAsync(packageId, cache, NullLogger.Instance, ct);
-                    return versions.ToList();
-                }
-                catch
-                {
-                    return [];
-                }
-            });
+                return [];
+            }
 
-            var results = await Task.WhenAll(tasks);
-            return results.SelectMany(v => v)
+            var data = JsonSerializer.Deserialize<DotnetPackageSearchOutput>(result.StandardOutput, JsonOptions);
+            if (data?.SearchResult == null) return [];
+
+            var versions = data.SearchResult
+                .SelectMany(sr => sr.Packages ?? [])
+                .Select(p => p.Version)
+                .Where(v => !string.IsNullOrEmpty(v))
+                .Cast<string>()
                 .Distinct()
-                .OrderByDescending(v => v)
-                .Select(v => v.ToNormalizedString())
                 .ToList();
+
+            var parsedVersions = versions
+                .Select(v => new { Original = v, SemVer = NuGetVersion.Parse(v) })
+                .OrderByDescending(x => x.SemVer)
+                .Select(x => x.Original)
+                .ToList();
+
+            return parsedVersions;
         }
         catch (Exception ex)
         {
@@ -189,14 +159,13 @@ public static class NuGetService
             var data = JsonSerializer.Deserialize<DotnetListOutput>(result.StandardOutput, JsonOptions);
             if (data?.Projects == null) return [];
 
-            return data.Projects
+            return [.. data.Projects
                 .SelectMany(p => p.Frameworks ?? [])
                 .SelectMany(f => f.TopLevelPackages ?? [])
                 .Where(pkg => !string.IsNullOrEmpty(pkg.Id) && !string.IsNullOrEmpty(pkg.ResolvedVersion))
                 .Select(pkg => new NuGetPackageInfo(pkg.Id!, pkg.ResolvedVersion!, null))
                 .Distinct()
-                .OrderBy(p => p.Id)
-                .ToList();
+                .OrderBy(p => p.Id)];
         }
         catch (Exception ex)
         {
@@ -359,3 +328,11 @@ internal record DotnetListOutput(List<DotnetProject>? Projects);
 internal record DotnetProject(string Path, List<DotnetFramework>? Frameworks);
 internal record DotnetFramework(string Framework, List<DotnetPackage>? TopLevelPackages);
 internal record DotnetPackage(string? Id, string? ResolvedVersion, string? LatestVersion);
+internal record DotnetPackageSearchOutput(int Version, List<DotnetSearchResult>? SearchResult);
+internal record DotnetSearchResult(string SourceName, List<DotnetSearchPackage>? Packages);
+internal record DotnetSearchPackage(
+    string? Id,
+    string? Version,
+    string? LatestVersion,
+    long? TotalDownloads,
+    string? Owners);
