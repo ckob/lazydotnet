@@ -21,16 +21,26 @@ public enum VersionLock
     Minor
 }
 
-public record NuGetPackageInfo(string Id, string ResolvedVersion, string? LatestVersion)
+public record PackageProjectInfo(string ProjectPath, string ResolvedVersion);
+
+public record NuGetPackageInfo(string Id, List<PackageProjectInfo> Projects, string? LatestVersion)
 {
-    public bool IsOutdated => LatestVersion != null && LatestVersion != ResolvedVersion;
+    public string ResolvedVersion => Projects.Count > 0
+        ? string.Join(", ", Projects.Select(p => p.ResolvedVersion).Distinct().OrderBy(v => v))
+        : "";
+
+    public string? PrimaryVersion => Projects.Count > 0 ? Projects[0].ResolvedVersion : null;
+
+    public bool IsOutdated => LatestVersion != null && Projects.Any(p => p.ResolvedVersion != LatestVersion);
+
+    public bool IsVersionOutdated(string version) => LatestVersion != null && version != LatestVersion;
 
     public VersionUpdateType GetUpdateType()
     {
-        if (!IsOutdated || LatestVersion == null)
+        if (!IsOutdated || LatestVersion == null || string.IsNullOrEmpty(PrimaryVersion))
             return VersionUpdateType.None;
 
-        if (!NuGetVersion.TryParse(ResolvedVersion, out var current) ||
+        if (!NuGetVersion.TryParse(PrimaryVersion, out var current) ||
             !NuGetVersion.TryParse(LatestVersion, out var latest))
         {
             return VersionUpdateType.Major;
@@ -47,6 +57,17 @@ public record NuGetPackageInfo(string Id, string ResolvedVersion, string? Latest
             return VersionUpdateType.Patch;
 
         return VersionUpdateType.None;
+    }
+
+    public List<string> GetProjectsToUpdate(string targetVersion)
+    {
+        if (!NuGetVersion.TryParse(targetVersion, out var target))
+            return [];
+
+        return Projects
+            .Where(p => NuGetVersion.TryParse(p.ResolvedVersion, out var current) && current != target)
+            .Select(p => p.ProjectPath)
+            .ToList();
     }
 }
 
@@ -159,13 +180,24 @@ public static class NuGetService
             var data = JsonSerializer.Deserialize<DotnetListOutput>(result.StandardOutput, JsonOptions);
             if (data?.Projects == null) return [];
 
-            return [.. data.Projects
-                .SelectMany(p => p.Frameworks ?? [])
-                .SelectMany(f => f.TopLevelPackages ?? [])
-                .Where(pkg => !string.IsNullOrEmpty(pkg.Id) && !string.IsNullOrEmpty(pkg.ResolvedVersion))
-                .Select(pkg => new NuGetPackageInfo(pkg.Id!, pkg.ResolvedVersion!, null))
-                .Distinct()
-                .OrderBy(p => p.Id)];
+            // Group packages by Id across all projects
+            var packageGroups = data.Projects
+                .SelectMany(p => (p.Frameworks ?? []).SelectMany(f => (f.TopLevelPackages ?? []).Select(pkg => new { Project = p.Path, Package = pkg })))
+                .Where(x => !string.IsNullOrEmpty(x.Package.Id) && !string.IsNullOrEmpty(x.Package.ResolvedVersion))
+                .GroupBy(x => x.Package.Id!)
+                .OrderBy(g => g.Key);
+
+            var packages = new List<NuGetPackageInfo>();
+            foreach (var group in packageGroups)
+            {
+                var projects = group
+                    .Select(x => new PackageProjectInfo(x.Project, x.Package.ResolvedVersion!))
+                    .ToList();
+
+                packages.Add(new NuGetPackageInfo(group.Key, projects, null));
+            }
+
+            return packages;
         }
         catch (Exception ex)
         {
@@ -193,6 +225,7 @@ public static class NuGetService
             var data = JsonSerializer.Deserialize<DotnetListOutput>(result.StandardOutput, JsonOptions);
             if (data?.Projects == null) return [];
 
+            // Get the latest version for each package across all projects
             return data.Projects
                 .SelectMany(p => p.Frameworks ?? [])
                 .SelectMany(f => f.TopLevelPackages ?? [])
@@ -233,40 +266,9 @@ public static class NuGetService
         await AppCli.RunAsync(command);
     }
 
-    public static async Task UpdatePackageAsync(string projectPath, string packageId, string version, bool noRestore = false, Action<string>? logger = null)
+    public static async Task UpdatePackageAsync(string projectPath, string packageId, string targetVersion, bool noRestore = false, Action<string>? logger = null)
     {
-        var relativePath = PathHelper.GetRelativePath(projectPath);
-        var args = new List<string> { "outdated", relativePath, "-u:Auto", "--include", packageId };
-
-        if (!string.IsNullOrEmpty(version))
-        {
-            args.Add("--maximum-version");
-            args.Add(version);
-        }
-
-        if (!string.IsNullOrEmpty(version) && version.Contains('-'))
-        {
-            args.Add("--pre-release");
-            args.Add("Always");
-        }
-        else
-        {
-            args.Add("--pre-release");
-            args.Add("Auto");
-        }
-
-        if (noRestore)
-        {
-            args.Add("--no-restore");
-        }
-
-        var command = Cli.Wrap(DotnetBaseCommand)
-            .WithArguments(args)
-            .WithValidation(CommandResultValidation.None)
-            .WithStandardOutputPipe(PipeTarget.ToDelegate(s => logger?.Invoke(Markup.Escape(s))))
-            .WithStandardErrorPipe(PipeTarget.ToDelegate(s => logger?.Invoke($"[red]{Markup.Escape(s)}[/]")));
-
-        await AppCli.RunAsync(command);
+        await InstallPackageAsync(projectPath, packageId, targetVersion, noRestore, logger);
     }
 
     public static async Task UpdateAllPackagesAsync(string projectPath, VersionLock versionLock, bool noRestore = false, Action<string>? logger = null)

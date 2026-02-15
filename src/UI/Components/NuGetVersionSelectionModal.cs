@@ -8,7 +8,7 @@ namespace lazydotnet.UI.Components;
 public class NuGetVersionSelectionModal : Modal
 {
     private readonly string _packageId;
-    private readonly string _currentVersion;
+    private readonly List<string> _currentVersions;
     private readonly string? _latestVersion;
     private readonly Func<string, Task> _onSelected;
     private readonly Action<string>? _logAction;
@@ -21,7 +21,7 @@ public class NuGetVersionSelectionModal : Modal
 
     public NuGetVersionSelectionModal(
         string packageId,
-        string currentVersion,
+        List<string> currentVersions,
         string? latestVersion,
         Func<string, Task> onSelected,
         Action onClose,
@@ -30,7 +30,7 @@ public class NuGetVersionSelectionModal : Modal
         : base($"Select Version: {packageId}", new Markup("Loading versions..."), onClose)
     {
         _packageId = packageId;
-        _currentVersion = currentVersion;
+        _currentVersions = currentVersions;
         _latestVersion = latestVersion;
         _onSelected = onSelected;
         _logAction = logAction;
@@ -86,7 +86,14 @@ public class NuGetVersionSelectionModal : Modal
         reversed.Reverse();
         _versionList.SetItems(reversed);
 
-        var index = reversed.IndexOf(_currentVersion);
+        // Find first matching current version, or use latest, or default to first
+        var index = -1;
+        foreach (var currentVersion in _currentVersions)
+        {
+            index = reversed.IndexOf(currentVersion);
+            if (index >= 0) break;
+        }
+
         if (index >= 0)
         {
             _versionList.Select(index);
@@ -136,8 +143,10 @@ public class NuGetVersionSelectionModal : Modal
         {
             if (_versionList.SelectedItem != null)
             {
-                await _onSelected(_versionList.SelectedItem);
+                var selectedVersion = _versionList.SelectedItem;
+                _logAction?.Invoke($"[dim]Selected version {selectedVersion} for {_packageId}[/]");
                 OnClose();
+                await _onSelected(selectedVersion);
             }
         }, k => k.Key == ConsoleKey.Enter);
     }
@@ -213,7 +222,7 @@ public class NuGetVersionSelectionModal : Modal
 
     private string GetVersionStyle(string version, bool isSelected)
     {
-        if (version == _currentVersion)
+        if (_currentVersions.Contains(version))
         {
             return isSelected ? "[black on green]" : "[green]";
         }

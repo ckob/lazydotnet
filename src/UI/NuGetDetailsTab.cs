@@ -29,6 +29,11 @@ public class NuGetDetailsTab : IProjectTab
     private string? _currentProjectName;
     private CancellationTokenSource? _loadCts;
 
+    // Cached column widths to prevent flickering during scroll
+    private int _cachedPackageWidth = 10;
+    private int _cachedCurrentWidth = 7;
+    private int _cachedLatestWidth = 6;
+
     public Action<string>? LogAction { get; set; }
     public Action? RequestRefresh { get; set; }
     public Action<Modal>? RequestModal { get; set; }
@@ -72,6 +77,9 @@ public class NuGetDetailsTab : IProjectTab
             _appMode = AppMode.Normal;
             _statusMessage = null;
             _isFetchingLatest = false;
+            _cachedPackageWidth = 10;
+            _cachedCurrentWidth = 7;
+            _cachedLatestWidth = 6;
         }
     }
 
@@ -111,6 +119,7 @@ public class NuGetDetailsTab : IProjectTab
             lock (_lock)
             {
                 _nugetList.SetItems(packages);
+                RecalculateColumnWidths();
             }
 
             RequestRefresh?.Invoke();
@@ -189,12 +198,24 @@ public class NuGetDetailsTab : IProjectTab
             var updatedList = currentList.Select(p =>
                     latestVersions.TryGetValue(p.Id, out var latest)
                         ? p with { LatestVersion = latest }
-                        : p with { LatestVersion = p.ResolvedVersion }
+                        : p with { LatestVersion = p.PrimaryVersion }
             ).ToList();
 
             _nugetList.SetItems(updatedList);
             _isFetchingLatest = false;
+
+            // Recalculate cached widths based on all data including latest versions
+            RecalculateColumnWidths();
         }
+    }
+
+    private void RecalculateColumnWidths()
+    {
+        if (_nugetList.Count == 0) return;
+
+        _cachedPackageWidth = Math.Max(10, _nugetList.Items.Max(p => p.Id.Length) + 2);
+        _cachedCurrentWidth = Math.Max(7, _nugetList.Items.Max(p => p.ResolvedVersion.Length) + 2);
+        _cachedLatestWidth = Math.Max(6, _nugetList.Items.Max(p => (p.LatestVersion ?? p.ResolvedVersion).Length) + 2);
     }
 
     private async Task ReloadDataAsync()
@@ -324,9 +345,10 @@ public class NuGetDetailsTab : IProjectTab
     {
         return new KeyBinding("enter", "versions", () =>
         {
+            var versions = pkg.Projects.Select(p => p.ResolvedVersion).Distinct().ToList();
             var modal = new NuGetVersionSelectionModal(
                 pkg.Id,
-                pkg.ResolvedVersion,
+                versions,
                 pkg.LatestVersion,
                 async v => await UpdatePackageAsync(pkg.Id, v),
                 () => RequestModal?.Invoke(null!),
@@ -364,16 +386,80 @@ public class NuGetDetailsTab : IProjectTab
         }
     }
 
-    private async Task UpdatePackageAsync(string packageId, string version)
+    private async Task UpdatePackageAsync(string packageId, string targetVersion)
     {
-        if (_currentProjectPath == null) return;
+        LogAction?.Invoke($"[dim]UpdatePackageAsync called: {packageId} -> {targetVersion}[/]");
+
+        if (_currentProjectPath == null)
+        {
+            LogAction?.Invoke("[red]UpdatePackageAsync: _currentProjectPath is null[/]");
+            return;
+        }
 
         _isActionRunning = true;
-        _statusMessage = $"Updating {packageId} to {version}...";
+        _statusMessage = $"Updating {packageId} to {targetVersion}...";
         RequestRefresh?.Invoke();
         try
         {
-            await NuGetService.UpdatePackageAsync(_currentProjectPath, packageId, version, false, LogAction);
+            // Find the package in our list
+            NuGetPackageInfo? package = null;
+            lock (_lock)
+            {
+                package = _nugetList.Items.FirstOrDefault(p => p.Id == packageId);
+            }
+
+            if (package == null)
+            {
+                _statusMessage = $"Package {packageId} not found";
+                LogAction?.Invoke($"[red]Package {packageId} not found in list[/]");
+                return;
+            }
+
+            LogAction?.Invoke($"[dim]Found package {packageId} with {package.Projects.Count} projects[/]");
+
+            // Get list of projects that need updating (have lower version than target)
+            var projectsToUpdate = package.GetProjectsToUpdate(targetVersion);
+            LogAction?.Invoke($"[dim]Projects to update: {projectsToUpdate.Count}[/]");
+
+            if (projectsToUpdate.Count == 0)
+            {
+                _statusMessage = $"All projects already at version {targetVersion} or higher";
+                LogAction?.Invoke($"[yellow]No projects need updating - all at {targetVersion} or higher[/]");
+                await Task.Delay(2000);
+                return;
+            }
+
+            // Update each project that needs it
+            var successCount = 0;
+            var failCount = 0;
+
+            foreach (var projectPath in projectsToUpdate)
+            {
+                _statusMessage = $"Updating {packageId} in {Path.GetFileName(projectPath)}...";
+                RequestRefresh?.Invoke();
+
+                try
+                {
+                    await NuGetService.UpdatePackageAsync(projectPath, packageId, targetVersion, false, LogAction);
+                    successCount++;
+                }
+                catch (Exception ex)
+                {
+                    failCount++;
+                    LogAction?.Invoke($"[red]Failed to update {packageId} in {projectPath}: {ex.Message}[/]");
+                }
+            }
+
+            if (failCount > 0)
+            {
+                _statusMessage = $"Updated {successCount} projects, {failCount} failed";
+                await Task.Delay(3000);
+            }
+            else
+            {
+                _statusMessage = $"Successfully updated {successCount} project(s)";
+                await Task.Delay(2000);
+            }
         }
         catch (Exception ex)
         {
@@ -496,7 +582,7 @@ public class NuGetDetailsTab : IProjectTab
             {
                 if (_nugetList.Count > 0)
                 {
-                    RenderNuGetTab(grid, height, width, isActive);
+                    RenderNuGetTab(grid, height, isActive);
                 }
 
                 var msg = _statusMessage ?? "Loading...";
@@ -504,7 +590,7 @@ public class NuGetDetailsTab : IProjectTab
                 return grid;
             }
 
-            RenderNuGetTab(grid, height, width, isActive);
+            RenderNuGetTab(grid, height, isActive);
 
             if (_statusMessage != null)
             {
@@ -515,7 +601,7 @@ public class NuGetDetailsTab : IProjectTab
         }
     }
 
-    private void RenderNuGetTab(Grid grid, int maxRows, int width, bool isActive)
+    private void RenderNuGetTab(Grid grid, int maxRows, bool isActive)
     {
         if (_nugetList.Count == 0)
         {
@@ -523,57 +609,55 @@ public class NuGetDetailsTab : IProjectTab
             return;
         }
 
-        var visibleRows = Math.Max(1, maxRows - 4); // Reserve space for borders/headers/status
+        var visibleRows = Math.Max(1, maxRows - 4);
         var (start, end) = _nugetList.GetVisibleRange(visibleRows);
 
-        var currentWidth = Math.Max(7, _nugetList.Items.Max(p => p.ResolvedVersion.Length) + 2);
-        var latestWidth = Math.Max(6, _nugetList.Items.Max(p => (p.LatestVersion ?? p.ResolvedVersion).Length) + 2);
-        var packageWidth = Math.Max(10, width - currentWidth - latestWidth - 12);
+        var table = CreateNuGetTable();
+        RenderPackageRows(table, start, end, isActive);
+        PadTableWithEmptyRows(table, end - start, visibleRows);
 
-        var table = new Table()
+        grid.AddRow(table);
+
+        var indicator = _nugetList.GetScrollIndicator(visibleRows);
+        if (indicator != null)
+        {
+            grid.AddRow(new Markup($"[dim]{indicator}[/]"));
+        }
+    }
+
+    private Table CreateNuGetTable()
+    {
+        return new Table()
             .Border(TableBorder.Rounded)
-            .Expand()
-            .AddColumn(new TableColumn("Package").Width(packageWidth))
-            .AddColumn(new TableColumn("Current").Width(currentWidth).RightAligned())
-            .AddColumn(new TableColumn("Latest").Width(latestWidth).RightAligned());
+            .Collapse()
+            .AddColumn(new TableColumn("Package").Width(_cachedPackageWidth))
+            .AddColumn(new TableColumn("Current").Width(_cachedCurrentWidth).NoWrap().RightAligned())
+            .AddColumn(new TableColumn("Latest").Width(_cachedLatestWidth).NoWrap().RightAligned());
+    }
 
+    private void RenderPackageRows(Table table, int start, int end, bool isActive)
+    {
         for (var i = start; i < end; i++)
         {
             var pkg = _nugetList.Items[i];
             var isSelected = i == _nugetList.SelectedIndex;
+            var latestText = GetLatestVersionText(pkg);
 
-            string latestText;
-            if (pkg.LatestVersion == null && _isFetchingLatest)
+            if (isSelected && isActive)
             {
-                latestText = $"[yellow]{SpinnerHelper.GetFrame()}[/]";
+                table.AddRow(
+                    new Markup($"[black on blue]{Markup.Escape(pkg.Id)}[/]"),
+                    new Markup($"[black on blue]{Markup.Escape(pkg.ResolvedVersion)}[/]"),
+                    new Markup($"[black on blue]{Markup.Remove(latestText)}[/]")
+                );
             }
-            else if (!pkg.IsOutdated)
+            else if (isSelected)
             {
-                latestText = $"[dim]{Markup.Escape(pkg.ResolvedVersion)}[/]";
-            }
-            else
-            {
-                latestText = FormatColoredVersion(pkg.ResolvedVersion, pkg.LatestVersion!, pkg.GetUpdateType());
-            }
-
-            if (isSelected)
-            {
-                if (isActive)
-                {
-                    table.AddRow(
-                        new Markup($"[black on blue]{Markup.Escape(pkg.Id)}[/]"),
-                        new Markup($"[black on blue]{Markup.Escape(pkg.ResolvedVersion)}[/]"),
-                        new Markup($"[black on blue]{Markup.Remove(latestText)}[/]")
-                    );
-                }
-                else
-                {
-                    table.AddRow(
-                        new Markup(Markup.Escape(pkg.Id)),
-                        new Markup(Markup.Escape(pkg.ResolvedVersion)),
-                        new Markup(latestText)
-                    );
-                }
+                table.AddRow(
+                    new Markup(Markup.Escape(pkg.Id)),
+                    new Markup(Markup.Escape(pkg.ResolvedVersion)),
+                    new Markup(latestText)
+                );
             }
             else
             {
@@ -584,13 +668,28 @@ public class NuGetDetailsTab : IProjectTab
                 );
             }
         }
+    }
 
-        grid.AddRow(table);
-
-        var indicator = _nugetList.GetScrollIndicator(visibleRows);
-        if (indicator != null)
+    private string GetLatestVersionText(NuGetPackageInfo pkg)
+    {
+        if (pkg.LatestVersion == null && _isFetchingLatest)
         {
-            grid.AddRow(new Markup($"[dim]{indicator}[/]"));
+            return $"[yellow]{SpinnerHelper.GetFrame()}[/]";
+        }
+
+        if (!pkg.IsOutdated)
+        {
+            return $"[dim]{Markup.Escape(pkg.ResolvedVersion)}[/]";
+        }
+
+        return FormatColoredVersion(pkg.ResolvedVersion, pkg.LatestVersion!, pkg.GetUpdateType());
+    }
+
+    private static void PadTableWithEmptyRows(Table table, int rowsRendered, int visibleRows)
+    {
+        for (var i = rowsRendered; i < visibleRows; i++)
+        {
+            table.AddRow(new Markup(""), new Markup(""), new Markup(""));
         }
     }
 

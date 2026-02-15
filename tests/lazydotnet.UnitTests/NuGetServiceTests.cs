@@ -22,7 +22,8 @@ public class NuGetServiceTests
     public void NuGetPackageInfo_GetUpdateType_ShouldReturnCorrectType(string current, string latest, VersionUpdateType expected)
     {
         // Arrange
-        var pkg = new NuGetPackageInfo("TestPkg", current, latest);
+        var projects = new List<PackageProjectInfo> { new("/test/project.csproj", current) };
+        var pkg = new NuGetPackageInfo("TestPkg", projects, latest);
 
         // Act
         var result = pkg.GetUpdateType();
@@ -34,21 +35,24 @@ public class NuGetServiceTests
     [Fact]
     public void NuGetPackageInfo_IsOutdated_ShouldReturnTrue_WhenLatestDiffers()
     {
-        var pkg = new NuGetPackageInfo("TestPkg", "1.0.0", "1.0.1");
+        var projects = new List<PackageProjectInfo> { new("/test/project.csproj", "1.0.0") };
+        var pkg = new NuGetPackageInfo("TestPkg", projects, "1.0.1");
         pkg.IsOutdated.Should().BeTrue();
     }
 
     [Fact]
     public void NuGetPackageInfo_IsOutdated_ShouldReturnFalse_WhenSame()
     {
-        var pkg = new NuGetPackageInfo("TestPkg", "1.0.0", "1.0.0");
+        var projects = new List<PackageProjectInfo> { new("/test/project.csproj", "1.0.0") };
+        var pkg = new NuGetPackageInfo("TestPkg", projects, "1.0.0");
         pkg.IsOutdated.Should().BeFalse();
     }
 
     [Fact]
     public void NuGetPackageInfo_IsOutdated_ShouldReturnFalse_WhenLatestIsNull()
     {
-        var pkg = new NuGetPackageInfo("TestPkg", "1.0.0", null);
+        var projects = new List<PackageProjectInfo> { new("/test/project.csproj", "1.0.0") };
+        var pkg = new NuGetPackageInfo("TestPkg", projects, null);
         pkg.IsOutdated.Should().BeFalse();
     }
 }
