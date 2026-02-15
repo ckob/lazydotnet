@@ -20,7 +20,7 @@ public class ExplorerNode
     public ProjectInfo? ProjectInfo { get; init; }
 }
 
-public class SolutionExplorer(IEditorService editorService) : IKeyBindable
+public class SolutionExplorer(IEditorService editorService, Action? onSearchRequested = null) : IKeyBindable, ISearchable
 {
     private ExplorerNode? _root;
     private readonly List<ExplorerNode> _visibleNodes = [];
@@ -220,6 +220,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         yield return new KeyBinding("enter/space", "toggle", DoToggle, k => k.Key is ConsoleKey.Enter or ConsoleKey.Spacebar, false);
         yield return new KeyBinding("e", "edit", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
         yield return new KeyBinding("b", "build", DoBuild, k => k.KeyChar == 'b');
+        yield return new KeyBinding("/", "search", DoStartSearch, k => k.KeyChar == '/');
 
         var selectedProject = GetSelectedProject();
         var isRunning = selectedProject != null && ExecutionService.Instance.IsRunning(selectedProject.Path);
@@ -289,6 +290,20 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         var project = GetSelectedProject();
         if (project != null) OnRequestStop?.Invoke(project);
         return Task.CompletedTask;
+    }
+
+    private Task DoStartSearch()
+    {
+        onSearchRequested?.Invoke();
+        return Task.CompletedTask;
+    }
+
+    public void RequestSearch() => onSearchRequested?.Invoke();
+
+    public Action? OnSearchRequested
+    {
+        get => onSearchRequested;
+        set => onSearchRequested = value;
     }
 
     public Action<ProjectInfo>? OnRequestRun { get; set; }
@@ -509,7 +524,7 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         return grid;
     }
 
-    private static Markup RenderNode(ExplorerNode node, bool isSelected, bool isActive, int availableWidth, bool suppressHighlight)
+    private Markup RenderNode(ExplorerNode node, bool isSelected, bool isActive, int availableWidth, bool suppressHighlight)
     {
         var indent = new string(' ', node.Depth * 2);
         var icon = GetNodeIcon(node);
@@ -521,20 +536,25 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
             runningStatus = " [bold green](R)[/]";
         }
 
+        // Highlight search matches in the name
+        var displayName = string.IsNullOrEmpty(_searchQuery)
+            ? Markup.Escape(name)
+            : HighlightMatch(name, _searchQuery);
+
         if (!isSelected)
-            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}{runningStatus}[/]");
+            return new Markup($"[white]{indent} {icon} {displayName}{runningStatus}[/]");
 
         if (isActive)
         {
-            return new Markup($"{indent} [black on blue]{Markup.Remove(icon)} {Markup.Escape(name)}[/]{runningStatus}");
+            return new Markup($"{indent} [black on blue]{Markup.Remove(icon)} {displayName}[/]{runningStatus}");
         }
 
         if (suppressHighlight)
         {
-            return new Markup($"[white]{indent} {icon} {Markup.Escape(name)}{runningStatus}[/]");
+            return new Markup($"[white]{indent} {icon} {displayName}{runningStatus}[/]");
         }
 
-        return new Markup($"{indent} [bold yellow]{icon} {Markup.Escape(name)}[/]{runningStatus}");
+        return new Markup($"{indent} [bold yellow]{icon} {displayName}[/]{runningStatus}");
     }
 
     private static string GetNodeIcon(ExplorerNode node)
@@ -553,5 +573,82 @@ public class SolutionExplorer(IEditorService editorService) : IKeyBindable
         return name.Length > maxNameWidth
             ? string.Concat(name.AsSpan(0, maxNameWidth - 3), "...")
             : name;
+    }
+
+    private List<int> _searchMatches = [];
+    private int _currentSearchMatchIndex = -1;
+    private string _searchQuery = string.Empty;
+
+    private void ClearSearch()
+    {
+        _searchMatches = [];
+        _currentSearchMatchIndex = -1;
+        _searchQuery = string.Empty;
+    }
+
+    public void StartSearch() => ClearSearch();
+
+    public void ExitSearch() => ClearSearch();
+
+    public List<int> UpdateSearchQuery(string query)
+    {
+        _searchQuery = query;
+        if (string.IsNullOrWhiteSpace(query) || _root == null)
+        {
+            _searchMatches = [];
+            _currentSearchMatchIndex = -1;
+            return _searchMatches;
+        }
+
+        _searchMatches = [];
+        var comparer = StringComparison.OrdinalIgnoreCase;
+
+        for (var i = 0; i < _visibleNodes.Count; i++)
+        {
+            if (_visibleNodes[i].Name.Contains(query, comparer))
+            {
+                _searchMatches.Add(i);
+            }
+        }
+
+        _currentSearchMatchIndex = _searchMatches.Count > 0 ? 0 : -1;
+
+        // Jump to first match
+        if (_currentSearchMatchIndex >= 0)
+        {
+            _selectedIndex = _searchMatches[_currentSearchMatchIndex];
+        }
+
+        return _searchMatches;
+    }
+
+    private static string HighlightMatch(string text, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return Markup.Escape(text);
+
+        var index = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return Markup.Escape(text);
+
+        var before = text[..index];
+        var match = text.Substring(index, query.Length);
+        var after = text[(index + query.Length)..];
+
+        return $"{Markup.Escape(before)}[yellow]{Markup.Escape(match)}[/]{HighlightMatch(after, query)}";
+    }
+
+    public void NextSearchMatch()
+    {
+        if (_searchMatches.Count == 0) return;
+        _currentSearchMatchIndex = (_currentSearchMatchIndex + 1) % _searchMatches.Count;
+        _selectedIndex = _searchMatches[_currentSearchMatchIndex];
+    }
+
+    public void PreviousSearchMatch()
+    {
+        if (_searchMatches.Count == 0) return;
+        _currentSearchMatchIndex = (_currentSearchMatchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
+        _selectedIndex = _searchMatches[_currentSearchMatchIndex];
     }
 }

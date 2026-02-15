@@ -5,7 +5,7 @@ using Spectre.Console.Rendering;
 
 namespace lazydotnet.UI.Components;
 
-public partial class LogViewer : IKeyBindable
+public partial class LogViewer : IKeyBindable, ISearchable
 {
     private readonly List<string> _logs = [];
     private readonly Lock _lock = new();
@@ -16,6 +16,8 @@ public partial class LogViewer : IKeyBindable
     public bool IsStreaming => _selectedLogicalIndex == -1;
 
     private const int MaxLogLines = 1000;
+
+    public Action? OnSearchRequested { get; set; }
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
@@ -56,6 +58,12 @@ public partial class LogViewer : IKeyBindable
 
             return Task.CompletedTask;
         }, k => k.Key == ConsoleKey.Escape, false);
+
+        yield return new KeyBinding("/", "search", () =>
+        {
+            OnSearchRequested?.Invoke();
+            return Task.CompletedTask;
+        }, k => k.KeyChar == '/');
     }
 
     public void AddLog(string message)
@@ -232,18 +240,20 @@ public partial class LogViewer : IKeyBindable
         {
             var line = physicalLines[i];
             var isSelected = line.LogicalIndex == _selectedLogicalIndex;
-            var escapedText = Markup.Escape(line.Text);
+            var displayText = string.IsNullOrEmpty(_searchQuery)
+                ? line.Text
+                : HighlightMatch(line.Text, _searchQuery);
 
             if (isSelected)
             {
                 var selectionStyle = isActive ? "black on white" : "black on silver";
-                table.AddRow(new Markup($"[{selectionStyle}]{escapedText}[/]"));
+                table.AddRow(new Markup($"[{selectionStyle}]{displayText}[/]"));
             }
             else
             {
                 var contentMarkup = string.IsNullOrEmpty(line.Style)
-                    ? escapedText
-                    : $"[{line.Style}]{escapedText}[/]";
+                    ? displayText
+                    : $"[{line.Style}]{displayText}[/]";
                 table.AddRow(new Markup(contentMarkup));
             }
 
@@ -298,4 +308,90 @@ public partial class LogViewer : IKeyBindable
 
     [GeneratedRegex(@"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$", RegexOptions.Compiled)]
     private static partial Regex GetStyleRegex();
+
+    private List<int> _searchMatches = [];
+    private int _currentSearchMatchIndex = -1;
+    private string _searchQuery = string.Empty;
+
+    private void ClearSearch()
+    {
+        _searchMatches = [];
+        _currentSearchMatchIndex = -1;
+        _searchQuery = string.Empty;
+    }
+
+    public void StartSearch() => ClearSearch();
+
+    public void ExitSearch() => ClearSearch();
+
+    public List<int> UpdateSearchQuery(string query)
+    {
+        _searchQuery = query;
+        lock (_lock)
+        {
+            if (string.IsNullOrWhiteSpace(query) || _logs.Count == 0)
+            {
+                _searchMatches = [];
+                _currentSearchMatchIndex = -1;
+                return _searchMatches;
+            }
+
+            _searchMatches = [];
+            var comparer = StringComparison.OrdinalIgnoreCase;
+
+            for (var i = 0; i < _logs.Count; i++)
+            {
+                var (text, _) = ExtractStyle(_logs[i]);
+                if (text.Contains(query, comparer))
+                {
+                    _searchMatches.Add(i);
+                }
+            }
+
+            _currentSearchMatchIndex = _searchMatches.Count > 0 ? 0 : -1;
+
+            if (_currentSearchMatchIndex >= 0)
+            {
+                _selectedLogicalIndex = _searchMatches[_currentSearchMatchIndex];
+            }
+
+            return _searchMatches;
+        }
+    }
+
+    private static string HighlightMatch(string text, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return Markup.Escape(text);
+
+        var index = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return Markup.Escape(text);
+
+        var before = text[..index];
+        var match = text.Substring(index, query.Length);
+        var after = text[(index + query.Length)..];
+
+        return $"{Markup.Escape(before)}[yellow]{Markup.Escape(match)}[/]{HighlightMatch(after, query)}";
+    }
+
+    public void NextSearchMatch()
+    {
+        lock (_lock)
+        {
+            if (_searchMatches.Count == 0) return;
+            _currentSearchMatchIndex = (_currentSearchMatchIndex + 1) % _searchMatches.Count;
+            _selectedLogicalIndex = _searchMatches[_currentSearchMatchIndex];
+        }
+    }
+
+    public void PreviousSearchMatch()
+    {
+        lock (_lock)
+        {
+            if (_searchMatches.Count == 0) return;
+            _currentSearchMatchIndex = (_currentSearchMatchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
+            _selectedLogicalIndex = _searchMatches[_currentSearchMatchIndex];
+        }
+    }
 }
