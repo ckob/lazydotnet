@@ -308,6 +308,37 @@ public class DashboardScreen : IScreen
         }, k => k.KeyChar == '?');
     }
 
+    public void StartSearch()
+    {
+        var searchable = GetCurrentSearchable();
+        if (searchable == null) return;
+
+        _layout.SearchState.StartSearch(_layout.ActivePanel);
+        searchable.StartSearch();
+        _needsRefresh = true;
+    }
+
+    private ISearchable? GetCurrentSearchable()
+    {
+        return _layout.ActivePanel switch
+        {
+            0 => _detailsPane,
+            2 => _explorer,
+            3 => _layout.LogViewer,
+            _ => null
+        };
+    }
+
+    private void UpdateSearchStateForPanelChange(int newPanel)
+    {
+        var searchState = _layout.SearchState;
+        
+        // Simply sync the search state's active panel with the layout's active panel
+        // This preserves each panel's search state and just switches which one is "current"
+        searchState.SwitchToPanel(newPanel);
+        _needsRefresh = true;
+    }
+
     private IEnumerable<KeyBinding> GetPanelSpecificBindings()
     {
         switch (_layout.ActivePanel)
@@ -401,7 +432,16 @@ public class DashboardScreen : IScreen
             return this;
         }
 
-        if (key.Key == ConsoleKey.Q)
+        // Handle search mode input - in navigation mode, pass through unhandled keys
+        if (_layout.SearchState.IsActive)
+        {
+            var handled = await HandleSearchInputAsync(key);
+            if (handled)
+            {
+                return this;
+            }
+        }
+        else if (key.Key == ConsoleKey.Q)
         {
             return null;
         }
@@ -420,18 +460,21 @@ public class DashboardScreen : IScreen
                 else if (key.Key == ConsoleKey.D1) layout.SetActivePanel(1);
                 else if (key.Key == ConsoleKey.D2) layout.SetActivePanel(2);
                 else if (key.Key == ConsoleKey.D3) layout.SetActivePanel(3);
+                UpdateSearchStateForPanelChange(layout.ActivePanel);
                 return this;
             }
             case "tab":
             {
                 var next = (layout.ActivePanel + 1) % 4;
                 layout.SetActivePanel(next);
+                UpdateSearchStateForPanelChange(layout.ActivePanel);
                 return this;
             }
             case "shift+tab":
             {
                 var next = (layout.ActivePanel - 1 + 4) % 4;
                 layout.SetActivePanel(next);
+                UpdateSearchStateForPanelChange(layout.ActivePanel);
                 return this;
             }
             case "q":
@@ -440,6 +483,88 @@ public class DashboardScreen : IScreen
                 await binding.Action();
 
                 return this;
+        }
+    }
+
+    private async Task<bool> HandleSearchInputAsync(ConsoleKeyInfo key)
+    {
+        var searchable = GetCurrentSearchable();
+        var searchState = _layout.SearchState;
+
+        if (key.Key == ConsoleKey.Escape)
+        {
+            searchable?.ExitSearch();
+            searchState.ExitSearch();
+            _needsRefresh = true;
+            return true;
+        }
+
+        return searchState.Mode == SearchMode.Input
+            ? HandleSearchInputMode(key, searchable, searchState)
+            : HandleSearchNavigationMode(key, searchable, searchState);
+    }
+
+    private bool HandleSearchInputMode(ConsoleKeyInfo key, ISearchable? searchable, SearchState searchState)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.Enter:
+                if (searchable != null)
+                {
+                    var matches = searchable.UpdateSearchQuery(searchState.Query);
+                    searchState.SetMatches(matches);
+                }
+                searchState.ExecuteSearch();
+                _needsRefresh = true;
+                return true;
+
+            case ConsoleKey.Backspace:
+                searchState.Backspace();
+                _needsRefresh = true;
+                return true;
+
+            default:
+                if (key.KeyChar is >= ' ' and <= '~')
+                {
+                    searchState.AppendChar(key.KeyChar);
+                    _needsRefresh = true;
+                }
+                return true;
+        }
+    }
+
+    private bool HandleSearchNavigationMode(ConsoleKeyInfo key, ISearchable? searchable, SearchState searchState)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.N:
+                if (key.Modifiers == ConsoleModifiers.Shift)
+                {
+                    searchState.PreviousMatch();
+                    searchable?.PreviousSearchMatch();
+                }
+                else
+                {
+                    searchState.NextMatch();
+                    searchable?.NextSearchMatch();
+                }
+                _needsRefresh = true;
+                return true;
+
+            case ConsoleKey.Divide:
+            case ConsoleKey.Oem2:
+                if (key.KeyChar == '/' || key.Key == ConsoleKey.Divide)
+                {
+                    searchable?.ExitSearch();
+                    searchState.RestartSearch(_layout.ActivePanel);
+                    searchable?.StartSearch();
+                    _needsRefresh = true;
+                    return true;
+                }
+                return false;
+
+            default:
+                return false;
         }
     }
 

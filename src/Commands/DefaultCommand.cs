@@ -100,6 +100,9 @@ public sealed class DefaultCommand : AsyncCommand<DefaultSettings>
         AppCli.OnLog += layout.AddLog;
 
         var dashboard = new DashboardScreen(explorer, detailsPane, layout, solutionService, rootDir, solutionFile);
+        explorer.OnSearchRequested += () => dashboard.StartSearch();
+        detailsPane.OnSearchRequested += () => dashboard.StartSearch();
+        layout.SetLogViewerSearchCallback(() => dashboard.StartSearch());
         var host = new AppHost(layout, dashboard);
 
         try

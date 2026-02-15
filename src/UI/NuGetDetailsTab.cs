@@ -13,7 +13,7 @@ public enum AppMode
     Busy // Showing spinner/progress
 }
 
-public class NuGetDetailsTab : IProjectTab
+public class NuGetDetailsTab : IProjectTab, ISearchable
 {
     private readonly ScrollableList<NuGetPackageInfo> _nugetList = new();
 
@@ -716,10 +716,15 @@ public class NuGetDetailsTab : IProjectTab
             var isSelected = i == _nugetList.SelectedIndex;
             var latestText = GetLatestVersionText(pkg);
 
+            // Highlight search matches in the package ID
+            var displayId = string.IsNullOrEmpty(_searchQuery)
+                ? Markup.Escape(pkg.Id)
+                : HighlightMatch(pkg.Id, _searchQuery);
+
             if (isSelected && isActive)
             {
                 table.AddRow(
-                    new Markup($"[black on blue]{Markup.Escape(pkg.Id)}[/]"),
+                    new Markup($"[black on blue]{displayId}[/]"),
                     new Markup($"[black on blue]{Markup.Escape(pkg.ResolvedVersion)}[/]"),
                     new Markup($"[black on blue]{Markup.Remove(latestText)}[/]")
                 );
@@ -727,7 +732,7 @@ public class NuGetDetailsTab : IProjectTab
             else if (isSelected)
             {
                 table.AddRow(
-                    new Markup(Markup.Escape(pkg.Id)),
+                    new Markup(displayId),
                     new Markup(Markup.Escape(pkg.ResolvedVersion)),
                     new Markup(latestText)
                 );
@@ -735,7 +740,7 @@ public class NuGetDetailsTab : IProjectTab
             else
             {
                 table.AddRow(
-                    new Markup(Markup.Escape(pkg.Id)),
+                    new Markup(displayId),
                     new Markup(Markup.Escape(pkg.ResolvedVersion)),
                     new Markup(latestText)
                 );
@@ -820,5 +825,91 @@ public class NuGetDetailsTab : IProjectTab
         }
 
         sb.Append($"[{color}]{Markup.Escape(part)}[/]");
+    }
+
+    private List<int> _searchMatches = [];
+    private int _currentSearchMatchIndex = -1;
+    private string _searchQuery = string.Empty;
+
+    private void ClearSearch()
+    {
+        _searchMatches = [];
+        _currentSearchMatchIndex = -1;
+        _searchQuery = string.Empty;
+    }
+
+    public void StartSearch() => ClearSearch();
+
+    public void ExitSearch() => ClearSearch();
+
+    public List<int> UpdateSearchQuery(string query)
+    {
+        _searchQuery = query;
+        lock (_lock)
+        {
+            if (string.IsNullOrWhiteSpace(query) || _nugetList.Count == 0)
+            {
+                _searchMatches = [];
+                _currentSearchMatchIndex = -1;
+                return _searchMatches;
+            }
+
+            _searchMatches = [];
+            var comparer = StringComparison.OrdinalIgnoreCase;
+            var items = _nugetList.Items.ToList();
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (items[i].Id.Contains(query, comparer))
+                {
+                    _searchMatches.Add(i);
+                }
+            }
+
+            _currentSearchMatchIndex = _searchMatches.Count > 0 ? 0 : -1;
+
+            if (_currentSearchMatchIndex >= 0)
+            {
+                _nugetList.Select(_searchMatches[_currentSearchMatchIndex]);
+            }
+
+            return _searchMatches;
+        }
+    }
+
+    private static string HighlightMatch(string text, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return Markup.Escape(text);
+
+        var index = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return Markup.Escape(text);
+
+        var before = text[..index];
+        var match = text.Substring(index, query.Length);
+        var after = text[(index + query.Length)..];
+
+        return $"{Markup.Escape(before)}[yellow]{Markup.Escape(match)}[/]{HighlightMatch(after, query)}";
+    }
+
+    public void NextSearchMatch()
+    {
+        lock (_lock)
+        {
+            if (_searchMatches.Count == 0) return;
+            _currentSearchMatchIndex = (_currentSearchMatchIndex + 1) % _searchMatches.Count;
+            _nugetList.Select(_searchMatches[_currentSearchMatchIndex]);
+        }
+    }
+
+    public void PreviousSearchMatch()
+    {
+        lock (_lock)
+        {
+            if (_searchMatches.Count == 0) return;
+            _currentSearchMatchIndex = (_currentSearchMatchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
+            _nugetList.Select(_searchMatches[_currentSearchMatchIndex]);
+        }
     }
 }

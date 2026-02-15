@@ -23,6 +23,7 @@ public class AppLayout
     );
 
     private readonly Layout _rootLayout;
+    public SearchState SearchState { get; } = new();
 
     public AppLayout()
     {
@@ -52,6 +53,8 @@ public class AppLayout
         return availableHeight - topHeight;
     }
     public LogViewer LogViewer { get; } = new();
+
+    public void SetLogViewerSearchCallback(Action callback) => LogViewer.OnSearchRequested = callback;
 
     public Layout GetRoot() => _rootLayout;
 
@@ -146,6 +149,12 @@ public class AppLayout
 
     public void UpdateFooter(IEnumerable<KeyBinding> bindings)
     {
+        if (SearchState.IsActive)
+        {
+            _rootLayout["Footer"].Update(new Markup(SearchState.GetStatusText()));
+            return;
+        }
+
         var footerBindings = bindings.Where(b => b.ShowInBottomBar).ToList();
 
         var rawVersion = ThisAssembly.Info.InformationalVersion;

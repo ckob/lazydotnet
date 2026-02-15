@@ -6,7 +6,7 @@ using lazydotnet.Services;
 
 namespace lazydotnet.UI;
 
-public class ProjectDetailsPane : IKeyBindable
+public class ProjectDetailsPane : IKeyBindable, ISearchable
 {
     private readonly TabbedPane _tabs;
     private readonly NuGetDetailsTab _nugetTab;
@@ -23,6 +23,7 @@ public class ProjectDetailsPane : IKeyBindable
         set => _nugetTab.LogAction = value;
     }
 
+    public Action? OnSearchRequested { get; set; }
     public Action? RequestRefresh { get; set; }
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
@@ -158,6 +159,12 @@ public class ProjectDetailsPane : IKeyBindable
             return Task.CompletedTask;
         }, k => k.KeyChar == ']' || k.Key == ConsoleKey.Tab, false);
 
+        yield return new KeyBinding("/", "search", () =>
+        {
+            OnSearchRequested?.Invoke();
+            return Task.CompletedTask;
+        }, k => k.KeyChar == '/');
+
         var activeTab = _tabInstances[_tabs.ActiveTab];
         foreach (var b in activeTab.GetKeyBindings())
         {
@@ -181,5 +188,49 @@ public class ProjectDetailsPane : IKeyBindable
     {
         var activeInstance = _tabInstances[_tabs.ActiveTab];
         return activeInstance.GetContent(availableHeight, availableWidth, isActive);
+    }
+
+    public void StartSearch()
+    {
+        if (_tabInstances[_tabs.ActiveTab] is ISearchable searchable)
+        {
+            searchable.StartSearch();
+        }
+    }
+
+    public void ExitSearch()
+    {
+        foreach (var tab in _tabInstances)
+        {
+            if (tab is ISearchable searchable)
+            {
+                searchable.ExitSearch();
+            }
+        }
+    }
+
+    public List<int> UpdateSearchQuery(string query)
+    {
+        if (_tabInstances[_tabs.ActiveTab] is ISearchable searchable)
+        {
+            return searchable.UpdateSearchQuery(query);
+        }
+        return [];
+    }
+
+    public void NextSearchMatch()
+    {
+        if (_tabInstances[_tabs.ActiveTab] is ISearchable searchable)
+        {
+            searchable.NextSearchMatch();
+        }
+    }
+
+    public void PreviousSearchMatch()
+    {
+        if (_tabInstances[_tabs.ActiveTab] is ISearchable searchable)
+        {
+            searchable.PreviousSearchMatch();
+        }
     }
 }

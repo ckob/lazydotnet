@@ -14,7 +14,7 @@ public enum TestFilter
     Running
 }
 
-public class TestDetailsTab(IEditorService editorService) : IProjectTab
+public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearchable
 {
     private TestNode? _root;
     private readonly List<TestNode> _visibleNodes = [];
@@ -405,7 +405,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
         }
     }
 
-    private static Markup RenderNode(TestNode node, bool isSelected, int width, bool isActive)
+    private Markup RenderNode(TestNode node, bool isSelected, int width, bool isActive)
     {
         string indent = new(' ', (node.Depth - 1) * 2);
         var statusColor = GetStatusColor(node.Status);
@@ -430,7 +430,11 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             rawName = TruncateName(rawName, maxNameLen - testCountSuffix.Length - 1);
         }
 
-        var displayName = Markup.Escape(rawName);
+        // Highlight search matches in the name
+        var displayName = string.IsNullOrEmpty(_searchQuery)
+            ? Markup.Escape(rawName)
+            : HighlightMatch(rawName, _searchQuery);
+
         if (testCountSuffix.Length > 0)
         {
             displayName += $" [dim]{Markup.Escape(testCountSuffix)}[/]";
@@ -788,5 +792,90 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab
             TestFilter.Running => GetCountByStatus(node, TestStatus.Running) > 0,
             _ => true
         };
+    }
+
+    private List<int> _searchMatches = [];
+    private int _currentSearchMatchIndex = -1;
+    private string _searchQuery = string.Empty;
+
+    private void ClearSearch()
+    {
+        _searchMatches = [];
+        _currentSearchMatchIndex = -1;
+        _searchQuery = string.Empty;
+    }
+
+    public void StartSearch() => ClearSearch();
+
+    public void ExitSearch() => ClearSearch();
+
+    public List<int> UpdateSearchQuery(string query)
+    {
+        _searchQuery = query;
+        lock (_lock)
+        {
+            if (string.IsNullOrWhiteSpace(query) || _visibleNodes.Count == 0)
+            {
+                _searchMatches = [];
+                _currentSearchMatchIndex = -1;
+                return _searchMatches;
+            }
+
+            _searchMatches = [];
+            var comparer = StringComparison.OrdinalIgnoreCase;
+
+            for (var i = 0; i < _visibleNodes.Count; i++)
+            {
+                if (_visibleNodes[i].Name.Contains(query, comparer))
+                {
+                    _searchMatches.Add(i);
+                }
+            }
+
+            _currentSearchMatchIndex = _searchMatches.Count > 0 ? 0 : -1;
+
+            if (_currentSearchMatchIndex >= 0)
+            {
+                _selectedIndex = _searchMatches[_currentSearchMatchIndex];
+            }
+
+            return _searchMatches;
+        }
+    }
+
+    private static string HighlightMatch(string text, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return Markup.Escape(text);
+
+        var index = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return Markup.Escape(text);
+
+        var before = text[..index];
+        var match = text.Substring(index, query.Length);
+        var after = text[(index + query.Length)..];
+
+        return $"{Markup.Escape(before)}[yellow]{Markup.Escape(match)}[/]{HighlightMatch(after, query)}";
+    }
+
+    public void NextSearchMatch()
+    {
+        lock (_lock)
+        {
+            if (_searchMatches.Count == 0) return;
+            _currentSearchMatchIndex = (_currentSearchMatchIndex + 1) % _searchMatches.Count;
+            _selectedIndex = _searchMatches[_currentSearchMatchIndex];
+        }
+    }
+
+    public void PreviousSearchMatch()
+    {
+        lock (_lock)
+        {
+            if (_searchMatches.Count == 0) return;
+            _currentSearchMatchIndex = (_currentSearchMatchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
+            _selectedIndex = _searchMatches[_currentSearchMatchIndex];
+        }
     }
 }
