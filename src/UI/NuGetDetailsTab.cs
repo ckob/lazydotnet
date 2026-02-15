@@ -29,6 +29,14 @@ public class NuGetDetailsTab : IProjectTab
     private string? _currentProjectName;
     private CancellationTokenSource? _loadCts;
 
+    // Track packages being updated in the background (non-blocking)
+    private readonly HashSet<string> _updatingPackages = new();
+    private int _activeBackgroundOperations = 0;
+
+    // Thread-safe log queue for background operations
+    private readonly List<string> _pendingLogs = new();
+    private readonly Lock _logLock = new();
+
     // Cached column widths to prevent flickering during scroll
     private int _cachedPackageWidth = 10;
     private int _cachedCurrentWidth = 7;
@@ -87,7 +95,7 @@ public class NuGetDetailsTab : IProjectTab
 
     public bool OnTick()
     {
-        if (!_isFetchingLatest && !_isLoading && !_isActionRunning) return false;
+        if (!_isFetchingLatest && !_isLoading && !_isActionRunning && _activeBackgroundOperations == 0) return false;
         var currentFrame = SpinnerHelper.GetCurrentFrameIndex();
         if (currentFrame == _lastFrameIndex) return false;
         _lastFrameIndex = currentFrame;
@@ -228,7 +236,8 @@ public class NuGetDetailsTab : IProjectTab
 
     public IEnumerable<KeyBinding> GetKeyBindings()
     {
-        if (_isActionRunning || _isLoading) yield break;
+        // Only block during initial loading, not during background operations
+        if (_isLoading) yield break;
 
         foreach (var b in GetNavigationBindings()) yield return b;
 
@@ -313,7 +322,10 @@ public class NuGetDetailsTab : IProjectTab
         if (pkg.IsOutdated)
         {
             yield return new KeyBinding("u", "update", () =>
-                    UpdatePackageAsync(pkg.Id, pkg.LatestVersion!),
+            {
+                UpdatePackageAsync(pkg.Id, pkg.LatestVersion!);
+                return Task.CompletedTask;
+            },
                 k => k.Key == ConsoleKey.U && (k.Modifiers & ConsoleModifiers.Shift) == 0);
         }
 
@@ -350,14 +362,18 @@ public class NuGetDetailsTab : IProjectTab
                 pkg.Id,
                 versions,
                 pkg.LatestVersion,
-                async v => await UpdatePackageAsync(pkg.Id, v),
+                v =>
+                {
+                    UpdatePackageAsync(pkg.Id, v);
+                    return Task.CompletedTask;
+                },
                 () => RequestModal?.Invoke(null!),
                 LogAction,
                 () => RequestRefresh?.Invoke()
             );
             RequestModal?.Invoke(modal);
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.Enter);
+        }, k => k.Key == ConsoleKey.Enter && k.Modifiers == ConsoleModifiers.None);
     }
 
 
@@ -386,92 +402,147 @@ public class NuGetDetailsTab : IProjectTab
         }
     }
 
-    private async Task UpdatePackageAsync(string packageId, string targetVersion)
+    private void UpdatePackageAsync(string packageId, string targetVersion)
     {
-        LogAction?.Invoke($"[dim]UpdatePackageAsync called: {packageId} -> {targetVersion}[/]");
-
         if (_currentProjectPath == null)
         {
-            LogAction?.Invoke("[red]UpdatePackageAsync: _currentProjectPath is null[/]");
             return;
         }
 
-        _isActionRunning = true;
-        _statusMessage = $"Updating {packageId} to {targetVersion}...";
+        lock (_lock)
+        {
+            if (!_updatingPackages.Add(packageId))
+            {
+                LogAction?.Invoke($"[yellow]Package {packageId} is already being updated[/]");
+                return;
+            }
+
+            _activeBackgroundOperations++;
+        }
+
+        UpdateStatusMessage();
         RequestRefresh?.Invoke();
+
+        _ = Task.Run(() => ExecutePackageUpdateAsync(packageId, targetVersion));
+    }
+
+    private async Task ExecutePackageUpdateAsync(string packageId, string targetVersion)
+    {
         try
         {
-            // Find the package in our list
-            NuGetPackageInfo? package = null;
-            lock (_lock)
-            {
-                package = _nugetList.Items.FirstOrDefault(p => p.Id == packageId);
-            }
-
-            if (package == null)
-            {
-                _statusMessage = $"Package {packageId} not found";
-                LogAction?.Invoke($"[red]Package {packageId} not found in list[/]");
-                return;
-            }
-
-            LogAction?.Invoke($"[dim]Found package {packageId} with {package.Projects.Count} projects[/]");
-
-            // Get list of projects that need updating (have lower version than target)
-            var projectsToUpdate = package.GetProjectsToUpdate(targetVersion);
-            LogAction?.Invoke($"[dim]Projects to update: {projectsToUpdate.Count}[/]");
-
-            if (projectsToUpdate.Count == 0)
-            {
-                _statusMessage = $"All projects already at version {targetVersion} or higher";
-                LogAction?.Invoke($"[yellow]No projects need updating - all at {targetVersion} or higher[/]");
-                await Task.Delay(2000);
-                return;
-            }
-
-            // Update each project that needs it
-            var successCount = 0;
-            var failCount = 0;
-
-            foreach (var projectPath in projectsToUpdate)
-            {
-                _statusMessage = $"Updating {packageId} in {Path.GetFileName(projectPath)}...";
-                RequestRefresh?.Invoke();
-
-                try
-                {
-                    await NuGetService.UpdatePackageAsync(projectPath, packageId, targetVersion, false, LogAction);
-                    successCount++;
-                }
-                catch (Exception ex)
-                {
-                    failCount++;
-                    LogAction?.Invoke($"[red]Failed to update {packageId} in {projectPath}: {ex.Message}[/]");
-                }
-            }
-
-            if (failCount > 0)
-            {
-                _statusMessage = $"Updated {successCount} projects, {failCount} failed";
-                await Task.Delay(3000);
-            }
-            else
-            {
-                _statusMessage = $"Successfully updated {successCount} project(s)";
-                await Task.Delay(2000);
-            }
+            await RunPackageUpdateCoreAsync(packageId, targetVersion);
         }
         catch (Exception ex)
         {
-            _statusMessage = $"Update failed: {ex.Message}";
-            await Task.Delay(3000);
+            QueueLog($"[red]Update failed for {packageId}: {ex.Message}[/]");
         }
         finally
         {
-            _isActionRunning = false;
-            _statusMessage = null;
-            await ReloadDataAsync();
+            lock (_lock)
+            {
+                _updatingPackages.Remove(packageId);
+                _activeBackgroundOperations--;
+            }
+
+            UpdateStatusMessage();
             RequestRefresh?.Invoke();
+
+            await Task.Delay(500);
+            await ReloadDataAsync();
+        }
+    }
+
+    private async Task RunPackageUpdateCoreAsync(string packageId, string targetVersion)
+    {
+        NuGetPackageInfo? package;
+        lock (_lock)
+        {
+            package = _nugetList.Items.FirstOrDefault(p => p.Id == packageId);
+        }
+
+        if (package == null)
+        {
+            QueueLog($"[red]Package {packageId} not found in list[/]");
+            return;
+        }
+
+        var projectsToUpdate = package.GetProjectsToUpdate(targetVersion);
+
+        if (projectsToUpdate.Count == 0)
+        {
+            QueueLog($"[yellow]No projects need updating - all at {targetVersion} or higher[/]");
+            return;
+        }
+
+        var (successCount, failCount) = await UpdateProjectsAsync(packageId, targetVersion, projectsToUpdate);
+
+        if (failCount > 0)
+        {
+            QueueLog($"[yellow]Updated {successCount} projects, {failCount} failed[/]");
+        }
+        else
+        {
+            QueueLog($"[green]Successfully updated {successCount} project(s) for {packageId}[/]");
+        }
+    }
+
+    private async Task<(int SuccessCount, int FailCount)> UpdateProjectsAsync(
+        string packageId, string targetVersion, List<string> projectsToUpdate)
+    {
+        var successCount = 0;
+        var failCount = 0;
+
+        foreach (var projectPath in projectsToUpdate)
+        {
+            try
+            {
+                await NuGetService.UpdatePackageAsync(projectPath, packageId, targetVersion, false, QueueLog);
+                successCount++;
+            }
+            catch (Exception ex)
+            {
+                failCount++;
+                QueueLog($"[red]Failed to update {packageId} in {projectPath}: {ex.Message}[/]");
+            }
+        }
+
+        return (successCount, failCount);
+    }
+
+    private void UpdateStatusMessage()
+    {
+        lock (_lock)
+        {
+            _statusMessage = _updatingPackages.Count switch
+            {
+                0 => null,
+                1 => $"Updating {_updatingPackages.First()}...",
+                _ => $"Updating {_updatingPackages.Count} packages..."
+            };
+        }
+    }
+
+    private void FlushPendingLogs()
+    {
+        List<string> logsToFlush;
+        lock (_logLock)
+        {
+            if (_pendingLogs.Count == 0) return;
+            logsToFlush = new List<string>(_pendingLogs);
+            _pendingLogs.Clear();
+        }
+
+        foreach (var log in logsToFlush)
+        {
+            LogAction?.Invoke(log);
+        }
+    }
+
+    private void QueueLog(string message)
+    {
+        lock (_logLock)
+        {
+            _pendingLogs.Add(message);
         }
     }
 
@@ -567,6 +638,8 @@ public class NuGetDetailsTab : IProjectTab
 
     public IRenderable GetContent(int height, int width, bool isActive)
     {
+        FlushPendingLogs();
+
         lock (_lock)
         {
             var grid = new Grid();
