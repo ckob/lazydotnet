@@ -4,12 +4,9 @@ A terminal-based UI for managing .NET solutions and projects, inspired by [lazyg
 
 lazydotnet provides an interactive, keyboard-driven interface for common .NET development tasks. Navigate your solution structure, build and run projects, manage NuGet packages, and run tests—all without leaving your terminal.
 
-
 ![Test Details](docs/assets/tests.png)
 
 https://github.com/user-attachments/assets/758228fc-582a-4820-9672-97bda2050562
-
-
 
 **Important:** This project does **not** include LSP (Language Server Protocol) functionality or debugging capabilities. It focuses on solution/project management and execution tasks.
 
@@ -28,7 +25,6 @@ To update to the latest version:
 ```bash
 dotnet tool update --global lazydotnet
 ```
-
 
 ### Optional Dependencies
 
@@ -150,6 +146,21 @@ lazydotnet -s MySolution.sln
 - **Build solution** (`Shift+B`)
 - **Stop all running projects** (`Shift+S`)
 
+### Search
+
+Search is available in some panels.
+
+| Key     | Action                                  |
+| ------- | --------------------------------------- |
+| `/`     | Start search (when on searchable panel) |
+| `Enter` | Execute search and show matches         |
+| `n`     | Next match                              |
+| `N`     | Previous match                          |
+| `Esc`   | Exit search mode                        |
+
+- Search is **per-panel**: switching panels preserves each panel's search state
+- Matches are **highlighted**
+
 ## Keybindings
 
 ### Global
@@ -163,7 +174,7 @@ lazydotnet -s MySolution.sln
 | `0-3`       | Switch to panel (0=Details, 1=Workspace, 2=Explorer, 3=Log) |
 | `B`         | Build solution                                              |
 | `S`         | Stop all running projects                                   |
-| `Ctrl+R`    | Reload current project/solution                             |
+| `Ctrl+R`    | Reload                                                      |
 
 ### Explorer Panel
 
@@ -234,9 +245,11 @@ lazydotnet -s MySolution.sln
 ## Configuration examples
 
 ### Zed Integration
+
 > lazydotnet is not a replacement for the [Zed c#](https://zed.dev/extensions/csharp) extension. It can complement it.
 
 Add this task to your `.zed/tasks.json`:
+
 ```json
 [
   {
@@ -279,7 +292,7 @@ Now you can launch lazydotnet with `Cmd+Shift+D` from Zed.
 
 ## Acknowledgments
 
-- This project is based on the idea of [lazygit](https://github.com/jesseduffield/lazygit). 
+- This project is based on the idea of [lazygit](https://github.com/jesseduffield/lazygit).
 - Special thanks to [easy-dotnet](https://github.com/GustavEikaas/easy-dotnet.nvim) for the inspiration.
 - Built with [Spectre.Console](https://spectreconsole.net/) for beautiful terminal UI.
 
