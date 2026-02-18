@@ -109,7 +109,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
         }
         catch (Exception ex)
         {
-            layout.AddLog($"[red]CRITICAL ERROR: {ex.Message}[/]");
+            layout.AddLog($"[red]CRITICAL ERROR: {Markup.Escape(ex.Message)}[/]");
             lock (_uiLock)
             {
                 var bottomH = AppLayout.GetBottomHeight(Console.WindowHeight);

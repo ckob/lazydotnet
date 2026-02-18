@@ -102,7 +102,7 @@ public class DashboardScreen : IScreen
         }
         catch (Exception ex)
         {
-            _layout.AddLog($"[red]Build Error: {ex.Message}[/]");
+            _layout.AddLog($"[red]Build Error: {Markup.Escape(ex.Message)}[/]");
         }
         _needsRefresh = true;
     }
@@ -139,7 +139,7 @@ public class DashboardScreen : IScreen
             }
             catch (Exception ex)
             {
-                _layout.AddLog($"[red]Build Error for {Markup.Escape(project.Name)}: {ex.Message}[/]");
+                _layout.AddLog($"[red]Build Error for {Markup.Escape(project.Name)}: {Markup.Escape(ex.Message)}[/]");
             }
         }
         _needsRefresh = true;
@@ -184,7 +184,7 @@ public class DashboardScreen : IScreen
         }
         catch (Exception ex)
         {
-            _layout.AddLog($"[red]Error loading solution: {ex.Message}[/]");
+            _layout.AddLog($"[red]Error loading solution: {Markup.Escape(ex.Message)}[/]");
         }
     }
 
@@ -590,7 +590,7 @@ public class DashboardScreen : IScreen
             }
             catch (Exception ex)
             {
-                _layout.AddLog($"[red]Error reloading solution: {ex.Message}[/]");
+                _layout.AddLog($"[red]Error reloading solution: {Markup.Escape(ex.Message)}[/]");
             }
         }
         else
@@ -647,7 +647,7 @@ public class DashboardScreen : IScreen
             }
             catch (Exception ex)
             {
-                layout.AddLog($"[red]Build Error: {ex.Message}[/]");
+                layout.AddLog($"[red]Build Error: {Markup.Escape(ex.Message)}[/]");
                 _needsRefresh = true;
             }
         });

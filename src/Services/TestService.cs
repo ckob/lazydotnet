@@ -6,6 +6,7 @@ using Microsoft.Build.Evaluation;
 using Microsoft.Build.Construction;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using Spectre.Console;
 
 namespace lazydotnet.Services;
 
@@ -135,7 +136,7 @@ public static class TestService
             }
             catch (Exception ex)
             {
-                AppCli.Log($"[red]Discovery error: {ex.Message}[/]");
+                AppCli.Log($"[red]Discovery error: {Markup.Escape(ex.Message)}[/]");
                 return [];
             }
         }, cancellationToken);
@@ -217,7 +218,7 @@ public static class TestService
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[red]VSTest discovery failed: {ex.Message}[/]");
+            AppCli.Log($"[red]VSTest discovery failed: {Markup.Escape(ex.Message)}[/]");
             return [];
         }
         finally
@@ -267,7 +268,7 @@ public static class TestService
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[red]MTP RPC discovery failed for {Path.GetFileName(targetPath)}: {ex.Message}[/]");
+            AppCli.Log($"[red]MTP RPC discovery failed for {Markup.Escape(Path.GetFileName(targetPath))}: {Markup.Escape(ex.Message)}[/]");
             return [];
         }
         finally
@@ -635,7 +636,7 @@ public static class TestService
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[red]MTP RPC run failed for {Path.GetFileName(targetPath)}: {ex.Message}[/]");
+            AppCli.Log($"[red]MTP RPC run failed for {Markup.Escape(Path.GetFileName(targetPath))}: {Markup.Escape(ex.Message)}[/]");
             return EmptyRun();
         }
     }

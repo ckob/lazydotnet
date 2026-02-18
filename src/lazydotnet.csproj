@@ -30,6 +30,7 @@
     <PackageReference Include="Microsoft.Build.Locator" Version="1.11.2" />
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="18.0.1" />
     <PackageReference Include="Microsoft.TestPlatform.TranslationLayer" Version="18.0.1" />
+    <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
     <PackageReference Include="NuGet.Versioning" Version="7.3.0" />
     <PackageReference Include="SonarAnalyzer.CSharp" Version="10.19.0.132793">
       <PrivateAssets>all</PrivateAssets>
