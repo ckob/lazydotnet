@@ -13,6 +13,8 @@ public class ExplorerNode
     public bool IsSolution { get; init; }
     public bool IsSlnx { get; init; }
     public bool IsSlnf { get; init; }
+    public bool IsSolutionFolder { get; init; }
+    public string? SolutionFolderGuid { get; init; }
     public bool IsExpanded { get; set; } = true;
     public int Depth { get; set; }
     public List<ExplorerNode> Children { get; } = [];
@@ -23,13 +25,15 @@ public class ExplorerNode
 public class SolutionExplorer(IEditorService editorService, Action? onSearchRequested = null) : IKeyBindable, ISearchable
 {
     private ExplorerNode? _root;
+    private string? _solutionRootPath;
     private readonly List<ExplorerNode> _visibleNodes = [];
     private int _selectedIndex;
     private int _scrollOffset;
 
     public void SetSolution(SolutionInfo solution)
     {
-        editorService.RootPath = Path.GetDirectoryName(solution.Path);
+        _solutionRootPath = Path.GetDirectoryName(solution.Path);
+        editorService.RootPath = _solutionRootPath;
         _root = BuildTree(solution);
         RefreshVisibleNodes();
     }
@@ -64,13 +68,12 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
             ProjectPath = solution.Path
         };
 
-        var solutionDir = Path.GetDirectoryName(solution.Path) ?? "";
         var nodeMap = InitializeNodeMap(solution);
 
-        // Second pass: build hierarchy
+        // Second pass: build hierarchy using ParentProjectGuid
         foreach (var proj in solution.Projects)
         {
-            AddProjectToHierarchy(root, nodeMap, proj, solutionDir);
+            AddProjectToHierarchy(root, nodeMap, proj);
         }
 
         PruneTree(root);
@@ -87,8 +90,10 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
             nodeMap[proj.Id] = new ExplorerNode
             {
                 Name = proj.Name,
-                IsProject = true,
-                ProjectPath = proj.Path,
+                IsProject = !proj.IsSolutionFolder,
+                IsSolutionFolder = proj.IsSolutionFolder,
+                SolutionFolderGuid = proj.Id,
+                ProjectPath = proj.IsSolutionFolder ? null : proj.Path,
                 IsExpanded = true,
                 ProjectInfo = proj
             };
@@ -96,58 +101,34 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
         return nodeMap;
     }
 
-    private static void AddProjectToHierarchy(ExplorerNode root, Dictionary<string, ExplorerNode> nodeMap, ProjectInfo proj, string solutionDir)
+    private static void AddProjectToHierarchy(ExplorerNode root, Dictionary<string, ExplorerNode> nodeMap, ProjectInfo proj)
     {
         var node = nodeMap[proj.Id];
-        var relativePath = Path.GetRelativePath(solutionDir, Path.GetDirectoryName(proj.Path) ?? "");
 
-        if (relativePath == "." || string.IsNullOrEmpty(relativePath))
+        // If no parent (root level), add directly to root
+        if (string.IsNullOrEmpty(proj.ParentId))
         {
             root.Children.Add(node);
             node.Parent = root;
             return;
         }
 
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-        var currentParent = root;
-        var pathAccumulator = "";
-
-        foreach (var segment in segments)
+        // Try to find parent in the map
+        if (nodeMap.TryGetValue(proj.ParentId, out var parentNode))
         {
-            pathAccumulator = string.IsNullOrEmpty(pathAccumulator) ? segment : Path.Combine(pathAccumulator, segment);
-            currentParent = GetOrCreateFolderNode(currentParent, nodeMap, segment, pathAccumulator, solutionDir);
+            parentNode.Children.Add(node);
+            node.Parent = parentNode;
         }
-
-        currentParent.Children.Add(node);
-        node.Parent = currentParent;
-    }
-
-    private static ExplorerNode GetOrCreateFolderNode(ExplorerNode currentParent, Dictionary<string, ExplorerNode> nodeMap, string segment, string pathAccumulator, string solutionDir)
-    {
-        var folderId = $"folder:{pathAccumulator}";
-
-        if (nodeMap.TryGetValue(folderId, out var folderNode))
+        else
         {
-            return folderNode;
+            // Parent not found (shouldn't happen with valid solutions), add to root
+            root.Children.Add(node);
+            node.Parent = root;
         }
-
-        folderNode = new ExplorerNode
-        {
-            Name = segment,
-            IsProject = false,
-            IsSolution = false,
-            IsExpanded = true,
-            ProjectPath = Path.GetFullPath(Path.Combine(solutionDir, pathAccumulator)),
-            Parent = currentParent
-        };
-        currentParent.Children.Add(folderNode);
-        nodeMap[folderId] = folderNode;
-        return folderNode;
     }
 
     private static bool PruneTree(ExplorerNode node)
     {
-
         var hasContent = false;
         for (var i = node.Children.Count - 1; i >= 0; i--)
         {
@@ -163,8 +144,11 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
             }
         }
 
-
+        // Always keep solution root and projects
         if (node.IsSolution || node.IsProject) return true;
+
+        // For solution folders, only keep if they have content (projects or non-empty subfolders)
+        if (node.IsSolutionFolder) return hasContent;
 
         return hasContent;
     }
@@ -425,7 +409,8 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
     {
         if (_root == null) return new ExplorerNode { Name = "Loading..." };
         if (_visibleNodes.Count == 0) return _root;
-        if (_selectedIndex == -1) return _visibleNodes[0];
+        if (_selectedIndex < 0 || _selectedIndex >= _visibleNodes.Count) 
+            _selectedIndex = 0;
         return _visibleNodes[_selectedIndex];
     }
 
@@ -478,6 +463,21 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
 
         if (node.ProjectInfo != null)
         {
+            // For solution folders, try to find a physical directory
+            if (node.ProjectInfo.IsSolutionFolder && _solutionRootPath != null)
+            {
+                var physicalPath = FindPhysicalPathForFolder(node);
+                if (physicalPath != null && Directory.Exists(physicalPath))
+                {
+                    return new ProjectInfo 
+                    { 
+                        Name = node.Name, 
+                        Path = physicalPath, 
+                        Id = physicalPath,
+                        IsSolutionFolder = true
+                    };
+                }
+            }
             return node.ProjectInfo;
         }
 
@@ -486,6 +486,28 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
             return new ProjectInfo { Name = node.Name, Path = node.ProjectPath, Id = node.ProjectPath };
         }
         return null;
+    }
+
+    private string? FindPhysicalPathForFolder(ExplorerNode node)
+    {
+        if (_solutionRootPath == null) return null;
+        
+        // Build path from folder hierarchy
+        var pathParts = new List<string>();
+        var current = node;
+        while (current != null && current != _root)
+        {
+            if (!current.IsSolution && !current.IsProject && !string.IsNullOrEmpty(current.Name))
+            {
+                pathParts.Insert(0, current.Name);
+            }
+            current = current.Parent;
+        }
+        
+        if (pathParts.Count == 0) return null;
+        
+        var potentialPath = Path.Combine(_solutionRootPath, Path.Combine(pathParts.ToArray()));
+        return Directory.Exists(potentialPath) ? potentialPath : null;
     }
 
     private static IEnumerable<ProjectInfo> GetAllChildProjects(ExplorerNode node)

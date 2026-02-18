@@ -8,6 +8,7 @@ using StreamJsonRpc;
 using System.Threading.Channels;
 using CliWrap;
 using lazydotnet.Core;
+using Spectre.Console;
 
 namespace lazydotnet.Services;
 
@@ -131,7 +132,7 @@ public class MtpClient : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[red]MTP connection failed: {ex.Message}[/]");
+            AppCli.Log($"[red]MTP connection failed: {Markup.Escape(ex.Message)}[/]");
             throw;
         }
     }
@@ -215,7 +216,7 @@ public class MtpClient : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            AppCli.Log($"[red]MTP discovery RPC failed: {ex.Message}[/]");
+            AppCli.Log($"[red]MTP discovery RPC failed: {Markup.Escape(ex.Message)}[/]");
             throw;
         }
         finally

@@ -434,7 +434,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         }
         catch (Exception ex)
         {
-            QueueLog($"[red]Update failed for {packageId}: {ex.Message}[/]");
+            QueueLog($"[red]Update failed for {Markup.Escape(packageId)}: {Markup.Escape(ex.Message)}[/]");
         }
         finally
         {
@@ -502,7 +502,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
             catch (Exception ex)
             {
                 failCount++;
-                QueueLog($"[red]Failed to update {packageId} in {projectPath}: {ex.Message}[/]");
+                QueueLog($"[red]Failed to update {Markup.Escape(packageId)} in {Markup.Escape(projectPath)}: {Markup.Escape(ex.Message)}[/]");
             }
         }
 
