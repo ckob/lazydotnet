@@ -1,7 +1,9 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
+using TextCopy;
 
 namespace lazydotnet.UI.Components;
 
@@ -14,6 +16,10 @@ public partial class LogViewer : IKeyBindable, ISearchable
     private int _scrollOffset;
     private int _selectedLogicalIndex = -1; // -1 means auto-scroll
     public bool IsStreaming => _selectedLogicalIndex == -1;
+
+    private bool _isVisualMode;
+    private int _visualSelectionStart = -1;
+    private int _visualSelectionEnd = -1;
 
     private const int MaxLogLines = 1000;
 
@@ -54,6 +60,9 @@ public partial class LogViewer : IKeyBindable, ISearchable
             lock (_lock)
             {
                 _selectedLogicalIndex = -1;
+                _isVisualMode = false;
+                _visualSelectionStart = -1;
+                _visualSelectionEnd = -1;
             }
 
             return Task.CompletedTask;
@@ -64,6 +73,18 @@ public partial class LogViewer : IKeyBindable, ISearchable
             OnSearchRequested?.Invoke();
             return Task.CompletedTask;
         }, k => k.KeyChar == '/');
+
+        yield return new KeyBinding("v", "toggle range select", () =>
+        {
+            ToggleVisualMode();
+            return Task.CompletedTask;
+        }, k => k.KeyChar == 'v', false);
+
+        yield return new KeyBinding("y", "copy to clipboard", () =>
+        {
+            YankToClipboard();
+            return Task.CompletedTask;
+        }, k => k.KeyChar == 'y', false);
     }
 
     public void AddLog(string message)
@@ -84,6 +105,12 @@ public partial class LogViewer : IKeyBindable, ISearchable
         lock (_lock)
         {
             if (_logs.Count == 0) return;
+
+            if (_isVisualMode)
+            {
+                ExtendVisualSelectionUp();
+                return;
+            }
 
             if (_selectedLogicalIndex == -1)
             {
@@ -108,7 +135,15 @@ public partial class LogViewer : IKeyBindable, ISearchable
     {
         lock (_lock)
         {
-            if (_logs.Count == 0 || _selectedLogicalIndex == -1) return;
+            if (_logs.Count == 0) return;
+
+            if (_isVisualMode)
+            {
+                ExtendVisualSelectionDown();
+                return;
+            }
+
+            if (_selectedLogicalIndex == -1) return;
 
             var index = _selectedLogicalIndex;
             while (index < _logs.Count - 1)
@@ -130,6 +165,13 @@ public partial class LogViewer : IKeyBindable, ISearchable
         lock (_lock)
         {
             if (_logs.Count == 0) return;
+
+            if (_isVisualMode)
+            {
+                ExtendVisualSelectionPageUp(pageSize);
+                return;
+            }
+
             if (_selectedLogicalIndex == -1) _selectedLogicalIndex = _logs.Count - 1;
             _selectedLogicalIndex = Math.Max(0, _selectedLogicalIndex - pageSize);
         }
@@ -139,12 +181,110 @@ public partial class LogViewer : IKeyBindable, ISearchable
     {
         lock (_lock)
         {
-            if (_logs.Count == 0 || _selectedLogicalIndex == -1) return;
+            if (_logs.Count == 0) return;
+
+            if (_isVisualMode)
+            {
+                ExtendVisualSelectionPageDown(pageSize);
+                return;
+            }
+
+            if (_selectedLogicalIndex == -1) return;
             if (_selectedLogicalIndex + pageSize >= _logs.Count - 1)
                 _selectedLogicalIndex = -1;
             else
                 _selectedLogicalIndex += pageSize;
         }
+    }
+
+    private void ToggleVisualMode()
+    {
+        lock (_lock)
+        {
+            if (_isVisualMode)
+            {
+                _isVisualMode = false;
+                _visualSelectionStart = -1;
+                _visualSelectionEnd = -1;
+            }
+            else
+            {
+                if (_logs.Count == 0) return;
+                _isVisualMode = true;
+                _selectedLogicalIndex = _selectedLogicalIndex == -1 ? _logs.Count - 1 : _selectedLogicalIndex;
+                _visualSelectionStart = _selectedLogicalIndex;
+                _visualSelectionEnd = _selectedLogicalIndex;
+            }
+        }
+    }
+
+    private void ExtendVisualSelectionUp()
+    {
+        var index = _selectedLogicalIndex;
+        while (index > 0)
+        {
+            index--;
+            if (!string.IsNullOrWhiteSpace(_logs[index]))
+            {
+                _selectedLogicalIndex = index;
+                _visualSelectionEnd = index;
+                return;
+            }
+        }
+    }
+
+    private void ExtendVisualSelectionDown()
+    {
+        var index = _selectedLogicalIndex;
+        while (index < _logs.Count - 1)
+        {
+            index++;
+            if (!string.IsNullOrWhiteSpace(_logs[index]))
+            {
+                _selectedLogicalIndex = index;
+                _visualSelectionEnd = index;
+                return;
+            }
+        }
+    }
+
+    private void ExtendVisualSelectionPageUp(int pageSize)
+    {
+        _selectedLogicalIndex = Math.Max(0, _selectedLogicalIndex - pageSize);
+        _visualSelectionEnd = _selectedLogicalIndex;
+    }
+
+    private void ExtendVisualSelectionPageDown(int pageSize)
+    {
+        if (_selectedLogicalIndex + pageSize >= _logs.Count - 1)
+            _selectedLogicalIndex = -1;
+        else
+            _selectedLogicalIndex += pageSize;
+        _visualSelectionEnd = _selectedLogicalIndex;
+    }
+
+    private void YankToClipboard()
+    {
+        lock (_lock)
+        {
+            if (_logs.Count == 0) return;
+
+            var start = _isVisualMode 
+                ? Math.Min(_visualSelectionStart, _visualSelectionEnd)
+                : GetCurrentOrLastIndex();
+            var end = _isVisualMode
+                ? Math.Max(_visualSelectionStart, _visualSelectionEnd)
+                : start;
+
+            var selectedLogs = _logs.Skip(start).Take(end - start + 1).ToList();
+            var text = string.Join(Environment.NewLine, selectedLogs);
+            ClipboardService.SetText(Markup.Remove(text));
+        }
+    }
+
+    private int GetCurrentOrLastIndex()
+    {
+        return _selectedLogicalIndex == -1 ? _logs.Count - 1 : _selectedLogicalIndex;
     }
 
     private struct PhysicalLine
@@ -236,27 +376,14 @@ public partial class LogViewer : IKeyBindable, ISearchable
         var start = _scrollOffset;
         var renderedCount = 0;
 
+        var visualStart = _isVisualMode ? Math.Min(_visualSelectionStart, _visualSelectionEnd) : -1;
+        var visualEnd = _isVisualMode ? Math.Max(_visualSelectionStart, _visualSelectionEnd) : -1;
+
         for (var i = start; i < physicalLines.Count && renderedCount < visibleRows; i++)
         {
             var line = physicalLines[i];
-            var isSelected = line.LogicalIndex == _selectedLogicalIndex;
-            var displayText = string.IsNullOrEmpty(_searchQuery)
-                ? line.Text
-                : HighlightMatch(line.Text, _searchQuery);
-
-            if (isSelected)
-            {
-                var selectionStyle = isActive ? "black on white" : "black on silver";
-                table.AddRow(new Markup($"[{selectionStyle}]{displayText}[/]"));
-            }
-            else
-            {
-                var contentMarkup = string.IsNullOrEmpty(line.Style)
-                    ? displayText
-                    : $"[{line.Style}]{displayText}[/]";
-                table.AddRow(new Markup(contentMarkup));
-            }
-
+            var row = CreateRowForLine(line, isActive, visualStart, visualEnd);
+            table.AddRow(row);
             renderedCount++;
         }
 
@@ -265,6 +392,41 @@ public partial class LogViewer : IKeyBindable, ISearchable
             table.AddRow(new Markup(""));
             renderedCount++;
         }
+    }
+
+    private IRenderable CreateRowForLine(PhysicalLine line, bool isActive, int visualStart, int visualEnd)
+    {
+        var isSelected = line.LogicalIndex == _selectedLogicalIndex;
+        var isInVisualSelection = _isVisualMode && line.LogicalIndex >= visualStart && line.LogicalIndex <= visualEnd;
+        
+        if (isInVisualSelection || isSelected)
+        {
+            return CreateSelectedRow(line, isActive);
+        }
+        
+        return CreateNormalRow(line);
+    }
+
+    private IRenderable CreateSelectedRow(PhysicalLine line, bool isActive)
+    {
+        var style = isActive ? "black on white" : "black on silver";
+        var text = GetDisplayText(line.Text);
+        return new Markup($"[{style}]{text}[/]");
+    }
+
+    private IRenderable CreateNormalRow(PhysicalLine line)
+    {
+        var text = GetDisplayText(line.Text);
+        if (!string.IsNullOrEmpty(line.Style))
+        {
+            return new Markup($"[{line.Style}]{text}[/]");
+        }
+        return new Markup(text);
+    }
+
+    private string GetDisplayText(string text)
+    {
+        return string.IsNullOrEmpty(_searchQuery) ? text : HighlightMatch(text, _searchQuery);
     }
 
     private static (string Text, string? Style) ExtractStyle(string input)
