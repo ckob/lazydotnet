@@ -16,7 +16,7 @@ public record ProjectInfo
     public string? ParentId { get; init; }
 }
 
-public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects, bool IsSlnx = false, bool IsSlnf = false);
+public record SolutionInfo(string Name, string Path, List<ProjectInfo> Projects, bool IsSlnx = false, bool IsSlnf = false, bool IsDirectoryBased = false);
 
 public class SolutionService
 {
@@ -24,6 +24,7 @@ public class SolutionService
     private const string SlnxFileExtension = ".slnx";
     private const string SlnfFileExtension = ".slnf";
     private const string CsprojFileExtension = ".csproj";
+    private static readonly string[] ExcludedDirectories = ["bin", "obj"];
 
     public SolutionInfo? CurrentSolution { get; private set; }
 
@@ -58,7 +59,9 @@ public class SolutionService
         // If no solution file found, look for all .csproj files recursively
         if (solutionFile == null)
         {
-            var projectFiles = Directory.GetFiles(path, $"*{CsprojFileExtension}", SearchOption.AllDirectories);
+            var projectFiles = Directory.GetFiles(path, $"*{CsprojFileExtension}", SearchOption.AllDirectories)
+                .Where(f => !ExcludedDirectories.Any(d => f.Contains($"{Path.DirectorySeparatorChar}{d}{Path.DirectorySeparatorChar}")))
+                .ToArray();
             return projectFiles.Length > 0 ? CreateMultiProjectSolution(path, projectFiles) : null;
         }
         
@@ -107,18 +110,59 @@ public class SolutionService
 
     private static SolutionInfo CreateMultiProjectSolution(string directoryPath, string[] projectFiles)
     {
-        var projects = projectFiles.Select(file => new ProjectInfo
-        {
-            Name = Path.GetFileNameWithoutExtension(file),
-            Path = Path.GetFullPath(file),
-            Id = Path.GetFullPath(file),
-            IsRunnable = IsProjectRunnable(file)
-        }).ToList();
+        var rootPath = Path.GetFullPath(directoryPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var projects = new List<ProjectInfo>();
+        var folders = new Dictionary<string, ProjectInfo>(StringComparer.OrdinalIgnoreCase);
 
-        var directoryName = Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) 
-                            ?? "Projects";
+        foreach (var file in projectFiles)
+        {
+            var fullPath = Path.GetFullPath(file);
+            var relativePath = Path.GetRelativePath(rootPath, fullPath);
+            var relativeDir = Path.GetDirectoryName(relativePath) ?? "";
+
+            string? parentId = null;
+
+            if (!string.IsNullOrEmpty(relativeDir))
+            {
+                var parts = relativeDir.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+                var currentPath = rootPath;
+
+                foreach (var part in parts)
+                {
+                    currentPath = Path.Combine(currentPath, part);
+                    var folderId = currentPath;
+
+                    if (!folders.TryGetValue(folderId, out var folder))
+                    {
+                        folder = new ProjectInfo
+                        {
+                            Name = part,
+                            Path = currentPath,
+                            Id = folderId,
+                            IsSolutionFolder = true,
+                            ParentId = parentId
+                        };
+                        folders[folderId] = folder;
+                        projects.Add(folder);
+                    }
+
+                    parentId = folderId;
+                }
+            }
+
+            projects.Add(new ProjectInfo
+            {
+                Name = Path.GetFileNameWithoutExtension(file),
+                Path = fullPath,
+                Id = fullPath,
+                IsRunnable = IsProjectRunnable(file),
+                ParentId = parentId
+            });
+        }
+
+        var directoryName = Path.GetFileName(rootPath) ?? "Projects";
         
-        return new SolutionInfo(directoryName, directoryPath, projects);
+        return new SolutionInfo(directoryName, directoryPath, projects, IsDirectoryBased: true);
     }
 
     private static SolutionInfo CreateSingleProjectSolution(string csprojPath)

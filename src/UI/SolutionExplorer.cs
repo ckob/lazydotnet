@@ -62,7 +62,7 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
             Depth = 0,
             IsExpanded = true,
             IsProject = false,
-            IsSolution = !isSingleProject,
+            IsSolution = !isSingleProject && !solution.IsDirectoryBased,
             IsSlnx = solution.IsSlnx,
             IsSlnf = solution.IsSlnf,
             ProjectPath = solution.Path
