@@ -75,6 +75,11 @@ public class ExecutionService
                state.Status is ExecutionStatus.Running or ExecutionStatus.Building;
     }
 
+    public bool HasRunningProjects()
+    {
+        return _states.Values.Any(s => s.Status is ExecutionStatus.Running or ExecutionStatus.Building);
+    }
+
     public async Task StartProjectAsync(string projectPath, string projectName)
     {
         var state = GetOrCreateState(projectPath, projectName);

@@ -298,7 +298,8 @@ public class DashboardScreen : IScreen
             await ExecutionService.Instance.StopAllAsync();
             _layout.AddLog("[yellow]Stopped all running projects.[/]");
             _needsRefresh = true;
-        }, k => k.Key == ConsoleKey.S && (k.Modifiers & ConsoleModifiers.Shift) != 0);
+        }, k => k.Key == ConsoleKey.S && (k.Modifiers & ConsoleModifiers.Shift) != 0,
+           ExecutionService.Instance.HasRunningProjects());
         yield return new KeyBinding("ctrl+r", "reload", HandleReloadAsync,
             k => k is { Key: ConsoleKey.R, Modifiers: ConsoleModifiers.Control });
         yield return new KeyBinding("?", "keybindings", () =>
