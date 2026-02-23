@@ -95,6 +95,12 @@ public class EditorService : IEditorService
             return ("cursor", EditorType.VsCodeStyle);
         }
 
+        var antigravityAlias = Environment.GetEnvironmentVariable("ANTIGRAVITY_CLI_ALIAS");
+        if (!string.IsNullOrEmpty(antigravityAlias))
+        {
+            return (antigravityAlias, EditorType.VsCodeStyle);
+        }
+
         if (string.Equals(Environment.GetEnvironmentVariable("TERM_PROGRAM"), "zed", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(Environment.GetEnvironmentVariable("ZED_TERM"), "true", StringComparison.OrdinalIgnoreCase))
         {
