@@ -30,13 +30,20 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
 
                     layout.OnLog += () =>
                     {
-                        lock (_uiLock)
+                        try
                         {
-                            var h = AppLayout.GetBottomHeight(Console.WindowHeight);
-                            layout.UpdateBottom(Console.WindowWidth, h);
-                            if (_currentScreen != null)
-                                layout.UpdateFooter(_currentScreen.GetKeyBindings());
-                            ctx.Refresh();
+                            lock (_uiLock)
+                            {
+                                var h = AppLayout.GetBottomHeight(Console.WindowHeight);
+                                layout.UpdateBottom(Console.WindowWidth, h);
+                                if (_currentScreen != null)
+                                    layout.UpdateFooter(_currentScreen.GetKeyBindings());
+                                ctx.Refresh();
+                            }
+                        }
+                        catch
+                        {
+                            // Silently ignore rendering errors
                         }
                     };
 
@@ -52,14 +59,23 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
         await Task.CompletedTask;
     }
 
+    private const int MinWidth = 20;
+    private const int MinHeight = 5;
+
     private async Task ProcessTickAsync(LiveDisplayContext ctx)
     {
+        var width = Console.WindowWidth;
+        var height = Console.WindowHeight;
+
+        if (width < MinWidth || height < MinHeight)
+        {
+            await Task.Delay(100);
+            return;
+        }
+
         try
         {
             var needsRefresh = false;
-
-            var width = Console.WindowWidth;
-            var height = Console.WindowHeight;
 
             if (width != _lastWidth || height != _lastHeight)
             {
@@ -107,16 +123,9 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
 
             await Task.Delay(33);
         }
-        catch (Exception ex)
+        catch
         {
-            layout.AddLog($"[red]CRITICAL ERROR: {Markup.Escape(ex.Message)}[/]");
-            lock (_uiLock)
-            {
-                var bottomH = AppLayout.GetBottomHeight(Console.WindowHeight);
-                layout.UpdateBottom(Console.WindowWidth, bottomH);
-                ctx.Refresh();
-            }
-            await Task.Delay(1000);
+            // Silently ignore rendering errors (e.g., terminal too small)
         }
     }
 
