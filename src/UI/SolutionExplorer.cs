@@ -199,8 +199,8 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
         yield return new KeyBinding("j/↓/ctrl+n", "down", DoMoveDown, MatchDownKey, false);
         yield return new KeyBinding("pgup/ctrl+u", "page up", DoPageUp, MatchPageUpKey, false);
         yield return new KeyBinding("pgdn/ctrl+d", "page down", DoPageDown, MatchPageDownKey, false);
-        yield return new KeyBinding("←", "collapse", DoCollapse, k => k.Key == ConsoleKey.LeftArrow, false);
-        yield return new KeyBinding("→", "expand", DoExpand, k => k.Key == ConsoleKey.RightArrow, false);
+        yield return new KeyBinding("h/←", "collapse", DoCollapse, MatchLeftKey, false);
+        yield return new KeyBinding("l/→", "expand", DoExpand, MatchRightKey, false);
         yield return new KeyBinding("enter/space", "toggle", DoToggle, k => k.Key is ConsoleKey.Enter or ConsoleKey.Spacebar, false);
         yield return new KeyBinding("e", "edit", OpenInEditorAsync, k => k.Key == ConsoleKey.E);
         yield return new KeyBinding("b", "build", DoBuild, k => k.KeyChar == 'b');
@@ -222,6 +222,12 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
 
     private static bool MatchDownKey(ConsoleKeyInfo k) =>
         k.Key == ConsoleKey.DownArrow || k.Key == ConsoleKey.J || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.N };
+
+    private static bool MatchLeftKey(ConsoleKeyInfo k) =>
+        k.Key == ConsoleKey.LeftArrow || k.Key == ConsoleKey.H;
+
+    private static bool MatchRightKey(ConsoleKeyInfo k) =>
+        k.Key == ConsoleKey.RightArrow || k.Key == ConsoleKey.L;
 
     private static bool MatchPageUpKey(ConsoleKeyInfo k) =>
         k.Key == ConsoleKey.PageUp || k is { Modifiers: ConsoleModifiers.Control, Key: ConsoleKey.U };
@@ -409,7 +415,7 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
     {
         if (_root == null) return new ExplorerNode { Name = "Loading..." };
         if (_visibleNodes.Count == 0) return _root;
-        if (_selectedIndex < 0 || _selectedIndex >= _visibleNodes.Count) 
+        if (_selectedIndex < 0 || _selectedIndex >= _visibleNodes.Count)
             _selectedIndex = 0;
         return _visibleNodes[_selectedIndex];
     }
@@ -469,10 +475,10 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
                 var physicalPath = FindPhysicalPathForFolder(node);
                 if (physicalPath != null && Directory.Exists(physicalPath))
                 {
-                    return new ProjectInfo 
-                    { 
-                        Name = node.Name, 
-                        Path = physicalPath, 
+                    return new ProjectInfo
+                    {
+                        Name = node.Name,
+                        Path = physicalPath,
                         Id = physicalPath,
                         IsSolutionFolder = true
                     };
@@ -491,7 +497,7 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
     private string? FindPhysicalPathForFolder(ExplorerNode node)
     {
         if (_solutionRootPath == null) return null;
-        
+
         // Build path from folder hierarchy
         var pathParts = new List<string>();
         var current = node;
@@ -503,9 +509,9 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
             }
             current = current.Parent;
         }
-        
+
         if (pathParts.Count == 0) return null;
-        
+
         var potentialPath = Path.Combine(_solutionRootPath, Path.Combine(pathParts.ToArray()));
         return Directory.Exists(potentialPath) ? potentialPath : null;
     }

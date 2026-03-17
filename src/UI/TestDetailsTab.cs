@@ -182,7 +182,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
 
     private KeyBinding GetExpandBinding(TestNode node)
     {
-        return new KeyBinding("→", "expand", () =>
+        return new KeyBinding("l/→", "expand", () =>
         {
             if (node is { IsContainer: true, IsExpanded: false })
             {
@@ -193,12 +193,12 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
                 }
             }
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.RightArrow, false);
+        }, k => k.Key == ConsoleKey.RightArrow || k.Key == ConsoleKey.L, false);
     }
 
     private KeyBinding GetCollapseBinding(TestNode node)
     {
-        return new KeyBinding("←", "collapse", () =>
+        return new KeyBinding("h/←", "collapse", () =>
         {
             if (node is { IsContainer: true, IsExpanded: true })
             {
@@ -224,7 +224,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
                 }
             }
             return Task.CompletedTask;
-        }, k => k.Key == ConsoleKey.LeftArrow, false);
+        }, k => k.Key == ConsoleKey.LeftArrow || k.Key == ConsoleKey.H, false);
     }
 
     private KeyBinding GetToggleBinding(TestNode node)
