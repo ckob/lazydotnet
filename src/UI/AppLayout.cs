@@ -11,6 +11,8 @@ public class AppLayout
     private const int TopRatio = 70;
     private const int BottomRatio = 30;
 
+    public static string? UpdateAvailableVersion { get; set; }
+
     private readonly Layout _mainLayout = new Layout("MainContainer").SplitRows(
         new Layout("Top").SplitColumns(
             new Layout("LeftContainer").SplitRows(
@@ -157,9 +159,11 @@ public class AppLayout
 
         var footerBindings = bindings.Where(b => b.ShowInBottomBar).ToList();
 
-        var rawVersion = ThisAssembly.Info.InformationalVersion;
+        const string rawVersion = ThisAssembly.Info.InformationalVersion;
         var version = rawVersion.Contains('+') ? rawVersion.Split('+')[0] : rawVersion;
-        var versionText = $"v{version}";
+        var versionText = UpdateAvailableVersion is not null
+            ? $"v{version} (v{UpdateAvailableVersion} available)"
+            : $"v{version}";
 
         if (footerBindings.Count == 0)
         {

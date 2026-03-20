@@ -97,13 +97,15 @@ public sealed class DefaultCommand : AsyncCommand<DefaultSettings>
         var layout = new AppLayout();
 
         var explorer = new SolutionExplorer(editorService);
-        AppCli.OnLog += layout.AddLog;
 
         var dashboard = new DashboardScreen(explorer, detailsPane, layout, solutionService, rootDir, solutionFile);
         explorer.OnSearchRequested += () => dashboard.StartSearch();
         detailsPane.OnSearchRequested += () => dashboard.StartSearch();
         layout.SetLogViewerSearchCallback(() => dashboard.StartSearch());
         var host = new AppHost(layout, dashboard);
+
+        AppCli.OnLog += msg => host.Log(msg);
+        _ = UpdateCheckerService.StartFireAndForgetCheckAsync();
 
         try
         {

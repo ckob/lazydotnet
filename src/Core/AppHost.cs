@@ -9,6 +9,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
     private IScreen? _currentScreen = initialScreen;
     private readonly Lock _uiLock = new();
     private bool _isRunning = true;
+    private string? _pendingLog;
 
     public async Task RunAsync()
     {
@@ -64,6 +65,20 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
 
     private async Task ProcessTickAsync(LiveDisplayContext ctx)
     {
+        var pendingLog = Interlocked.Exchange(ref _pendingLog, null);
+        if (pendingLog is not null)
+        {
+            lock (_uiLock)
+            {
+                layout.AddLog(pendingLog);
+                var h = AppLayout.GetBottomHeight(Console.WindowHeight);
+                layout.UpdateBottom(Console.WindowWidth, h);
+                if (_currentScreen is not null)
+                    layout.UpdateFooter(_currentScreen.GetKeyBindings());
+                ctx.Refresh();
+            }
+        }
+
         var width = Console.WindowWidth;
         var height = Console.WindowHeight;
 
@@ -94,7 +109,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
                 var key = Console.ReadKey(true);
                 var nextScreen = await _currentScreen.HandleInputAsync(key, layout);
 
-                if (nextScreen == null)
+                if (nextScreen is null)
                 {
                     _isRunning = false;
                     break;
@@ -131,4 +146,9 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
 
     private int _lastWidth;
     private int _lastHeight;
+
+    public void Log(string message)
+    {
+        Interlocked.Exchange(ref _pendingLog, message);
+    }
 }
