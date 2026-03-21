@@ -134,7 +134,7 @@ public static class TestService
 
                 return allTests.GroupBy(t => t.Id).Select(g => g.First()).ToList();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 AppCli.Log($"[red]Discovery error: {Markup.Escape(ex.Message)}[/]");
                 return [];
@@ -216,15 +216,67 @@ public static class TestService
                     )).ToList();
             }, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            AppCli.Log($"[red]VSTest discovery failed: {Markup.Escape(ex.Message)}[/]");
-            return [];
+            wrapper.EndSession();
+            return await DiscoverVsTestsPerProjectAsync(targetPaths, vstestPath, ct);
         }
         finally
         {
             wrapper.EndSession();
         }
+    }
+
+    private static async Task<List<DiscoveredTest>> DiscoverVsTestsPerProjectAsync(List<string> targetPaths, string vstestPath, CancellationToken ct)
+    {
+        var allTests = new List<DiscoveredTest>();
+
+        foreach (var targetPath in targetPaths)
+        {
+            var wrapper = new VsTestConsoleWrapper(vstestPath);
+            var handler = new DiscoveryHandler();
+
+            try
+            {
+                var tests = await Task.Run(() =>
+                {
+                    var options = new TestPlatformOptions
+                    {
+                        CollectMetrics = false,
+                        SkipDefaultAdapters = false
+                    };
+
+                    wrapper.DiscoverTests([targetPath], null, options, handler);
+                    handler.CompletionTask.Wait(ct);
+
+                    return handler.Tests
+                        .GroupBy(tc => tc.Id)
+                        .Select(g => g.First())
+                        .Select(tc => new DiscoveredTest(
+                            tc.Id.ToString(),
+                            null,
+                            tc.FullyQualifiedName,
+                            tc.DisplayName,
+                            tc.CodeFilePath,
+                            tc.LineNumber > 0 ? tc.LineNumber : null,
+                            tc.Source,
+                            false
+                        )).ToList();
+                }, ct);
+
+                allTests.AddRange(tests);
+            }
+            catch (Exception) 
+            {
+                // Errors already logged by HandleLogMessage
+            }
+            finally
+            {
+                wrapper.EndSession();
+            }
+        }
+
+        return allTests;
     }
 
     private static ProjectMetadata GetProjectMetadata(string projectPath)
@@ -266,7 +318,7 @@ public static class TestService
             var tests = await mtpClient.DiscoverTestsAsync(ct);
             return tests;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException and not InvalidOperationException)
         {
             AppCli.Log($"[red]MTP RPC discovery failed for {Markup.Escape(Path.GetFileName(targetPath))}: {Markup.Escape(ex.Message)}[/]");
             return [];
@@ -302,7 +354,7 @@ public static class TestService
 
         public void HandleLogMessage(TestMessageLevel level, string? message)
         {
-            if (level == TestMessageLevel.Error) AppCli.Log($"[red]VSTest: {message}[/]");
+            if (level == TestMessageLevel.Error) AppCli.Log($"[red]VSTest: {Markup.Escape(message ?? "")}[/]");
         }
         public void HandleRawMessage(string rawMessage) { }
     }
@@ -634,7 +686,7 @@ public static class TestService
             var mtpClient = await MtpClient.CreateAsync(targetPath, timeoutCts.Token);
             return RunMtpTestsAndDisposeAsync(mtpClient, filter, timeoutCts);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AppCli.Log($"[red]MTP RPC run failed for {Markup.Escape(Path.GetFileName(targetPath))}: {Markup.Escape(ex.Message)}[/]");
             return EmptyRun();

@@ -110,7 +110,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
 
         PrepareForNewLoad(projectPath, projectName);
 
-        if (Directory.Exists(projectPath) && !projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(projectPath) || Directory.Exists(projectPath) && !projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
         {
             _statusMessage = "Select a project to see NuGet packages.";
             _isLoading = false;

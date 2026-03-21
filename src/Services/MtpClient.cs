@@ -130,7 +130,7 @@ public class MtpClient : IAsyncDisposable
 
             return client;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AppCli.Log($"[red]MTP connection failed: {Markup.Escape(ex.Message)}[/]");
             throw;
@@ -214,7 +214,7 @@ public class MtpClient : IAsyncDisposable
             }
             return [];
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException and not InvalidOperationException)
         {
             AppCli.Log($"[red]MTP discovery RPC failed: {Markup.Escape(ex.Message)}[/]");
             throw;

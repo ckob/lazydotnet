@@ -320,10 +320,13 @@ public partial class LogViewer : IKeyBindable, ISearchable
         {
             var logical = _logs[i];
             var (cleanText, style) = ExtractStyle(logical);
-            var wrapped = WrapText(cleanText, renderWidth);
 
-            physicalLines.AddRange(wrapped.Select(w =>
-                new PhysicalLine { Text = w, LogicalIndex = i, Style = style }));
+            foreach (var segment in cleanText.Split('\n'))
+            {
+                var wrapped = WrapText(segment, renderWidth);
+                physicalLines.AddRange(wrapped.Select(w =>
+                    new PhysicalLine { Text = w, LogicalIndex = i, Style = style }));
+            }
         }
         return physicalLines;
     }
@@ -426,7 +429,7 @@ public partial class LogViewer : IKeyBindable, ISearchable
 
     private string GetDisplayText(string text)
     {
-        return string.IsNullOrEmpty(_searchQuery) ? text : HighlightMatch(text, _searchQuery);
+        return string.IsNullOrEmpty(_searchQuery) ? Markup.Escape(text) : HighlightMatch(text, _searchQuery);
     }
 
     private static (string Text, string? Style) ExtractStyle(string input)
@@ -468,7 +471,7 @@ public partial class LogViewer : IKeyBindable, ISearchable
         return lines;
     }
 
-    [GeneratedRegex(@"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$", RegexOptions.Compiled | RegexOptions.Singleline)]
     private static partial Regex GetStyleRegex();
 
     private List<int> _searchMatches = [];
