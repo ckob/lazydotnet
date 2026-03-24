@@ -42,7 +42,9 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
 
     private static ExplorerNode BuildTree(SolutionInfo solution)
     {
-        var isSingleProject = solution.Path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase);
+        var isSingleProject =
+            solution.Path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+            || solution.Path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
         if (isSingleProject && solution.Projects.Count == 1)
         {
@@ -598,7 +600,12 @@ public class SolutionExplorer(IEditorService editorService, Action? onSearchRequ
         if (node.IsSlnx) return "[dodgerblue1]SLNX[/]";
         if (node.IsSlnf) return "[cyan]SLNF[/]";
         if (node.IsSolution) return "[purple]SLN[/]";
-        if (node.IsProject) return "[green]C#[/]";
+
+        if (node.IsProject)
+        {
+            var projectEnum = ProjectTypeInfo.Parse(Path.GetExtension(node.ProjectPath ?? ""));
+            return $"[green]{ProjectTypeInfo.EnumToString(projectEnum)}[/]";
+        }
         return node.IsExpanded ? "[yellow]v[/]" : "[yellow]>[/]";
     }
 

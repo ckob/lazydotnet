@@ -5,6 +5,32 @@ using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 
 namespace lazydotnet.Services;
 
+public sealed class ProjectTypeInfo
+{
+    public enum ProjectType
+    {
+        csharp,
+        fsharp,
+        unknown,
+    }
+
+    public static ProjectType Parse(string str) =>
+        str switch
+        {
+            ".csproj" => ProjectType.csharp,
+            ".fsproj" => ProjectType.fsharp,
+            _ => ProjectType.unknown,
+        };
+
+    public static string EnumToString(ProjectType projectType) =>
+        projectType switch
+        {
+            ProjectType.csharp => "C#",
+            ProjectType.fsharp => "F#",
+            _ => "unknown",
+        };
+}
+
 public record ProjectInfo
 {
     public required string Name { get; init; }
@@ -24,6 +50,7 @@ public class SolutionService
     private const string SlnxFileExtension = ".slnx";
     private const string SlnfFileExtension = ".slnf";
     private const string CsprojFileExtension = ".csproj";
+    private const string FsprojFileExtension = ".fsproj";
     private static readonly string[] ExcludedDirectories = ["bin", "obj"];
 
     public SolutionInfo? CurrentSolution { get; private set; }
@@ -41,8 +68,8 @@ public class SolutionService
         var (solutionFile, rootDir) = ResolveSolutionPath(path);
         if (solutionFile == null || rootDir == null) return null;
 
-        // Handle single .csproj files directly
-        if (solutionFile.EndsWith(CsprojFileExtension, StringComparison.OrdinalIgnoreCase))
+        // Handle single .fsproj and .csproj files directly
+        if (solutionFile.EndsWith(CsprojFileExtension, StringComparison.OrdinalIgnoreCase) || solutionFile.EndsWith(FsprojFileExtension, StringComparison.OrdinalIgnoreCase))
         {
             return CreateSingleProjectSolution(solutionFile);
         }
@@ -56,10 +83,11 @@ public class SolutionService
                            ?? Directory.GetFiles(path, $"*{SlnxFileExtension}").FirstOrDefault()
                            ?? Directory.GetFiles(path, $"*{SlnfFileExtension}").FirstOrDefault();
         
-        // If no solution file found, look for all .csproj files recursively
+        // If no solution file found, look for all .fsproj and .csproj files recursively
         if (solutionFile == null)
         {
-            var projectFiles = Directory.GetFiles(path, $"*{CsprojFileExtension}", SearchOption.AllDirectories)
+            var projectFiles = new[] {FsprojFileExtension, CsprojFileExtension}
+                .SelectMany(x => Directory.GetFiles(path, $"*{x}", SearchOption.AllDirectories))
                 .Where(f => !ExcludedDirectories.Any(d => f.Contains($"{Path.DirectorySeparatorChar}{d}{Path.DirectorySeparatorChar}")))
                 .ToArray();
             return projectFiles.Length > 0 ? CreateMultiProjectSolution(path, projectFiles) : null;
@@ -165,9 +193,9 @@ public class SolutionService
         return new SolutionInfo(directoryName, directoryPath, projects, IsDirectoryBased: true);
     }
 
-    private static SolutionInfo CreateSingleProjectSolution(string csprojPath)
+    private static SolutionInfo CreateSingleProjectSolution(string projPath)
     {
-        var fullPath = Path.GetFullPath(csprojPath);
+        var fullPath = Path.GetFullPath(projPath);
         var project = new ProjectInfo
         {
             Name = Path.GetFileNameWithoutExtension(fullPath),

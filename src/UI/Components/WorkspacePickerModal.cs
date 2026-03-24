@@ -161,7 +161,8 @@ public class WorkspacePickerModal : Modal
             ".slnf" => "[cyan]SLNF[/]",
             ".sln" => "[purple]SLN[/]",
             ".csproj" => "[green]C#[/]",
-            _ => "[grey]??[/]"
+            ".fsproj" => "[green]F#[/]",
+            _ => "[grey]??[/]",
         };
 
         var nameMarkup = Markup.Escape(name);
