@@ -1,0 +1,46 @@
+{
+  "name": "lazydotnet",
+  "displayName": "lazydotnet - .NET TUI",
+  "icon": "assets/icon.png",
+  "description": "A terminal UI for .NET developers. Run tests, manage NuGets, and navigate solutions and projects inside VS Code.",
+  "version": "0.0.0",
+  "publisher": "ckob",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ckob/lazydotnet"
+  },
+  "keywords": [
+    "dotnet",
+    "csharp",
+    "tui",
+    "nuget",
+    "testing"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "lazydotnet.open",
+        "title": "lazydotnet: Open"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}

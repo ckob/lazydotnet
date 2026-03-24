@@ -1,0 +1,57 @@
+name: Build and Publish VS Code Extension
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'editors/vscode/**'
+    tags:
+      - 'vscode-*'
+  pull_request:
+    paths:
+      - 'editors/vscode/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run compile
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/vscode-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Set version from tag
+        run: npm version "${GITHUB_REF_NAME#vscode-}" --no-git-tag-version
+
+      - run: npm run compile
+
+      - name: Publish to VS Code Marketplace
+        run: npx @vscode/vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX
+        run: npx ovsx publish -p ${{ secrets.OVSX_PAT }}
