@@ -41,7 +41,11 @@ public class WorkspacePane(SolutionService solutionService, string rootDir) : IK
         if (current.IsSlnx) icon = "[dodgerblue1]SLNX[/]";
         else if (current.IsSlnf) icon = "[cyan]SLNF[/]";
         else if (current.Path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)) icon = "[purple]SLN[/]";
-        else icon = "[green]C#[/]";
+        else
+        {
+            var projectType = ProjectTypeInfo.Parse(Path.GetExtension(current.Path));
+            icon = $"[green]{ProjectTypeInfo.EnumToString(projectType)}[/]";
+        } 
 
         var markup = $" {icon} [bold]{Markup.Escape(current.Name)}[/]";
         if (isActive) return new Markup($"[black on blue]{Markup.Remove(markup)}[/]");

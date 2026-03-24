@@ -221,10 +221,11 @@ public class SolutionService
 
             if (solutionFile == null)
             {
-                var csproj = Directory.GetFiles(path, $"*{CsprojFileExtension}").FirstOrDefault();
-                if (csproj != null)
+                var proj = new[] {FsprojFileExtension, CsprojFileExtension}.SelectMany(x=> Directory.GetFiles(path, $"*{x}")).FirstOrDefault();
+                if (proj != null)
                 {
-                    return (Path.GetFullPath(csproj), Path.GetDirectoryName(csproj));
+                    
+                    return (Path.GetFullPath(proj), Path.GetDirectoryName(proj));
                 }
             }
         }
@@ -237,7 +238,7 @@ public class SolutionService
                 solutionFile = Path.GetFullPath(path);
                 rootDir = Path.GetDirectoryName(solutionFile);
             }
-            else if (path.EndsWith(CsprojFileExtension, StringComparison.OrdinalIgnoreCase))
+            else if (path.EndsWith(CsprojFileExtension, StringComparison.OrdinalIgnoreCase) || path.EndsWith(FsprojFileExtension, StringComparison.OrdinalIgnoreCase))
             {
                 return (Path.GetFullPath(path), Path.GetDirectoryName(path));
             }
@@ -478,7 +479,7 @@ public class SolutionService
                             IsSlnx: ext == SlnxFileExtension,
                             IsSlnf: ext == SlnfFileExtension));
                         break;
-                    case CsprojFileExtension:
+                    case CsprojFileExtension or FsprojFileExtension:
                         results.Add(new SolutionInfo(Path.GetFileName(file), file, []));
                         break;
                 }
