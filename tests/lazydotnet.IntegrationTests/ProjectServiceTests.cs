@@ -77,4 +77,23 @@ public sealed class ProjectServiceTests : IDisposable
         var references = await ProjectService.GetProjectReferencesAsync(mainProj);
         references.Should().NotContain(Path.GetFullPath(libProj));
     }
+
+    [Fact]
+    public async Task GetProjectReferencesAsync_WithFSharpProject_ShouldReturnAll()
+    {
+        // Arrange
+        TestUtils.CopyFixture("SimpleApp", _testDir);
+        TestUtils.CopyFixture("FSharpProject", _testDir);
+
+        var mainProj = Path.Combine(_testDir, "SimpleApp", "SimpleApp.csproj");
+        var fsProj = Path.Combine(_testDir, "FSharpProject", "FSharpProject.fsproj");
+
+        await ProjectService.AddProjectReferenceAsync(mainProj, fsProj);
+
+        // Act
+        var result = await ProjectService.GetProjectReferencesAsync(mainProj);
+
+        // Assert
+        result.Should().Contain(Path.GetFullPath(fsProj));
+    }
 }

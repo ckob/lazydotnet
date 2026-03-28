@@ -157,7 +157,8 @@ public static class TestService
         }
         else if (Directory.Exists(path))
         {
-            var projectFiles = Directory.EnumerateFiles(path, "*.csproj", SearchOption.AllDirectories);
+            var projectFiles = new[] { "*.csproj", "*.fsproj" }
+                .SelectMany(pattern => Directory.EnumerateFiles(path, pattern, SearchOption.AllDirectories));
             foreach (var file in projectFiles)
             {
                 var meta = GetProjectMetadata(file);

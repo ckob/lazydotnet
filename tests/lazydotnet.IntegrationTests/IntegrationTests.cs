@@ -18,6 +18,9 @@ public sealed class IntegrationTests : IDisposable
     private async Task BuildFixtureAsync(string fixtureName)
     {
         var projectPath = Path.Combine(_testDir, fixtureName, $"{fixtureName}.csproj");
+        if (!File.Exists(projectPath))
+            projectPath = Path.Combine(_testDir, fixtureName, $"{fixtureName}.fsproj");
+
         await CommandService.BuildProjectAsync(projectPath, _ => { }, TestContext.Current.CancellationToken);
     }
 
@@ -133,6 +136,47 @@ public sealed class IntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task FSharp_Discovery_ShouldWork()
+    {
+        // Arrange
+        TestUtils.CopyFixture("FSharpTestProject", _testDir);
+        var projectPath = Path.Combine(_testDir, "FSharpTestProject", "FSharpTestProject.fsproj");
+        await BuildFixtureAsync("FSharpTestProject");
+
+        // Act
+        var discoveredTests = await TestService.DiscoverTestsAsync(projectPath, TestContext.Current.CancellationToken);
+
+        // Assert
+        discoveredTests.Should().HaveCount(1);
+        discoveredTests[0].DisplayName.Should().Be("FSharpTestProject.Tests.Test 1");
+    }
+
+    [Fact]
+    public async Task FSharp_Execution_ShouldWork()
+    {
+        // Arrange
+        TestUtils.CopyFixture("FSharpTestProject", _testDir);
+        var projectPath = Path.Combine(_testDir, "FSharpTestProject", "FSharpTestProject.fsproj");
+        await BuildFixtureAsync("FSharpTestProject");
+        var discoveredTests = await TestService.DiscoverTestsAsync(projectPath, TestContext.Current.CancellationToken);
+
+        // Act
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var runResults = new List<TestRunResult>();
+        var filter = discoveredTests.Select(t => new RunRequestNode(t.Id, t.DisplayName, t.Source, t.IsMtp)).ToArray();
+
+        var resultsEnumerable = await TestService.RunTestsAsync(projectPath, filter);
+        await foreach (var result in resultsEnumerable.WithCancellation(cts.Token))
+        {
+            runResults.Add(result);
+        }
+
+        // Assert
+        runResults.Should().HaveCount(1);
+        runResults[0].Outcome.Should().Be("Passed");
+    }
+
+    [Fact]
     public async Task DiscoverTestsAsync_WithAllFixtureProjects_ShouldEvaluateThemAsTestProjects()
     {
         // Arrange
@@ -140,6 +184,7 @@ public sealed class IntegrationTests : IDisposable
         TestUtils.CopyFixture("XUnit3Project", _testDir);
         TestUtils.CopyFixture("NUnitProject", _testDir);
         TestUtils.CopyFixture("MSTestProject", _testDir);
+        TestUtils.CopyFixture("FSharpTestProject", _testDir);
         TestUtils.CopyFixture("SimpleLibrary", _testDir); // Not a test project
 
         // Act - Should not throw even when projects are not built

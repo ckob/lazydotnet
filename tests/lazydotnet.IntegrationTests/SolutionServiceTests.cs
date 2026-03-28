@@ -52,6 +52,8 @@ public sealed class SolutionServiceTests : IDisposable
         TestUtils.CopyFixture("XUnit3Project", _testDir);
         TestUtils.CopyFixture("NUnitProject", _testDir);
         TestUtils.CopyFixture("MSTestProject", _testDir);
+        TestUtils.CopyFixture("FSharpProject", _testDir);
+        TestUtils.CopyFixture("FSharpTestProject", _testDir);
         var slnPath = TestUtils.CopyFixture("SimpleSolution.sln", _testDir);
 
         // Act
@@ -59,8 +61,8 @@ public sealed class SolutionServiceTests : IDisposable
 
         // Assert
         result.Should().NotBeNull();
-        result!.Projects.Should().HaveCount(6);
-        result.Projects.Select(p => p.Name).Should().Contain(["SimpleLibrary", "SimpleApp", "XUnit2Project", "XUnit3Project", "NUnitProject", "MSTestProject"]);
+        result!.Projects.Should().HaveCount(8);
+        result.Projects.Select(p => p.Name).Should().Contain(["SimpleLibrary", "SimpleApp", "XUnit2Project", "XUnit3Project", "NUnitProject", "MSTestProject", "FSharpProject", "FSharpTestProject"]);
     }
 
     [Fact]
@@ -69,13 +71,14 @@ public sealed class SolutionServiceTests : IDisposable
         // Arrange
         TestUtils.CopyFixture("SimpleLibrary", _testDir);
         TestUtils.CopyFixture("SimpleApp", _testDir);
+        TestUtils.CopyFixture("FSharpProject", _testDir);
 
         // Act
         var results = await SolutionService.DiscoverWorkspacesAsync(_testDir);
 
         // Assert
-        results.Should().HaveCountGreaterThanOrEqualTo(2);
-        results.Select(r => r.Name).Should().Contain(["SimpleLibrary.csproj", "SimpleApp.csproj"]);
+        results.Should().HaveCount(3);
+        results.Select(r => r.Name).Should().Contain(["SimpleLibrary.csproj", "SimpleApp.csproj", "FSharpProject.fsproj"]);
     }
 
     [Fact]
