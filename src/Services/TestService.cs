@@ -79,7 +79,15 @@ public class TestNode
     }
 }
 
-public record TestOutputLine(string Text, string? Style = null);
+public enum TestOutputSection
+{
+    Generic,
+    Error,
+    Stack,
+    Stdout
+}
+
+public record TestOutputLine(string Text, string? Style = null, TestOutputSection Section = TestOutputSection.Generic);
 
 public enum TestStatus
 {
