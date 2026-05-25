@@ -254,17 +254,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
 
     private void ShowTestDetails(TestNode node)
     {
-        var modal = new TestDetailsModal(node, () => RequestModal?.Invoke(null!));
-
-        if (node.FilePath != null)
-        {
-            modal.SetAdditionalKeyBindings([
-                new KeyBinding("e", "edit", async () => {
-                    await editorService.OpenFileAsync(node.FilePath, node.LineNumber);
-                }, k => k is { Key: ConsoleKey.E, Modifiers: 0 }, LongDescription: "open file in editor")
-            ]);
-        }
-
+        var modal = new TestDetailsModal(node, () => RequestModal?.Invoke(null!), editorService);
         RequestModal?.Invoke(modal);
     }
 
@@ -650,27 +640,20 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
             if (res.DisplayName != null && res.DisplayName != targetNode.FullName)
             {
                 targetNode.Output.Add(new TestOutputLine($"Run name: {res.DisplayName}", "dim"));
-                targetNode.Output.Add(new TestOutputLine(""));
             }
 
-            if (res.ErrorMessage.Length > 0)
+            foreach (var err in res.ErrorMessage)
             {
-                targetNode.Output.Add(new TestOutputLine("Error:", "red"));
-                foreach (var err in res.ErrorMessage)
-                {
-                    targetNode.Output.Add(new TestOutputLine(err));
-                }
-
-                targetNode.Output.Add(new TestOutputLine(""));
+                targetNode.Output.Add(new TestOutputLine(err, Section: TestOutputSection.Error));
             }
 
             foreach (var line in stackTrace)
             {
-                targetNode.Output.Add(new TestOutputLine(line, "dim"));
+                targetNode.Output.Add(new TestOutputLine(line, "dim", TestOutputSection.Stack));
             }
             foreach (var line in stdOut)
             {
-                targetNode.Output.Add(new TestOutputLine(line));
+                targetNode.Output.Add(new TestOutputLine(line, Section: TestOutputSection.Stdout));
             }
         }
     }
