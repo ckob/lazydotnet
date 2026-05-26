@@ -26,6 +26,20 @@ public class TestDetailsReportTests
     }
 
     [Fact]
+    public void BuildMarkdownReport_GenericOutput_IncludesInfoSection()
+    {
+        var node = MakeFailedTest();
+        node.Output.Insert(0, new TestOutputLine("Run name: MyTest(case: 1)", "dim"));
+
+        var report = TestDetailsReport.BuildMarkdownReport(node);
+
+        report.Should().Contain("## Info");
+        report.Should().Contain("Run name: MyTest(case: 1)");
+        report.IndexOf("## Info", StringComparison.Ordinal)
+            .Should().BeLessThan(report.IndexOf("## Error", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BuildErrorAndStack_FailedTest_ReturnsErrorThenStack_NoStdout()
     {
         var node = MakeFailedTest();

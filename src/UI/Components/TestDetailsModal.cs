@@ -32,7 +32,7 @@ public class TestDetailsModal : Modal
         _editorService = editorService;
     }
 
-    private enum SectionKind { Test, Failure, Stack, Stdout }
+    private enum SectionKind { Test, Info, Failure, Stack, Stdout }
 
     private sealed record DetailLine(string Text, string? Style, SectionKind Section, bool IsHeader = false, bool Selectable = true);
 
@@ -113,12 +113,14 @@ public class TestDetailsModal : Modal
         var errorLines = output.Where(o => o.Section == TestOutputSection.Error).ToList();
         var stackLines = output.Where(o => o.Section == TestOutputSection.Stack).ToList();
         var stdoutLines = output.Where(o => o.Section == TestOutputSection.Stdout).ToList();
+        var infoLines = output.Where(o => o.Section == TestOutputSection.Generic).ToList();
 
+        AppendOutputSection(lines, infoLines, SectionKind.Info, "Info", "dim");
         AppendOutputSection(lines, errorLines, SectionKind.Failure, "Failure", "red");
         AppendOutputSection(lines, stackLines, SectionKind.Stack, "Stack Trace", "dim");
         AppendOutputSection(lines, stdoutLines, SectionKind.Stdout, "Output", null);
 
-        if (errorLines.Count == 0 && stackLines.Count == 0 && stdoutLines.Count == 0 && _node.IsTest)
+        if (infoLines.Count == 0 && errorLines.Count == 0 && stackLines.Count == 0 && stdoutLines.Count == 0 && _node.IsTest)
         {
             AppendBlank(lines, SectionKind.Test);
             var (msg, style) = StatusFallbackMessage(_node.Status);
