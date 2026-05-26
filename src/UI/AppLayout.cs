@@ -176,14 +176,44 @@ public class AppLayout
             return;
         }
 
-        var segments = footerBindings.Select(b => $"{Markup.Escape(b.Description)}: [blue]{Markup.Escape(b.Label)}[/]");
-        var keybindingsText = " " + string.Join(" [grey]|[/] ", segments);
 
         var consoleWidth = Console.WindowWidth;
+        var availableBindingsWidth = Math.Max(0, consoleWidth - versionText.Length - 2);
+        var keybindingsText = BuildFooterBindingsText(footerBindings, availableBindingsWidth);
         var visibleLength = Markup.Remove(keybindingsText).Length;
         var paddingSize = Math.Max(0, consoleWidth - visibleLength - versionText.Length - 1);
 
         var footerContent = keybindingsText + new string(' ', paddingSize) + versionText + " ";
         _rootLayout["Footer"].Update(new Markup(footerContent));
+    }
+
+    private static string BuildFooterBindingsText(List<KeyBinding> bindings, int maxVisibleLength)
+    {
+        if (maxVisibleLength <= 1) return "";
+
+        var parts = new List<string>();
+        var visibleLength = 1;
+
+        foreach (var binding in bindings)
+        {
+            var separator = parts.Count == 0 ? "" : " [dim]|[/] ";
+            var separatorLength = parts.Count == 0 ? 0 : 3;
+            var segment = $"{Markup.Escape(binding.Description)}: [blue]{Markup.Escape(binding.Label)}[/]";
+            var segmentLength = $"{binding.Description}: {binding.Label}".Length;
+
+            if (visibleLength + separatorLength + segmentLength > maxVisibleLength)
+            {
+                if (visibleLength + 2 <= maxVisibleLength)
+                {
+                    parts.Add($"{separator}[dim]…[/]");
+                }
+                break;
+            }
+
+            parts.Add(separator + segment);
+            visibleLength += separatorLength + segmentLength;
+        }
+
+        return parts.Count == 0 ? "" : " " + string.Concat(parts);
     }
 }
