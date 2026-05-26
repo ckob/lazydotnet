@@ -74,6 +74,8 @@ public class MtpClient : IAsyncDisposable
     private readonly ConcurrentDictionary<Guid, List<MtpTestNode>> _runResults = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _completionSources = new();
 
+    public Action<string>? OnLog { get; set; }
+
     private MtpClient(TcpListener listener, TcpClient tcpClient, JsonRpc jsonRpc, string targetPath, Task<CommandResult> processTask)
     {
         _listener = listener;
@@ -105,7 +107,10 @@ public class MtpClient : IAsyncDisposable
             ? Cli.Wrap("dotnet").WithArguments(args)
             : Cli.Wrap(targetPath).WithArguments(args);
 
-        var processTask = command.ExecuteAsync(ct).Task;
+        var processTask = command
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteAsync(ct)
+            .Task;
 
         try
         {
@@ -177,7 +182,10 @@ public class MtpClient : IAsyncDisposable
     [JsonRpcMethod("client/log")]
     public void OnClientLog(object? level, string? message)
     {
-        // Client log received from MTP server, currently ignored.
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            OnLog?.Invoke(message);
+        }
     }
 
     [JsonRpcMethod("telemetry/update")]

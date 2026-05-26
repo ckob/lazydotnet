@@ -41,6 +41,11 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
     private string? _statusMessage;
     private int _runningTestCount;
     private CancellationTokenSource? _discoveryCts;
+    private readonly List<TestOutputLine> _runOutput = [];
+    private readonly Lock _runOutputLock = new();
+    private TestRunProgress? _lastRunProgress;
+    private TestRunCompleted? _lastRunCompleted;
+    private int _runOutputVersion;
 
 
     public async Task LoadAsync(string projectPath, string projectName, bool force = false)
@@ -150,6 +155,8 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
         yield return GetToggleBinding(node);
         yield return GetDetailsBinding(node);
         yield return new KeyBinding("r", "run", () => RunSelectedTestAsync(node), k => k is { Key: ConsoleKey.R, Modifiers: 0 });
+        yield return new KeyBinding("o", "session", () => { ShowRunOutput(); return Task.CompletedTask; },
+            k => k is { Key: ConsoleKey.O, Modifiers: 0 }, LongDescription: "show test session output");
         yield return new KeyBinding("e", "edit", () => OpenInEditorAsync(node), k => k is { Key: ConsoleKey.E, Modifiers: 0 }, LongDescription: "open file in editor");
     }
 
@@ -256,6 +263,20 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
     {
         var modal = new TestDetailsModal(node, () => RequestModal?.Invoke(null!), editorService);
         RequestModal?.Invoke(modal);
+    }
+
+    private void ShowRunOutput()
+    {
+        var modal = new TestRunOutputModal(GetRunOutputSnapshot, () => RequestModal?.Invoke(null!));
+        RequestModal?.Invoke(modal);
+    }
+
+    private TestRunOutputSnapshot GetRunOutputSnapshot()
+    {
+        lock (_runOutputLock)
+        {
+            return new TestRunOutputSnapshot([.. _runOutput], _lastRunProgress, _lastRunCompleted, _runOutputVersion);
+        }
     }
 
     private void MoveUp()
@@ -489,6 +510,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
         }
 
         SetStatusRecursive(node, TestStatus.Running);
+        ResetRunOutput(testsToRun.Count);
         _statusMessage = $"Running tests ({_runningTestCount} active)...";
         RequestRefresh?.Invoke();
 
@@ -541,10 +563,17 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
             .Select(t => new RunRequestNode(t.Uid!, t.Name, t.Source!, t.IsMtp))
             .ToArray();
 
-        var results = await TestService.RunTestsAsync(_currentPath!, filter);
+        var events = await TestService.RunTestsWithEventsAsync(_currentPath!, filter);
 
-        await foreach (var res in results)
+        await foreach (var evt in events)
         {
+            if (evt is not TestRunTestResult testResult)
+            {
+                HandleRunEvent(evt);
+                continue;
+            }
+
+            var res = testResult.Result;
             var targets = testsToRun.Where(t => t.Uid == res.Id).ToList();
 
             if (targets.Count == 0 && res.DisplayName != null)
@@ -584,6 +613,52 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
         }
         RequestRefresh?.Invoke();
     }
+
+    private void ResetRunOutput(int total)
+    {
+        lock (_runOutputLock)
+        {
+            _runOutput.Clear();
+            _lastRunCompleted = null;
+            _lastRunProgress = new TestRunProgress("", 0, 0, 0, 0, total);
+            _runOutputVersion++;
+        }
+    }
+
+    private void HandleRunEvent(TestRunEvent evt)
+    {
+        lock (_runOutputLock)
+        {
+            switch (evt)
+            {
+                case TestRunStarted started:
+                    _runOutput.Add(new TestOutputLine($"Session started for {Path.GetFileName(started.Source)}", "dim"));
+                    _runOutputVersion++;
+                    break;
+                case TestRunOutput output:
+                    _runOutput.Add(new TestOutputLine(output.Text, GetOutputStyle(output.Section), output.Section));
+                    _runOutputVersion++;
+                    break;
+                case TestRunProgress progress:
+                    _lastRunProgress = progress;
+                    _statusMessage = $"Running tests: {progress.Completed}/{progress.Total} completed, {progress.Passed} passed, {progress.Failed} failed";
+                    _runOutputVersion++;
+                    break;
+                case TestRunCompleted completed:
+                    _lastRunCompleted = completed;
+                    _runOutputVersion++;
+                    break;
+            }
+        }
+        RequestRefresh?.Invoke();
+    }
+
+    private static string? GetOutputStyle(TestOutputSection section) => section switch
+    {
+        TestOutputSection.Error => "red",
+        TestOutputSection.Stack => "dim",
+        _ => null
+    };
 
     private static bool IsFuzzyMatch(TestNode node, TestRunResult res)
     {
@@ -637,6 +712,8 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
         lock (targetNode.OutputLock)
         {
             targetNode.Output.Clear();
+            if (res.DisplayName != null && res.DisplayName != targetNode.FullName)
+            {
                 targetNode.Output.Add(new TestOutputLine($"Run name: {res.DisplayName}", "dim"));
             }
 

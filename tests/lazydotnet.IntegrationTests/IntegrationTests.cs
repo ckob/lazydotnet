@@ -64,6 +64,33 @@ public sealed class IntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task XUnit3_ExecutionEvents_ShouldIncludeProgressAndCompletion()
+    {
+        // Arrange
+        TestUtils.CopyFixture("XUnit3Project", _testDir);
+        var projectPath = Path.Combine(_testDir, "XUnit3Project", "XUnit3Project.csproj");
+        await BuildFixtureAsync("XUnit3Project");
+        var discoveredTests = await TestService.DiscoverTestsAsync(projectPath, TestContext.Current.CancellationToken);
+
+        // Act
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var events = new List<TestRunEvent>();
+        var filter = discoveredTests.Select(t => new RunRequestNode(t.Id, t.DisplayName, t.Source, t.IsMtp)).ToArray();
+
+        var eventEnumerable = await TestService.RunTestsWithEventsAsync(projectPath, filter);
+        await foreach (var evt in eventEnumerable.WithCancellation(cts.Token))
+        {
+            events.Add(evt);
+        }
+
+        // Assert
+        events.Should().Contain(e => e is TestRunStarted);
+        events.Should().Contain(e => e is TestRunProgress);
+        events.Should().Contain(e => e is TestRunCompleted);
+        events.OfType<TestRunTestResult>().Should().HaveCountGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
     public async Task XUnit2_Discovery_ShouldWork()
     {
         // Arrange
