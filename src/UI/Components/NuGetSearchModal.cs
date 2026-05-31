@@ -17,7 +17,6 @@ public class NuGetSearchModal : Modal
     private string? _statusMessage;
     private int _lastFrameIndex = -1;
     private CancellationTokenSource? _searchCts;
-    private CancellationTokenSource? _debounceCts;
 
     public NuGetSearchModal(
         Func<SearchResult, Task> onSelected,
@@ -71,34 +70,6 @@ public class NuGetSearchModal : Modal
         }, k => k is { Key: ConsoleKey.PageDown, Modifiers: 0 } || (k.Modifiers == ConsoleModifiers.Control && k.Key == ConsoleKey.D), true);
     }
 
-    private void RestartDebounceTimer()
-    {
-        _debounceCts?.Cancel();
-        _debounceCts?.Dispose();
-        _debounceCts = new CancellationTokenSource();
-        var token = _debounceCts.Token;
-
-        _statusMessage = "Typing...";
-        _requestRefresh();
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(500, token);
-
-                if (!token.IsCancellationRequested)
-                {
-                    TriggerSearch();
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Task was cancelled, ignore.
-            }
-        }, token);
-    }
-
     public override async Task<bool> HandleInputAsync(ConsoleKeyInfo key)
     {
         if (await base.HandleInputAsync(key))
@@ -106,10 +77,6 @@ public class NuGetSearchModal : Modal
             if (_searchCts != null)
             {
                 await _searchCts.CancelAsync();
-            }
-            if (_debounceCts != null)
-            {
-                await _debounceCts.CancelAsync();
             }
             return true;
         }
@@ -132,9 +99,8 @@ public class NuGetSearchModal : Modal
         if (!changed)
             return false;
 
-        RestartDebounceTimer();
+        TriggerSearch();
         return true;
-
     }
 
     private void TriggerSearch()
@@ -153,8 +119,7 @@ public class NuGetSearchModal : Modal
             return;
         }
 
-        _searchList.Clear();
-        _isSearching = true;
+        _isSearching = false;
         _statusMessage = "Typing...";
         _requestRefresh();
 
@@ -165,6 +130,8 @@ public class NuGetSearchModal : Modal
                 await Task.Delay(500, token);
                 if (token.IsCancellationRequested) return;
 
+                _isSearching = true;
+                _searchList.Clear();
                 _statusMessage = "Searching...";
                 _requestRefresh();
 
