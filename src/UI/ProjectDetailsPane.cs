@@ -3,6 +3,8 @@ using Spectre.Console;
 using Spectre.Console.Rendering;
 using lazydotnet.UI.Components;
 using lazydotnet.Services;
+using lazydotnet.Core.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace lazydotnet.UI;
 
@@ -11,6 +13,7 @@ public class ProjectDetailsPane : IKeyBindable, ISearchable
     private readonly TabbedPane _tabs;
     private readonly NuGetDetailsTab _nugetTab;
     private readonly TestDetailsTab _testsTab;
+    private readonly ExecutionTab _executionTab;
     private readonly List<IProjectTab> _tabInstances = [];
 
     private string? _currentProjectPath;
@@ -28,17 +31,32 @@ public class ProjectDetailsPane : IKeyBindable, ISearchable
     public Action<Modal>? RequestModal { get; set; }
     public Action<string>? RequestSelectProject { get; set; }
 
-    public ProjectDetailsPane(SolutionService solutionService, IEditorService editorService)
+    public ProjectDetailsPane(SolutionService solutionService, IEditorService editorService, IOptions<LazydotnetSettings> options)
     {
+        var settings = options.Value.DetailsPane;
+
         _nugetTab = new NuGetDetailsTab();
         var refsTab = new ProjectReferencesTab(solutionService, editorService);
         _testsTab = new TestDetailsTab(editorService);
-        var executionTab = new ExecutionTab();
+        _executionTab = new ExecutionTab();
 
-        _tabInstances.Add(refsTab);
-        _tabInstances.Add(_nugetTab);
-        _tabInstances.Add(_testsTab);
-        _tabInstances.Add(executionTab);
+        var allTabs = new List<(IProjectTab Tab, ITabSettings Config)>
+        {
+            (refsTab, settings.ReferencesTab),
+            (_nugetTab, settings.NuGetsTab),
+            (_testsTab, settings.TestsTab),
+            (_executionTab, settings.ExecutionTab)
+        };
+
+        var orderedTabs = allTabs
+            .Where(t => t.Config.Enabled)
+            .OrderBy(t => t.Config.Position)
+            .ToList();
+
+        foreach (var (Tab, _) in orderedTabs)
+        {
+            _tabInstances.Add(Tab);
+        }
 
         foreach (var tab in _tabInstances)
         {
@@ -47,7 +65,7 @@ public class ProjectDetailsPane : IKeyBindable, ISearchable
             tab.RequestSelectProject = p => RequestSelectProject?.Invoke(p);
         }
 
-        _tabs = new TabbedPane(_tabInstances.Select(t => t.Title).ToArray());
+        _tabs = new TabbedPane([.. _tabInstances.Select(t => t.Title)]);
     }
 
     public int ActiveTab => _tabs.ActiveTab;
@@ -55,8 +73,12 @@ public class ProjectDetailsPane : IKeyBindable, ISearchable
 
     public void ActivateExecutionTab()
     {
-        _tabs.SetActiveTab(3);
-        TriggerLoad();
+        var index = _tabInstances.IndexOf(_executionTab);
+        if (index >= 0)
+        {
+            _tabs.SetActiveTab(index);
+            TriggerLoad();
+        }
     }
 
     public TestNode? GetSelectedTestNode()
@@ -117,7 +139,7 @@ public class ProjectDetailsPane : IKeyBindable, ISearchable
             return;
 
         var activeTab = _tabInstances[_tabs.ActiveTab];
-        if (activeTab.IsLoaded(_currentProjectPath))
+        if (activeTab?.IsLoaded(_currentProjectPath) != false)
             return;
 
         _loadCts?.Cancel();

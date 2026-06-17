@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Microsoft.VisualStudio.SolutionPersistence;
 using Microsoft.VisualStudio.SolutionPersistence.Model;
 using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 
@@ -82,7 +81,7 @@ public class SolutionService
         var solutionFile = Directory.GetFiles(path, $"*{SlnFileExtension}").FirstOrDefault()
                            ?? Directory.GetFiles(path, $"*{SlnxFileExtension}").FirstOrDefault()
                            ?? Directory.GetFiles(path, $"*{SlnfFileExtension}").FirstOrDefault();
-        
+
         // If no solution file found, look for all .fsproj and .csproj files recursively
         if (solutionFile == null)
         {
@@ -92,7 +91,7 @@ public class SolutionService
                 .ToArray();
             return projectFiles.Length > 0 ? CreateMultiProjectSolution(path, projectFiles) : null;
         }
-        
+
         return null;
     }
 
@@ -102,7 +101,7 @@ public class SolutionService
         // but keep the original slnf path for the solution name
         string? originalSolutionFile = solutionFile;
         var slnfFilteredProjects = await ParseSlnfFilterAsync(solutionFile);
-        
+
         if (slnfFilteredProjects != null && slnfFilteredProjects.Value.Path != null)
         {
             solutionFile = slnfFilteredProjects.Value.Path;
@@ -117,7 +116,7 @@ public class SolutionService
         var projects = BuildProjectList(solution, solutionDirectory, slnfFilteredProjects?.FilteredPaths);
 
         var (isSlnx, isSlnf) = DetermineSolutionType(originalSolutionFile, solutionFile);
-        
+
         CurrentSolution = new SolutionInfo(
             Path.GetFileNameWithoutExtension(originalSolutionFile ?? solutionFile),
             originalSolutionFile ?? solutionFile,
@@ -130,7 +129,7 @@ public class SolutionService
 
     private static (bool IsSlnx, bool IsSlnf) DetermineSolutionType(string? originalSolutionFile, string solutionFile)
     {
-        var isSlnf = originalSolutionFile?.EndsWith(SlnfFileExtension, StringComparison.OrdinalIgnoreCase) ?? 
+        var isSlnf = originalSolutionFile?.EndsWith(SlnfFileExtension, StringComparison.OrdinalIgnoreCase) ??
                      solutionFile.EndsWith(SlnfFileExtension, StringComparison.OrdinalIgnoreCase);
         var isSlnx = !isSlnf && solutionFile.EndsWith(SlnxFileExtension, StringComparison.OrdinalIgnoreCase);
         return (isSlnx, isSlnf);
@@ -189,7 +188,7 @@ public class SolutionService
         }
 
         var directoryName = Path.GetFileName(rootPath) ?? "Projects";
-        
+
         return new SolutionInfo(directoryName, directoryPath, projects, IsDirectoryBased: true);
     }
 
@@ -224,7 +223,7 @@ public class SolutionService
                 var proj = new[] {FsprojFileExtension, CsprojFileExtension}.SelectMany(x=> Directory.GetFiles(path, $"*{x}")).FirstOrDefault();
                 if (proj != null)
                 {
-                    
+
                     return (Path.GetFullPath(proj), Path.GetDirectoryName(proj));
                 }
             }
@@ -258,15 +257,15 @@ public class SolutionService
         {
             var slnfContent = await File.ReadAllTextAsync(solutionFile);
             using var doc = System.Text.Json.JsonDocument.Parse(slnfContent);
-            
+
             string? relativePath = null;
             HashSet<string>? filteredProjects = null;
-            
+
             if (doc.RootElement.TryGetProperty("solution", out var solutionElement))
             {
                 (relativePath, filteredProjects) = ExtractSlnfInfo(solutionElement);
             }
-            
+
             if (!string.IsNullOrEmpty(relativePath))
             {
                 var absolutePath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(solutionFile) ?? "", relativePath));
@@ -288,7 +287,7 @@ public class SolutionService
     {
         string? relativePath = null;
         HashSet<string>? filteredProjects = null;
-        
+
         if (solutionElement.ValueKind == System.Text.Json.JsonValueKind.String)
         {
             relativePath = solutionElement.GetString();
@@ -300,7 +299,7 @@ public class SolutionService
             {
                 relativePath = pathElement.GetString();
             }
-            
+
             if (solutionElement.TryGetProperty("projects", out var projectsElement) &&
                 projectsElement.ValueKind == System.Text.Json.JsonValueKind.Array)
             {
@@ -310,7 +309,7 @@ public class SolutionService
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
             }
         }
-        
+
         return (relativePath, filteredProjects);
     }
 
@@ -322,7 +321,7 @@ public class SolutionService
     {
         if (string.IsNullOrEmpty(path))
             return path;
-        
+
         // Replace backslashes with forward slashes for consistent comparison
         return path.Replace('\\', '/');
     }
@@ -332,7 +331,7 @@ public class SolutionService
         // First pass: identify which projects to include based on SLNF filter
         // Normalize paths for cross-platform comparison
         var filteredProjects = solution.SolutionProjects
-            .Where(proj => slnfFilteredProjects == null || 
+            .Where(proj => slnfFilteredProjects == null ||
                           slnfFilteredProjects.Contains(NormalizePath(proj.FilePath)))
             .ToList();
 
@@ -379,7 +378,7 @@ public class SolutionService
         var parentId = proj.Parent?.Id.ToString();
         var filePath = ResolveProjectPath(proj.FilePath, solutionDirectory);
         var projectName = CalculateProjectName(proj, filePath);
-        
+
         return new ProjectInfo
         {
             Name = projectName,
@@ -399,11 +398,11 @@ public class SolutionService
     {
         if (string.IsNullOrEmpty(projectPath))
             return "";
-        
+
         // If already absolute, return as-is
         if (Path.IsPathRooted(projectPath))
             return Path.GetFullPath(projectPath);
-        
+
         // Resolve relative path against solution directory
         var combinedPath = Path.Combine(solutionDirectory, projectPath);
         return Path.GetFullPath(combinedPath);
@@ -415,12 +414,12 @@ public class SolutionService
         {
             return proj.DisplayName;
         }
-        
+
         if (!string.IsNullOrEmpty(filePath))
         {
             return Path.GetFileNameWithoutExtension(filePath);
         }
-        
+
         return "Unnamed Project";
     }
 

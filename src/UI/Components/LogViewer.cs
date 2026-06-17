@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using lazydotnet.Core;
 using Spectre.Console;
@@ -267,7 +266,7 @@ public partial class LogViewer : IKeyBindable, ISearchable
             if (_logs.Count == 0) return;
             if (!_isVisualMode && _selectedLogicalIndex == -1) return;
 
-            var start = _isVisualMode 
+            var start = _isVisualMode
                 ? Math.Min(_visualSelectionStart, _visualSelectionEnd)
                 : _selectedLogicalIndex;
             var end = _isVisualMode
@@ -396,12 +395,12 @@ public partial class LogViewer : IKeyBindable, ISearchable
     {
         var isSelected = line.LogicalIndex == _selectedLogicalIndex;
         var isInVisualSelection = _isVisualMode && line.LogicalIndex >= visualStart && line.LogicalIndex <= visualEnd;
-        
+
         if (isInVisualSelection || isSelected)
         {
             return CreateSelectedRow(line, isActive);
         }
-        
+
         return CreateNormalRow(line);
     }
 

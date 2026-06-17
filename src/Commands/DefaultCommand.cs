@@ -3,6 +3,8 @@ using lazydotnet.Core;
 using lazydotnet.Screens;
 using lazydotnet.Services;
 using lazydotnet.UI;
+using lazydotnet.Core.Configuration;
+using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -68,8 +70,10 @@ public sealed class DefaultSettings : CommandSettings
     }
 }
 
-public sealed class DefaultCommand : AsyncCommand<DefaultSettings>
+public sealed class DefaultCommand(IOptions<LazydotnetSettings> options) : AsyncCommand<DefaultSettings>
 {
+    private readonly IOptions<LazydotnetSettings> _options = options;
+
     protected override async Task<int> ExecuteAsync(CommandContext context, DefaultSettings settings, CancellationToken cancellationToken)
     {
         if (settings.Version)
@@ -104,7 +108,7 @@ public sealed class DefaultCommand : AsyncCommand<DefaultSettings>
 
         var editorService = new EditorService { RootPath = rootDir };
         var solutionService = new SolutionService();
-        var detailsPane = new ProjectDetailsPane(solutionService, editorService);
+        var detailsPane = new ProjectDetailsPane(solutionService, editorService, _options);
         var layout = new AppLayout();
 
         var explorer = new SolutionExplorer(editorService);

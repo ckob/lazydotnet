@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "LazydotnetSettings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "DetailsPane": {
+      "description": "Settings related to the details pane.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/DetailsPaneSettings"
+        }
+      ]
+    },
+    "$schema": {
+      "type": "string",
+      "description": "The JSON schema reference."
+    }
+  },
+  "definitions": {
+    "DetailsPaneSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ReferencesTab": {
+          "$ref": "#/definitions/ReferencesTabSettings"
+        },
+        "NuGetsTab": {
+          "$ref": "#/definitions/NuGetsTabSettings"
+        },
+        "TestsTab": {
+          "$ref": "#/definitions/TestsTabSettings"
+        },
+        "ExecutionTab": {
+          "$ref": "#/definitions/ExecutionTabSettings"
+        }
+      }
+    },
+    "ReferencesTabSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Whether the tab is enabled and visible.",
+          "default": true
+        },
+        "Position": {
+          "type": "integer",
+          "description": "The 0-based position of the tab. Tabs are sorted by this value in ascending order.",
+          "format": "int32",
+          "default": 0
+        }
+      }
+    },
+    "NuGetsTabSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Whether the tab is enabled and visible.",
+          "default": true
+        },
+        "Position": {
+          "type": "integer",
+          "description": "The 0-based position of the tab. Tabs are sorted by this value in ascending order.",
+          "format": "int32",
+          "default": 1
+        }
+      }
+    },
+    "TestsTabSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Whether the tab is enabled and visible.",
+          "default": true
+        },
+        "Position": {
+          "type": "integer",
+          "description": "The 0-based position of the tab. Tabs are sorted by this value in ascending order.",
+          "format": "int32",
+          "default": 2
+        }
+      }
+    },
+    "ExecutionTabSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Whether the tab is enabled and visible.",
+          "default": true
+        },
+        "Position": {
+          "type": "integer",
+          "description": "The 0-based position of the tab. Tabs are sorted by this value in ascending order.",
+          "format": "int32",
+          "default": 3
+        }
+      }
+    }
+  }
+}

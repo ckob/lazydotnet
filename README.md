@@ -253,7 +253,72 @@ Search is available in some panels.
 | `y`               | Yank (copy) selection to clipboard |
 | `Esc`             | Resume auto-scroll                 |
 
-## Configuration examples
+## Configuration
+
+lazydotnet supports a hierarchical configuration system. You can define settings globally, override them locally per-project, and override them via environment variables.
+
+### Initialization
+
+To create a configuration file, use the built-in `config` command:
+
+```bash
+# Create global configuration
+lazydotnet config --init-global
+
+# Create local configuration (in current directory)
+lazydotnet config --init-local
+```
+
+### Configuration Paths
+
+- **Global**: Follows the XDG Base Directory Specification:
+  - Linux/macOS: `$XDG_CONFIG_HOME/lazydotnet/settings.json` (defaults to `~/.config/lazydotnet/settings.json`)
+  - Windows: `%APPDATA%\lazydotnet\settings.json`
+- **Local**: `.lazydotnet/settings.json` in your current working directory.
+
+### Settings schema
+
+The generated `settings.json` points to the remote JSON schema, providing instant auto-completion and validation in your editor.
+
+These are the default settings:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/ckob/lazydotnet/main/docs/settings.schema.json",
+  "DetailsPane": {
+    "ReferencesTab": {
+      "Enabled": true,
+      "Position": 0
+    },
+    "NuGetsTab": {
+      "Enabled": true,
+      "Position": 1
+    },
+    "TestsTab": {
+      "Enabled": true,
+      "Position": 2
+    },
+    "ExecutionTab": {
+      "Enabled": true,
+      "Position": 3
+    }
+  }
+}
+```
+
+### Environment Variables
+
+Any setting in the configuration hierarchy can be overridden using environment variables prefixed with `LAZYDOTNET_`.
+Use underscores (`_`) to represent the JSON hierarchy.
+
+For example, to configure the `TestsTab` via environment variables:
+
+```bash
+export LAZYDOTNET_DETAILSPANE_TESTSTAB_ENABLED=true
+export LAZYDOTNET_DETAILSPANE_TESTSTAB_POSITION=0
+```
+
+## Editor Integrations
 
 ### Zed Integration
 
