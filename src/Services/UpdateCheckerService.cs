@@ -19,8 +19,7 @@ public static class UpdateCheckerService
     private const string CacheFileName = "last_update_check.txt";
     private static readonly TimeSpan CacheMaxAge = TimeSpan.FromHours(24);
     private static readonly string CacheFilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "lazydotnet",
+        Core.EnvironmentPaths.GetDataDirectory(),
         CacheFileName
     );
 
