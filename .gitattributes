@@ -1,0 +1,3 @@
+# Verify snapshot baselines must stay LF so the Windows CI leg matches baselines
+# committed from Linux/macOS (the renderer is normalized to LF in TuiSnapshot).
+*.verified.txt text eol=lf
