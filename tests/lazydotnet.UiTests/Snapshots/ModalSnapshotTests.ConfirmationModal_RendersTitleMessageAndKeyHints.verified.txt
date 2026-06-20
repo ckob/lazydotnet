@@ -1,0 +1,10 @@
+﻿╭─ Delete project ─────────────────────╮
+│                                      │
+│                                      │
+│      Remove SimpleLibrary from       │
+│            the solution?             │
+│                                      │
+│             [y]es / [n]o             │
+│                                      │
+│                                      │
+╰──────────────────────────────────────╯

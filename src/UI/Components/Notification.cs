@@ -26,6 +26,15 @@ public static class Notification
         }
     }
 
+    public static void Clear()
+    {
+        lock (Lock)
+        {
+            _message = "";
+            _expiresAt = DateTime.MinValue;
+        }
+    }
+
     public static bool HasActiveNotification
     {
         get

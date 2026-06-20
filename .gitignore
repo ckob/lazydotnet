@@ -488,3 +488,6 @@ $RECYCLE.BIN/
 result
 result-*
 .direnv/
+
+# Verify snapshot churn
+*.received.*
