@@ -15,7 +15,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,8 +29,23 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      # blame-hang aborts and writes a process dump + a Sequence file naming the in-flight test if
+      # any test stalls for 120s, so a platform-specific hang (e.g. the TUI snapshot tests on
+      # Windows) fails fast and is diagnosable from the uploaded artifact instead of a silent
+      # 20-min timeout.
       - name: Run tests
-        run: dotnet test --configuration Release --warnaserror
+        run: >
+          dotnet test --configuration Release --warnaserror
+          --blame-hang-timeout 120s --blame-hang-dump-type full
+          --results-directory ./TestResults
+      - name: Upload hang dump
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-hang-dump-${{ matrix.os }}
+          path: ./TestResults
+          if-no-files-found: ignore
+          retention-days: 14
 
   publish:
     needs: test
