@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 using lazydotnet.Core;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using TextCopy;
 
 namespace lazydotnet.UI.Components;
 
@@ -275,8 +274,7 @@ public partial class LogViewer : IKeyBindable, ISearchable
 
             var selectedLogs = _logs.Skip(start).Take(end - start + 1).ToList();
             var text = string.Join(Environment.NewLine, selectedLogs);
-            ClipboardService.SetText(Markup.Remove(text));
-            Notification.Show("Copied to clipboard");
+            Clipboard.Copy(Markup.Remove(text), "Copied to clipboard");
         }
     }
 
