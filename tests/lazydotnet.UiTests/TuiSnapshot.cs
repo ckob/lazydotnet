@@ -24,9 +24,12 @@ public static class TuiSnapshot
         return Normalize(console.Output);
     }
 
-    // Force LF so a baseline committed on one OS matches the render on another — Spectre/TestConsole
-    // can emit CRLF on Windows, which would otherwise fail every snapshot on the Windows CI leg.
-    private static string Normalize(string output) => output.Replace("\r\n", "\n");
+    // Normalize OS-specific output so a baseline committed on one OS matches the render on another:
+    //  - CRLF -> LF: Spectre/TestConsole can emit CRLF on Windows.
+    //  - backslash -> forward slash: components that render file paths use Path.GetRelativePath, which
+    //    yields '\' on Windows. A backslash never appears in Spectre's box/line drawing, so this only
+    //    ever touches paths.
+    private static string Normalize(string output) => output.Replace("\r\n", "\n").Replace('\\', '/');
 
     /// <summary>
     /// Render with ANSI colour/style sequences captured. Use only when colour is the thing under
