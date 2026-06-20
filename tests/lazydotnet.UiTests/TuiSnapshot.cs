@@ -21,8 +21,12 @@ public static class TuiSnapshot
         console.Profile.Width = width;
         console.Profile.Height = height;
         console.Write(renderable);
-        return console.Output;
+        return Normalize(console.Output);
     }
+
+    // Force LF so a baseline committed on one OS matches the render on another — Spectre/TestConsole
+    // can emit CRLF on Windows, which would otherwise fail every snapshot on the Windows CI leg.
+    private static string Normalize(string output) => output.Replace("\r\n", "\n");
 
     /// <summary>
     /// Render with ANSI colour/style sequences captured. Use only when colour is the thing under
@@ -35,6 +39,6 @@ public static class TuiSnapshot
         console.Profile.Width = width;
         console.Profile.Height = height;
         console.Write(renderable);
-        return console.Output;
+        return Normalize(console.Output);
     }
 }
