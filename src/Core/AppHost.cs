@@ -12,6 +12,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
     private bool _isRunning = true;
     private string? _pendingLog;
     private bool _hadNotification;
+    private long _lastNotificationVersion;
     private volatile bool _suspended;
 
     public async Task RunAsync()
@@ -67,12 +68,17 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
         }
     }
 
-    private bool HandleNotificationExpiry()
+    private bool HandleNotificationChange()
     {
         var hasNotification = Notification.HasActiveNotification;
-        var expired = _hadNotification && !hasNotification;
+        var version = Notification.Version;
+        // Redraw when a notification appears or is replaced (version bump) and when
+        // it expires (active flag flips). Covers background-thread Show() calls that
+        // would otherwise not surface until the next unrelated refresh.
+        var changed = hasNotification != _hadNotification || version != _lastNotificationVersion;
         _hadNotification = hasNotification;
-        return expired;
+        _lastNotificationVersion = version;
+        return changed;
     }
 
     private async Task ProcessTickAsync(LiveDisplayContext ctx)
@@ -108,7 +114,7 @@ public class AppHost(AppLayout layout, IScreen initialScreen)
             if (_currentScreen!.OnTick())
                 needsRefresh = true;
 
-            if (HandleNotificationExpiry())
+            if (HandleNotificationChange())
                 needsRefresh = true;
 
             while (Console.KeyAvailable)
