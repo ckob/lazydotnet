@@ -1,0 +1,27 @@
+﻿╭─ ✗ Add_TwoNumbers_ReturnsSum ──────────────────────────────────────────────────────────╮
+│                                                                                        │
+│   ▌ Test                                                                               │
+│   Status:   ✗ Failed                                                                   │
+│   Duration: 12ms                                                                       │
+│   File:     tests/SampleApp.Tests/CalculatorTests.cs:21                                │
+│                                                                                        │
+│   ▌ Failure                                                                            │
+│   Expected: 5                                                                          │
+│   Actual:   4                                                                          │
+│                                                                                        │
+│   ▌ Stack Trace                                                                        │
+│      at CalculatorTests.Add() in CalculatorTests.cs:line 21                            │
+│                                                                                        │
+│   ▌ Output                                                                             │
+│   computing sum...                                                                     │
+│                                                                                        │
+│                                                                                        │
+│                                                                                        │
+│                                                                                        │
+│                                                                                        │
+│                                                                                        │
+│                                                                                        │
+│   ──────────────────────────────────────────────────────────────────────────────────   │
+│   y line · Y report · c error+stack · v range · g/G top/bot · esc close                │
+│                                                                                        │
+╰────────────────────────────────────────────────────────────────────────────────────────╯

@@ -1,0 +1,9 @@
+﻿╭─ Pick a framework ─────────────────────────────╮
+│                                                │
+│   Choose the target test framework:            │
+│                                                │
+│   xUnit                                        │
+│   NUnit                                        │
+│   MSTest                                       │
+│                                                │
+╰────────────────────────────────────────────────╯

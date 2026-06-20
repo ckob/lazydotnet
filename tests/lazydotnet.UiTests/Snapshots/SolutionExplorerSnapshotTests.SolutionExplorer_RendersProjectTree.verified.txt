@@ -1,0 +1,4 @@
+﻿ SLN SampleSolution  
+   C# SampleApp      
+   C# SampleApp.Tests
+   C# SampleLibrary  

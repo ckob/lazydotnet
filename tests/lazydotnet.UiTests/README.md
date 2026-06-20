@@ -35,11 +35,29 @@ mv Snapshots/<name>.received.txt Snapshots/<name>.verified.txt
 
 Commit the `.verified.txt`. `*.received.*` is gitignored.
 
-## Coverage targets
+## Coverage
 
-Most `src/UI` components expose an `IRenderable` entrypoint (`GetRenderable` / `GetContent`) — each
-is a snapshot candidate. Seeded so far: modals (`ConfirmationModal`, `Modal`), `Notification`.
-Still open: tabs (`TestDetailsTab`, `ExecutionTab`, `NuGetDetailsTab`, `ProjectReferencesTab`),
-panes (`SolutionExplorer`, `ProjectDetailsPane`, `WorkspacePane`, `LogViewer`), the picker modals,
-and full-screen `DashboardScreen` composition.
+Covered (rich, data-driven snapshots):
+
+- Modals: `ConfirmationModal`, `Modal` base, `ProjectPickerModal`, `SelectionModal<T>`, `TestDetailsModal`
+- `Notification` (info + error, colour-captured)
+- `LogViewer`, `SolutionExplorer` project tree
+- Tab default ("no project") states: `ExecutionTab`, `NuGetDetailsTab`, `TestDetailsTab`
+
+Deliberately **not** snapshot-tested here, and why:
+
+- **Populated tab/pane states** (`ProjectReferencesTab`, `NuGetDetailsTab` package list,
+  `TestDetailsTab` tree, `ProjectDetailsPane`) — their content comes from service I/O (MSBuild,
+  NuGet, the test platform). That coverage belongs in `lazydotnet.IntegrationTests` against the real
+  `tests/Fixtures` solutions, where the data is deterministic.
+- **Loading / async-search states** (`WorkspacePickerModal`, `NuGetVersionSelectionModal` fetch,
+  any spinner) — `SpinnerHelper` is time-based (`DateTime.UtcNow`) so the frame is non-deterministic.
+  Don't snapshot a view while a spinner is on screen.
+
+### Determinism rules
+
+- Pin terminal size via `TuiSnapshot.Default*` (done by the helper).
+- Feed **relative** file paths in fixtures — `PathHelper.GetRelativePath` rebases rooted paths on
+  the runner's cwd, which differs per machine.
+- Avoid any view that shows a spinner.
 ```
