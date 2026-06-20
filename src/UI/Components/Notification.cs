@@ -15,6 +15,7 @@ public static class Notification
     private static string _message = "";
     private static NotificationType _type = NotificationType.Info;
     private static DateTime _expiresAt = DateTime.MinValue;
+    private static long _version;
 
     public static void Show(string message, NotificationType type = NotificationType.Info)
     {
@@ -23,7 +24,18 @@ public static class Notification
             _message = message;
             _type = type;
             _expiresAt = DateTime.UtcNow.AddSeconds(5);
+            _version++;
         }
+    }
+
+    /// <summary>
+    /// Monotonic counter bumped on every <see cref="Show"/>. The render loop polls
+    /// this so notifications raised from background threads (e.g. async clipboard
+    /// copy) force a redraw instead of waiting for the next unrelated refresh.
+    /// </summary>
+    public static long Version
+    {
+        get { lock (Lock) return _version; }
     }
 
     public static bool HasActiveNotification
