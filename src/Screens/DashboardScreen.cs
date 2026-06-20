@@ -383,9 +383,10 @@ public class DashboardScreen : IScreen
             _ => "Panel"
         };
 
-        if (_activeModal != null)
+        var previousModal = _activeModal;
+        if (previousModal != null)
         {
-            localBindings = _activeModal.GetKeyBindings().ToList();
+            localBindings = previousModal.GetKeyBindings().ToList();
             panelName = "Modal";
         }
 
@@ -410,7 +411,7 @@ public class DashboardScreen : IScreen
         }
         AddSection("Global", globalBindings);
 
-        _activeModal = new Modal("Keybindings", grid, () => _activeModal = null);
+        _activeModal = new Modal("Keybindings", grid, () => _activeModal = previousModal);
         _needsRefresh = true;
         return;
 
@@ -436,6 +437,12 @@ public class DashboardScreen : IScreen
         if (_activeModal != null && await _activeModal.HandleInputAsync(key))
         {
             _needsRefresh = true;
+            return this;
+        }
+
+        if (_activeModal != null && key.KeyChar == '?')
+        {
+            ShowHelpModal();
             return this;
         }
 

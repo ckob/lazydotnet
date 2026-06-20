@@ -53,7 +53,7 @@ public sealed class TestRunOutputModal(
             var modalWidth = width * 9 / 10;
             var modalHeight = height * 9 / 10;
             var renderWidth = Math.Max(10, modalWidth - 8);
-            var visibleRows = Math.Max(1, modalHeight - 6);
+            var visibleRows = Math.Max(1, modalHeight - 4);
 
             var snapshot = snapshotProvider();
             _lastVersion = snapshot.Version;
@@ -81,12 +81,9 @@ public sealed class TestRunOutputModal(
                 rendered++;
             }
 
-            var footer = new Markup("[dim]y copy · g/G top/bot · esc close[/]");
             var grid = new Grid();
             grid.AddColumn();
             grid.AddRow(table);
-            grid.AddRow(new Rule { Style = new Style(Color.Grey) });
-            grid.AddRow(footer);
 
             return new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
             {

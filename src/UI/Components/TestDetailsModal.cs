@@ -369,8 +369,7 @@ public class TestDetailsModal : Modal
             var modalWidth = width * 9 / 10;
             var modalHeight = height * 9 / 10;
             var renderWidth = Math.Max(10, modalWidth - 8);
-            var footerRows = 2;
-            var visibleRows = Math.Max(1, modalHeight - 4 - footerRows);
+            var visibleRows = Math.Max(1, modalHeight - 4);
 
             var lines = GetLines();
             MaybeAutoJumpToFailure(lines);
@@ -382,13 +381,9 @@ public class TestDetailsModal : Modal
             contentTable.AddColumn(new TableColumn("Content").NoWrap().Width(renderWidth));
             RenderPhysicalLines(contentTable, physicalLines, visibleRows);
 
-            var footer = BuildFooter();
-
             var grid = new Grid();
             grid.AddColumn();
             grid.AddRow(contentTable);
-            grid.AddRow(new Rule { Style = new Style(Color.Grey) });
-            grid.AddRow(footer);
 
             return new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
             {
@@ -408,15 +403,6 @@ public class TestDetailsModal : Modal
         var color = TestDetailsTab.GetStatusColor(_node.Status);
         var visual = _isVisualMode ? " [dim](visual)[/]" : "";
         return $"[{color}]{icon}[/] {Markup.Escape(_node.Name)}{visual}";
-    }
-
-    private IRenderable BuildFooter()
-    {
-        var hasError = _node.Status == TestStatus.Failed;
-        var copy = hasError ? "[bold]y[/] line · [bold]Y[/] report · [bold]c[/] error+stack" : "[bold]y[/] line · [bold]Y[/] report";
-        var edit = _node.FilePath != null && _editorService != null ? " · [bold]e[/] edit" : "";
-        var visual = _isVisualMode ? "[yellow]v[/] exit range" : "[bold]v[/] range";
-        return new Markup($"[dim]{copy} · {visual} · g/G top/bot · esc close{edit}[/]");
     }
 
     private void MaybeAutoJumpToFailure(List<DetailLine> lines)
