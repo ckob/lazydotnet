@@ -47,8 +47,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  cli-smoke:
+    name: CLI Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # MinVer needs full history to compute the package version
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Pack tool
+        run: dotnet pack src/lazydotnet.csproj -c Release -o ./pkg
+      # Install from the local feed only (--add-source ./pkg with the exact packed version) so the
+      # smoke exercises THIS build's binary, never a fallback to the published NuGet package.
+      - name: Install tool from local package
+        shell: bash
+        run: |
+          pkg=$(ls ./pkg/lazydotnet.*.nupkg | head -1)
+          ver=$(basename "$pkg" .nupkg); ver=${ver#lazydotnet.}
+          echo "Installing lazydotnet $ver from local feed"
+          dotnet tool install --tool-path ./_tools --add-source ./pkg --version "$ver" lazydotnet
+      - name: CLI smoke
+        shell: bash
+        run: bash scripts/smoke/cli-smoke.sh ./_tools/lazydotnet
+
   publish:
-    needs: test
+    needs: [test, cli-smoke]
     if: startsWith(github.ref, 'refs/tags/cli-')
     runs-on: ubuntu-latest
     permissions:

@@ -491,3 +491,7 @@ result-*
 
 # Verify snapshot churn
 *.received.*
+
+# CLI smoke scratch (local package feed + tool install)
+/pkg/
+/_tools/
