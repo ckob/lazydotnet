@@ -43,8 +43,10 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
     private CancellationTokenSource? _discoveryCts;
     private readonly List<TestOutputLine> _runOutput = [];
     private readonly Lock _runOutputLock = new();
-    private TestRunProgress? _lastRunProgress;
-    private TestRunCompleted? _lastRunCompleted;
+    private readonly Dictionary<string, TestRunProgress> _progressBySource = [];
+    private readonly Dictionary<string, TestRunCompleted> _completedBySource = [];
+    private readonly HashSet<string> _startedSources = [];
+    private int _expectedTotal;
     private int _runOutputVersion;
 
 
@@ -275,7 +277,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
     {
         lock (_runOutputLock)
         {
-            return new TestRunOutputSnapshot([.. _runOutput], _lastRunProgress, _lastRunCompleted, _runOutputVersion);
+            return new TestRunOutputSnapshot([.. _runOutput], BuildAggregateProgress(), BuildAggregateCompleted(), _runOutputVersion);
         }
     }
 
@@ -619,8 +621,10 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
         lock (_runOutputLock)
         {
             _runOutput.Clear();
-            _lastRunCompleted = null;
-            _lastRunProgress = new TestRunProgress("", 0, 0, 0, 0, total);
+            _progressBySource.Clear();
+            _completedBySource.Clear();
+            _startedSources.Clear();
+            _expectedTotal = total;
             _runOutputVersion++;
         }
     }
@@ -632,6 +636,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
             switch (evt)
             {
                 case TestRunStarted started:
+                    _startedSources.Add(started.Source);
                     _runOutput.Add(new TestOutputLine($"Session started for {Path.GetFileName(started.Source)}", "dim"));
                     _runOutputVersion++;
                     break;
@@ -640,18 +645,29 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
                     _runOutputVersion++;
                     break;
                 case TestRunProgress progress:
-                    _lastRunProgress = progress;
-                    _statusMessage = $"Running tests: {progress.Completed}/{progress.Total} completed, {progress.Passed} passed, {progress.Failed} failed";
+                    _progressBySource[progress.Source] = progress;
+                    var agg = BuildAggregateProgress();
+                    if (agg != null)
+                    {
+                        _statusMessage = $"Running tests: {agg.Completed}/{agg.Total} completed, {agg.Passed} passed, {agg.Failed} failed";
+                    }
                     _runOutputVersion++;
                     break;
                 case TestRunCompleted completed:
-                    _lastRunCompleted = completed;
+                    _completedBySource[completed.Source] = completed;
                     _runOutputVersion++;
                     break;
             }
         }
         RequestRefresh?.Invoke();
     }
+
+    // Aggregates the whole multi-source run. Callers must hold _runOutputLock.
+    private TestRunProgress? BuildAggregateProgress() =>
+        TestRunAggregator.AggregateProgress(_progressBySource.Values, _expectedTotal);
+
+    private TestRunCompleted? BuildAggregateCompleted() =>
+        TestRunAggregator.AggregateCompleted(_completedBySource.Values, _startedSources.Count);
 
     private static string? GetOutputStyle(TestOutputSection section) => section switch
     {

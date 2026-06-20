@@ -2,7 +2,6 @@ using lazydotnet.Core;
 using lazydotnet.Services;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using TextCopy;
 
 namespace lazydotnet.UI.Components;
 
@@ -333,18 +332,8 @@ public class TestDetailsModal : Modal
         }
     }
 
-    private static void CopyToClipboard(string text, string successMessage)
-    {
-        try
-        {
-            ClipboardService.SetText(Markup.Remove(text));
-            Notification.Show(successMessage);
-        }
-        catch (Exception ex)
-        {
-            Notification.Show($"Clipboard failed: {ex.Message}", NotificationType.Error);
-        }
-    }
+    private static void CopyToClipboard(string text, string successMessage) =>
+        Clipboard.Copy(Markup.Remove(text), successMessage);
 
     private (int start, int end) OrderedSelection()
     {

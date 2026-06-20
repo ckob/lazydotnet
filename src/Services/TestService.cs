@@ -736,35 +736,48 @@ public static class TestService
         RunRequestNode[] filter,
         CancellationTokenSource timeoutCts)
     {
-        try
+        var source = filter.FirstOrDefault()?.Source ?? "";
+        var counters = new TestRunCounters(filter.Length);
+
+        // Single channel merges live logs (OnLog) with test results so log lines
+        // surface immediately instead of being buffered until the next result.
+        var channel = Channel.CreateUnbounded<TestRunEvent>();
+        client.OnLog = message => channel.Writer.TryWrite(new TestRunOutput(source, message));
+
+        var pump = Task.Run(async () =>
         {
-            var source = filter.FirstOrDefault()?.Source ?? "";
-            var counters = new TestRunCounters(filter.Length);
-            yield return new TestRunStarted(source, filter.Length);
-
-            client.OnLog = message => counters.Output.Writer.TryWrite(new TestRunOutput(source, message));
-
-            await foreach (var result in client.RunTestsAsync(filter, timeoutCts.Token))
+            try
             {
-                while (counters.Output.Reader.TryRead(out var output))
+                await foreach (var result in client.RunTestsAsync(filter, timeoutCts.Token))
                 {
-                    yield return output;
+                    counters.Apply(result);
+                    channel.Writer.TryWrite(new TestRunTestResult(source, result));
+                    channel.Writer.TryWrite(counters.ToProgress(source));
                 }
 
-                counters.Apply(result);
-                yield return new TestRunTestResult(source, result);
-                yield return counters.ToProgress(source);
+                channel.Writer.TryWrite(counters.ToCompleted(source));
+                channel.Writer.TryComplete();
             }
-
-            while (counters.Output.Reader.TryRead(out var output))
+            catch (Exception ex)
             {
-                yield return output;
+                channel.Writer.TryComplete(ex);
+            }
+        });
+
+        try
+        {
+            yield return new TestRunStarted(source, filter.Length);
+
+            await foreach (var evt in channel.Reader.ReadAllAsync())
+            {
+                yield return evt;
             }
 
-            yield return counters.ToCompleted(source);
+            await pump;
         }
         finally
         {
+            client.OnLog = null;
             await client.DisposeAsync();
             timeoutCts.Dispose();
         }
@@ -916,8 +929,6 @@ public static class TestService
         private int _passed;
         private int _failed;
         private int _skipped;
-
-        public Channel<TestRunOutput> Output { get; } = Channel.CreateUnbounded<TestRunOutput>();
 
         public void Apply(TestRunResult result)
         {

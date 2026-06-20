@@ -2,7 +2,6 @@ using lazydotnet.Core;
 using lazydotnet.Services;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using TextCopy;
 
 namespace lazydotnet.UI.Components;
 
@@ -123,15 +122,8 @@ public sealed class TestRunOutputModal(
 
     private void CopyAll()
     {
-        try
-        {
-            ClipboardService.SetText(string.Join(Environment.NewLine, BuildLines(snapshotProvider()).Select(l => l.Text)));
-            Notification.Show("Run output copied");
-        }
-        catch (Exception ex)
-        {
-            Notification.Show($"Clipboard failed: {ex.Message}", NotificationType.Error);
-        }
+        var text = string.Join(Environment.NewLine, BuildLines(snapshotProvider()).Select(l => l.Text));
+        Clipboard.Copy(text, "Run output copied");
     }
 
     private static List<TestOutputLine> BuildLines(TestRunOutputSnapshot snapshot)
