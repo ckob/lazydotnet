@@ -39,13 +39,7 @@ project, regenerate the NuGet lockfile so Nix can fetch packages in offline
 sandbox mode:
 
 ```bash
-nix run .#fetch-deps
-```
-
-The script writes the updated lockfile to a temp path; copy it back:
-
-```bash
-cp /tmp/lazydotnet-deps.json nix/deps.json
+nix run .#fetch-deps -- nix/deps.json
 ```
 
 Then commit `nix/deps.json`.
