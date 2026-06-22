@@ -34,8 +34,22 @@ nix profile install github:ckob/lazydotnet
 nix run github:ckob/lazydotnet
 ```
 
-See [`nix/README.md`](nix/README.md) for the dev shell and for regenerating
-`deps.json` after changing NuGet references.
+To add as a flake input in your NixOS or home-manager configuration:
+
+```nix
+# flake.nix
+inputs.lazydotnet.url = "github:ckob/lazydotnet";
+```
+
+```nix
+# home-manager module
+home.packages = [
+  inputs.lazydotnet.packages.${pkgs.stdenv.hostPlatform.system}.lazydotnet
+];
+```
+
+See [`nix/README.md`](nix/README.md) for full details including the dev shell,
+regenerating `deps.json`, and notes on runtime behaviour.
 
 ### Optional Dependencies
 
