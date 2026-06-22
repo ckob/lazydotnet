@@ -21,6 +21,14 @@
           if pkgs.dotnetCorePackages ? runtime_10_0
           then pkgs.dotnetCorePackages.runtime_10_0
           else pkgs.dotnetCorePackages.runtime_9_0;
+
+        # lazydotnet uses Microsoft.Build.Locator at runtime to discover and
+        # parse .NET solutions, which requires a full SDK installation.
+        # The combined package includes both the SDK and runtime.
+        dotnet-combined = pkgs.dotnetCorePackages.combinePackages [
+          dotnet-sdk
+          dotnet-runtime
+        ];
       in
       rec {
         packages.lazydotnet = pkgs.buildDotnetModule {
@@ -35,7 +43,8 @@
           # Regenerate via: nix run .#fetch-deps
           nugetDeps = ./nix/deps.json;
 
-          inherit dotnet-sdk dotnet-runtime;
+          inherit dotnet-sdk;
+          dotnet-runtime = dotnet-combined;
 
           # git is required by MinVer to determine the version from tags
           nativeBuildInputs = [ pkgs.git ];
