@@ -39,13 +39,7 @@ project, regenerate the NuGet lockfile so Nix can fetch packages in offline
 sandbox mode:
 
 ```bash
-nix run .#packages.$(nix eval --raw --impure --expr builtins.currentSystem).lazydotnet.fetch-deps
-```
-
-Or simpler, on most systems:
-
-```bash
-nix run '.#lazydotnet.fetch-deps'
+nix run .#fetch-deps
 ```
 
 The script writes the updated lockfile to a temp path; copy it back:

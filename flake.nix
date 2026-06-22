@@ -32,10 +32,13 @@
           projectFile = "src/lazydotnet.csproj";
           testProjectFile = "tests/lazydotnet.UnitTests/lazydotnet.UnitTests.csproj";
 
-          # Regenerate via: nix run .#packages.${system}.lazydotnet.fetch-deps
+          # Regenerate via: nix run .#fetch-deps
           nugetDeps = ./nix/deps.json;
 
           inherit dotnet-sdk dotnet-runtime;
+
+          # git is required by MinVer to determine the version from tags
+          nativeBuildInputs = [ pkgs.git ];
 
           executables = [ "lazydotnet" ];
 
@@ -59,6 +62,11 @@
           name = "lazydotnet";
         };
         apps.default = apps.lazydotnet;
+
+        apps.fetch-deps = {
+          type = "app";
+          program = "${packages.lazydotnet.fetch-deps}";
+        };
 
         devShells.default = pkgs.mkShell {
           packages = [
