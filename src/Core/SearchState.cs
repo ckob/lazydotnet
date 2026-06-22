@@ -179,8 +179,8 @@ public class SearchState
 
         // Navigation mode
         if (state.MatchIndices.Count == 0)
-            return $"Search: No matches for '{Markup.Escape(state.Query)}' [dim]esc: Exit[/]";
+            return $"Search: No matches for '{Markup.Escape(state.Query)}' [grey]esc: Exit[/]";
 
-        return $"Search: matches for '{Markup.Escape(state.Query)}' ({state.CurrentMatchIndex + 1} of {state.MatchIndices.Count}) [blue]n[/]: Next, [blue]N[/]: Previous, [dim]esc[/]: Exit";
+        return $"Search: matches for '{Markup.Escape(state.Query)}' ({state.CurrentMatchIndex + 1} of {state.MatchIndices.Count}) [blue]n[/]: Next, [blue]N[/]: Previous, [grey]esc[/]: Exit";
     }
 }

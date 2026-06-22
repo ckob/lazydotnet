@@ -77,7 +77,7 @@ public class AppLayout
         var isActive = ActivePanel == 1;
         var header = isActive
             ? "[green][[1]][/]-[green]Workspace[/]"
-            : "[dim][[1]][/]-[green]Workspace[/]";
+            : "[grey][[1]][/]-[green]Workspace[/]";
         var panel = new Panel(renderable)
             .Header(header)
             .Border(BoxBorder.Rounded)
@@ -93,7 +93,7 @@ public class AppLayout
         var isActive = ActivePanel == 2;
         var header = isActive
             ? "[green][[2]][/]-[green]Explorer[/]"
-            : "[dim][[2]][/]-[green]Explorer[/]";
+            : "[grey][[2]][/]-[green]Explorer[/]";
         var panel = new Panel(renderable)
             .Header(header)
             .Border(BoxBorder.Rounded)
@@ -107,7 +107,7 @@ public class AppLayout
     public void UpdateRight(IRenderable renderable, string headerText)
     {
         var isActive = ActivePanel == 0;
-        var header = isActive ? $"[green][[0]][/]-{headerText}" : $"[dim][[0]][/]-{headerText}";
+        var header = isActive ? $"[green][[0]][/]-{headerText}" : $"[grey][[0]][/]-{headerText}";
 
         var panel = new Panel(renderable)
             .Header(header)
@@ -140,7 +140,7 @@ public class AppLayout
 
         var header = isActive
             ? $"[green][[3]][/]-{logTab}"
-            : $"[dim][[3]][/]-{logTab}";
+            : $"[grey][[3]][/]-{logTab}";
 
         var content = LogViewer.GetContent(height - 2, width, isActive);
 
@@ -177,7 +177,7 @@ public class AppLayout
         }
 
         var segments = footerBindings.Select(b => $"{Markup.Escape(b.Description)}: [blue]{Markup.Escape(b.Label)}[/]");
-        var keybindingsText = " " + string.Join(" [dim]|[/] ", segments);
+        var keybindingsText = " " + string.Join(" [grey]|[/] ", segments);
 
         var consoleWidth = Console.WindowWidth;
         var visibleLength = Markup.Remove(keybindingsText).Length;

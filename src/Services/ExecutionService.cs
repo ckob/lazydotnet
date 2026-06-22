@@ -107,7 +107,7 @@ public class ExecutionService
                     .WithValidation(CommandResultValidation.None)
                     .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
                     {
-                        state.AddLog($"[dim]{Markup.Escape(line)}[/]");
+                        state.AddLog($"[grey]{Markup.Escape(line)}[/]");
                     }))
                     .WithStandardErrorPipe(PipeTarget.ToDelegate(line =>
                     {

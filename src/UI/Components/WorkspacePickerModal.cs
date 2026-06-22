@@ -111,7 +111,7 @@ public class WorkspacePickerModal : Modal
         if (_workspaceList.Count == 0)
         {
             var grid = new Grid().AddColumn();
-            grid.AddRow(new Markup("[dim]No workspaces found.[/]"));
+            grid.AddRow(new Markup("[grey]No workspaces found.[/]"));
             return CreatePanel(grid);
         }
 
@@ -166,7 +166,7 @@ public class WorkspacePickerModal : Modal
         };
 
         var nameMarkup = Markup.Escape(name);
-        var pathMarkup = $"[dim]{Markup.Escape(displayPath)}[/]";
+        var pathMarkup = $"[grey]{Markup.Escape(displayPath)}[/]";
 
         if (isSelected)
         {

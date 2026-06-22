@@ -373,9 +373,9 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
                         TestFilter.Running => "running",
                         _ => "" // Should not happen
                     };
-                    return new Markup($"[dim]No {filterName} tests found.[/]");
+                    return new Markup($"[grey]No {filterName} tests found.[/]");
                 }
-                return new Markup(_statusMessage ?? "[dim]No tests available.[/]");
+                return new Markup(_statusMessage ?? "[grey]No tests available.[/]");
             }
 
             var treeGrid = new Grid();
@@ -428,7 +428,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
 
         if (testCountSuffix.Length > 0)
         {
-            displayName += $" [dim]{Markup.Escape(testCountSuffix)}[/]";
+            displayName += $" [grey]{Markup.Escape(testCountSuffix)}[/]";
         }
 
         if (isSelected && isActive)
@@ -454,7 +454,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
         TestStatus.Passed => "green",
         TestStatus.Failed => "red",
         TestStatus.Running => "yellow",
-        _ => "dim"
+        _ => "grey"
     };
 
     public static string GetStatusIcon(TestStatus status) => status switch
@@ -639,7 +639,8 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
             targetNode.Output.Clear();
             if (res.DisplayName != null && res.DisplayName != targetNode.FullName)
             {
-                targetNode.Output.Add(new TestOutputLine($"Run name: {res.DisplayName}", "dim"));
+                targetNode.Output.Add(new TestOutputLine($"Run name: {res.DisplayName}", "grey"));
+                targetNode.Output.Add(new TestOutputLine(""));
             }
 
             foreach (var err in res.ErrorMessage)
@@ -649,7 +650,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
 
             foreach (var line in stackTrace)
             {
-                targetNode.Output.Add(new TestOutputLine(line, "dim", TestOutputSection.Stack));
+                targetNode.Output.Add(new TestOutputLine(line, "grey", TestOutputSection.Stack));
             }
             foreach (var line in stdOut)
             {

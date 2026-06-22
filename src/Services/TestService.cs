@@ -190,13 +190,13 @@ public static class TestService
             return [];
         }
 
-        AppCli.Log($"[dim]Using VSTest: {vstestPath}[/]");
+        AppCli.Log($"[grey]Using VSTest: {vstestPath}[/]");
         var wrapper = new VsTestConsoleWrapper(vstestPath);
         var handler = new DiscoveryHandler();
 
         try
         {
-            AppCli.Log($"[dim]Discovering tests for {targetPaths.Count} projects...[/]");
+            AppCli.Log($"[grey]Discovering tests for {targetPaths.Count} projects...[/]");
 
             return await Task.Run(() =>
             {

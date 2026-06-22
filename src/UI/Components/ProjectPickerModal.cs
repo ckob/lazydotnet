@@ -64,7 +64,7 @@ public class ProjectPickerModal : Modal
 
         if (_projectList.Count == 0)
         {
-            grid.AddRow(new Markup("[dim]No projects available.[/]"));
+            grid.AddRow(new Markup("[grey]No projects available.[/]"));
         }
         else
         {
@@ -120,7 +120,7 @@ public class ProjectPickerModal : Modal
 
         var content = string.IsNullOrWhiteSpace(path)
             ? Markup.Escape(name)
-            : $"{Markup.Escape(name)} [dim]{Markup.Escape(path)}[/]";
+            : $"{Markup.Escape(name)} [grey]{Markup.Escape(path)}[/]";
         return new Markup($"{content}{padding}");
     }
 

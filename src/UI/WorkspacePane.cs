@@ -35,7 +35,7 @@ public class WorkspacePane(SolutionService solutionService, string rootDir) : IK
     public IRenderable GetContent(bool isActive)
     {
         var current = solutionService.CurrentSolution;
-        if (current == null) return new Markup("[dim]No workspace selected[/]");
+        if (current == null) return new Markup("[grey]No workspace selected[/]");
 
         string icon;
         if (current.IsSlnx) icon = "[dodgerblue1]SLNX[/]";

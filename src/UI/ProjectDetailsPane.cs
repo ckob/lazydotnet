@@ -200,7 +200,7 @@ public class ProjectDetailsPane : IKeyBindable, ISearchable
         for (var i = 0; i < _tabInstances.Count; i++)
         {
             var title = _tabInstances[i].Title;
-            headers.Add(i == _tabs.ActiveTab ? $"[green]{Markup.Escape(title)}[/]" : $"[dim]{Markup.Escape(title)}[/]");
+            headers.Add(i == _tabs.ActiveTab ? $"[green]{Markup.Escape(title)}[/]" : $"[grey]{Markup.Escape(title)}[/]");
         }
 
         return string.Join(" - ", headers);

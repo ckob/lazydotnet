@@ -115,7 +115,7 @@ public class TestDetailsModal : Modal
         var stdoutLines = output.Where(o => o.Section == TestOutputSection.Stdout).ToList();
 
         AppendOutputSection(lines, errorLines, SectionKind.Failure, "Failure", "red");
-        AppendOutputSection(lines, stackLines, SectionKind.Stack, "Stack Trace", "dim");
+        AppendOutputSection(lines, stackLines, SectionKind.Stack, "Stack Trace", "grey");
         AppendOutputSection(lines, stdoutLines, SectionKind.Stdout, "Output", null);
 
         if (errorLines.Count == 0 && stackLines.Count == 0 && stdoutLines.Count == 0 && _node.IsTest)
@@ -169,7 +169,7 @@ public class TestDetailsModal : Modal
         TestStatus.Passed => ("Test passed successfully.", "green"),
         TestStatus.Failed => ("Test failed but no output was captured.", "red"),
         TestStatus.Running => ("Test is currently running...", "yellow"),
-        _ => ("Test has not been run yet.", "dim")
+        _ => ("Test has not been run yet.", "grey")
     };
 
     private static void AppendSectionHeader(List<DetailLine> lines, SectionKind section, string title)

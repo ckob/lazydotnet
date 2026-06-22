@@ -144,7 +144,7 @@ public class NuGetVersionSelectionModal : Modal
             if (_versionList.SelectedItem != null)
             {
                 var selectedVersion = _versionList.SelectedItem;
-                _logAction?.Invoke($"[dim]Selected version {selectedVersion} for {_packageId}[/]");
+                _logAction?.Invoke($"[grey]Selected version {selectedVersion} for {_packageId}[/]");
                 OnClose();
                 await _onSelected(selectedVersion);
             }
@@ -180,7 +180,7 @@ public class NuGetVersionSelectionModal : Modal
         }
         else if (_versionList.Count == 0)
         {
-            grid.AddRow(new Markup("[dim]No versions available.[/]"));
+            grid.AddRow(new Markup("[grey]No versions available.[/]"));
         }
         else
         {
@@ -209,7 +209,7 @@ public class NuGetVersionSelectionModal : Modal
         var indicator = _versionList.GetScrollIndicator(visibleRows);
         if (indicator != null)
         {
-            grid.AddRow(new Markup($"[dim]{indicator}[/]"));
+            grid.AddRow(new Markup($"[grey]{indicator}[/]"));
         }
     }
 

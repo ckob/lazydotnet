@@ -228,7 +228,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
         if (_refsList.Count == 0)
         {
-            grid.AddRow(new Markup("[dim]No project references found.[/]"));
+            grid.AddRow(new Markup("[grey]No project references found.[/]"));
             return grid;
         }
 
@@ -254,12 +254,12 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
             {
                 grid.AddRow(isActive
                     ? new Markup(
-                        $"  [black on blue]→ {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/][/]")
-                    : new Markup($"  [green]→[/] {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/]"));
+                        $"  [black on blue]→ {Markup.Escape(refName)} [grey]{Markup.Escape(pathMarkup)}[/][/]")
+                    : new Markup($"  [green]→[/] {Markup.Escape(refName)} [grey]{Markup.Escape(pathMarkup)}[/]"));
             }
             else
             {
-                grid.AddRow(new Markup($"  [green]→[/] {Markup.Escape(refName)} [dim]{Markup.Escape(pathMarkup)}[/]"));
+                grid.AddRow(new Markup($"  [green]→[/] {Markup.Escape(refName)} [grey]{Markup.Escape(pathMarkup)}[/]"));
             }
         }
     }

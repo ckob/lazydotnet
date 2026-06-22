@@ -647,7 +647,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
 
             if (_currentProjectPath == null)
             {
-                grid.AddRow(new Markup("[dim]Select a project...[/]"));
+                grid.AddRow(new Markup("[grey]Select a project...[/]"));
                 return grid;
             }
 
@@ -678,7 +678,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
     {
         if (_nugetList.Count == 0)
         {
-            grid.AddRow(new Markup("[dim]No packages found.[/]"));
+            grid.AddRow(new Markup("[grey]No packages found.[/]"));
             return;
         }
 
@@ -694,7 +694,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         var indicator = _nugetList.GetScrollIndicator(visibleRows);
         if (indicator != null)
         {
-            grid.AddRow(new Markup($"[dim]{indicator}[/]"));
+            grid.AddRow(new Markup($"[grey]{indicator}[/]"));
         }
     }
 
@@ -757,7 +757,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
 
         if (!pkg.IsOutdated)
         {
-            return $"[dim]{Markup.Escape(pkg.ResolvedVersion)}[/]";
+            return $"[grey]{Markup.Escape(pkg.ResolvedVersion)}[/]";
         }
 
         return FormatColoredVersion(pkg.ResolvedVersion, pkg.LatestVersion!, pkg.GetUpdateType());

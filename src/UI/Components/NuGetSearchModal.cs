@@ -205,7 +205,7 @@ public class NuGetSearchModal : Modal
 
         var versionMarkup = isSelected
             ? new Markup($"[black on blue]{Markup.Escape(version)}[/]")
-            : new Markup($"[dim]{Markup.Escape(version)}[/]");
+            : new Markup($"[grey]{Markup.Escape(version)}[/]");
 
         table.AddRow(idMarkup, versionMarkup);
     }
@@ -251,7 +251,7 @@ public class NuGetSearchModal : Modal
             return new Markup($"[yellow]{Markup.Escape(_statusMessage)}[/]");
         }
 
-        return new Markup("[dim]Type to search packages...[/]");
+        return new Markup("[grey]Type to search packages...[/]");
     }
 
     public override IRenderable GetRenderable(int width, int height)

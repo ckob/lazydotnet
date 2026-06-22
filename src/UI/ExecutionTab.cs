@@ -201,7 +201,7 @@ public class ExecutionTab : IProjectTab
         {
             if (_currentProjectPath == null || _currentProjectName == null)
             {
-                return new Markup("[dim]Select a project to see execution logs.[/]");
+                return new Markup("[grey]Select a project to see execution logs.[/]");
             }
 
             var state = ExecutionService.Instance.GetOrCreateState(_currentProjectPath, _currentProjectName);
@@ -215,7 +215,7 @@ public class ExecutionTab : IProjectTab
                 ExecutionStatus.Building => "blue",
                 ExecutionStatus.Crashed => "red",
                 ExecutionStatus.Stopped => "yellow",
-                _ => "dim"
+                _ => "grey"
             };
 
             grid.AddRow(new Markup($"Status: [{statusColor}]{state.Status}[/]"));
