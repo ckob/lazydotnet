@@ -1,0 +1,48 @@
+name: Nix CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.csproj'
+      - '**/Directory.Build.props'
+      - '**/Directory.Packages.props'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/nix.yml'
+  pull_request:
+    paths:
+      - '**/*.csproj'
+      - '**/Directory.Build.props'
+      - '**/Directory.Packages.props'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/nix.yml'
+
+jobs:
+  nix-build-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Fetch Nix Dependencies
+        run: nix run .#fetch-deps -- nix/deps.json
+
+      - name: Auto-commit nix/deps.json
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(nix): auto-update nix/deps.json hashes"
+          file_pattern: "nix/deps.json"
+          
+      - name: Build Nix package
+        run: nix build .
