@@ -28,7 +28,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Resolve checkout ref
+      - name: Resolve Ref
         id: ref
         run: |
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
@@ -39,7 +39,7 @@ jobs:
             echo "ref=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -48,24 +48,24 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Enable Nix Cache
+      - name: Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v14
 
-      - name: Sync version from git tag
+      - name: Sync Version
         if: startsWith(github.ref, 'refs/tags/cli-')
         run: |
           VERSION="${GITHUB_REF_NAME#cli-}"
           sed -i "s/version = \".*\";/version = \"$VERSION\";/" flake.nix
 
-      - name: Fetch Nix Dependencies
+      - name: Fetch Dependencies
         run: nix run .#fetch-deps -- nix/deps.json
 
-      - name: Auto-commit changes
+      - name: Commit Changes
         if: github.event_name == 'push'
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(nix): auto-update nix/deps.json hashes"
           file_pattern: "flake.nix nix/deps.json"
 
-      - name: Build Nix package
+      - name: Build
         run: nix build .
