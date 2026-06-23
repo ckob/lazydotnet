@@ -113,7 +113,7 @@ public sealed class DefaultCommand(IOptions<LazydotnetSettings> options) : Async
 
         var explorer = new SolutionExplorer(editorService);
 
-        var dashboard = new DashboardScreen(explorer, detailsPane, layout, solutionService, rootDir, solutionFile);
+        var dashboard = new DashboardScreen(explorer, detailsPane, layout, solutionService, _options, rootDir, solutionFile);
         explorer.OnSearchRequested += dashboard.StartSearch;
         detailsPane.OnSearchRequested += dashboard.StartSearch;
         layout.SetLogViewerSearchCallback(dashboard.StartSearch);

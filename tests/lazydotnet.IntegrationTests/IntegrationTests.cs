@@ -21,7 +21,7 @@ public sealed class IntegrationTests : IDisposable
         if (!File.Exists(projectPath))
             projectPath = Path.Combine(_testDir, fixtureName, $"{fixtureName}.fsproj");
 
-        await CommandService.BuildProjectAsync(projectPath, _ => { }, TestContext.Current.CancellationToken);
+        await CommandService.BuildProjectAsync(projectPath, "", _ => { }, TestContext.Current.CancellationToken);
     }
 
     [Fact]

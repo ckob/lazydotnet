@@ -12,6 +12,14 @@
         }
       ]
     },
+    "Commands": {
+      "description": "Settings related to commands executed by lazydotnet.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/CommandsSettings"
+        }
+      ]
+    },
     "$schema": {
       "type": "string",
       "description": "The JSON schema reference."
@@ -101,6 +109,30 @@
           "description": "The 0-based position of the tab. Tabs are sorted by this value in ascending order.",
           "format": "int32",
           "default": 3
+        }
+      }
+    },
+    "CommandsSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Build": {
+          "description": "Settings related to the 'dotnet build' command.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/BuildSettings"
+            }
+          ]
+        }
+      }
+    },
+    "BuildSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Arguments": {
+          "type": "string",
+          "description": "Arguments to append to the 'dotnet build' command."
         }
       }
     }

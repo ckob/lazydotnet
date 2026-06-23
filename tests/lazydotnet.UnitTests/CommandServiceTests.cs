@@ -18,7 +18,7 @@ public class CommandServiceTests
         // BuildProjectAsync will fail but we want to see if it starts.
         try
         {
-            await CommandService.BuildProjectAsync("non-existent.csproj", _ => {}, ct);
+            await CommandService.BuildProjectAsync("non-existent.csproj", "", _ => {}, ct);
         }
         catch
         {

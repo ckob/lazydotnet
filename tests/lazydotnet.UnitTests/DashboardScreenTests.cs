@@ -16,7 +16,7 @@ public class DashboardScreenTests
         var options = Microsoft.Extensions.Options.Options.Create(new Core.Configuration.LazydotnetSettings());
         var detailsPane = new ProjectDetailsPane(solutionService, editorService, options);
         var layout = new AppLayout();
-        return new DashboardScreen(explorer, detailsPane, layout, solutionService, ".", null);
+        return new DashboardScreen(explorer, detailsPane, layout, solutionService, options, ".", null);
     }
 
     [Theory]
