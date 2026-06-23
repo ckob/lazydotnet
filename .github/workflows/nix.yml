@@ -11,6 +11,8 @@ on:
       - 'flake.nix'
       - 'flake.lock'
       - '.github/workflows/nix.yml'
+    tags:
+      - 'cli-*'
   pull_request:
     paths:
       - '**/*.csproj'
@@ -27,22 +29,32 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ startsWith(github.ref, 'refs/tags/') && 'main' || github.head_ref || github.ref_name }}
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: Enable Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Sync version from git tag
+        if: startsWith(github.ref, 'refs/tags/cli-')
+        run: |
+          VERSION="${GITHUB_REF_NAME#cli-}"
+          sed -i "s/version = \".*\";/version = \"$VERSION\";/" flake.nix
 
       - name: Fetch Nix Dependencies
         run: nix run .#fetch-deps -- nix/deps.json
 
-      - name: Auto-commit nix/deps.json
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Auto-commit changes
+        if: github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(nix): auto-update nix/deps.json hashes"
-          file_pattern: "nix/deps.json"
-          
+          file_pattern: "flake.nix nix/deps.json"
+
       - name: Build Nix package
         run: nix build .
