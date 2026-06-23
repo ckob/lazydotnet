@@ -6,71 +6,55 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-
-        # Prefer .NET 10 SDK if available in nixpkgs, fallback to 9
-        dotnet-sdk =
-          if pkgs.dotnetCorePackages ? sdk_10_0
-          then pkgs.dotnetCorePackages.sdk_10_0
-          else pkgs.dotnetCorePackages.sdk_9_0;
-
-        dotnet-runtime =
-          if pkgs.dotnetCorePackages ? runtime_10_0
-          then pkgs.dotnetCorePackages.runtime_10_0
-          else pkgs.dotnetCorePackages.runtime_9_0;
+        dotnet-sdk = pkgs.dotnetCorePackages.sdk_10_0;
+        dotnet-runtime = pkgs.dotnetCorePackages.runtime_10_0;
       in
       rec {
-        packages.lazydotnet = pkgs.buildDotnetModule {
-          pname = "lazydotnet";
-          version = "0.1.0";
-
-          src = ./.;
-
-          projectFile = "src/lazydotnet.csproj";
-          testProjectFile = "tests/lazydotnet.UnitTests/lazydotnet.UnitTests.csproj";
-
-          # Regenerate via: nix run .#fetch-deps
-          nugetDeps = ./nix/deps.json;
-
-          inherit dotnet-sdk dotnet-runtime;
-
-          # lazydotnet uses Microsoft.Build.Locator at runtime to discover SDKs.
-          # useDotnetFromEnv makes the wrapper prefer the dotnet on PATH (i.e.
-          # the system-installed SDK), falling back to dotnet-runtime if absent.
-          useDotnetFromEnv = true;
-
-          # git is required by MinVer to determine the version from tags
-          nativeBuildInputs = [ pkgs.git ];
-
-          executables = [ "lazydotnet" ];
-
-          # Skip integration tests at build time (require external test binaries)
-          doCheck = true;
-
-          meta = with pkgs.lib; {
-            description = "Terminal UI for .NET solutions, inspired by lazygit";
-            homepage = "https://github.com/ckob/lazydotnet";
-            license = licenses.mit;
-            mainProgram = "lazydotnet";
-            platforms = platforms.unix;
-            maintainers = [ ];
+        packages.lazydotnet =
+          let
+            version = "0.8.1";
+          in
+          pkgs.buildDotnetModule {
+            inherit version dotnet-sdk dotnet-runtime;
+            pname = "lazydotnet";
+            src = ./.;
+            projectFile = "src/lazydotnet.csproj";
+            testProjectFile = "tests/lazydotnet.UnitTests/lazydotnet.UnitTests.csproj";
+            nugetDeps = ./nix/deps.json;
+            useDotnetFromEnv = true;
+            dotnetBuildFlags = [ "/p:MinVerVersion=${version}" ];
+            executables = [ "lazydotnet" ];
+            meta = with pkgs.lib; {
+              description = "Terminal UI for .NET solutions, inspired by lazygit";
+              homepage = "https://github.com/ckob/lazydotnet";
+              license = licenses.mit;
+              mainProgram = "lazydotnet";
+              platforms = platforms.unix;
+            };
           };
-        };
 
         packages.default = packages.lazydotnet;
 
-        apps.lazydotnet = flake-utils.lib.mkApp {
-          drv = packages.lazydotnet;
-          name = "lazydotnet";
-        };
-        apps.default = apps.lazydotnet;
-
-        apps.fetch-deps = {
-          type = "app";
-          program = "${packages.lazydotnet.fetch-deps}";
+        apps = {
+          lazydotnet = flake-utils.lib.mkApp {
+            drv = packages.lazydotnet;
+            name = "lazydotnet";
+          };
+          default = apps.lazydotnet;
+          fetch-deps = {
+            type = "app";
+            program = "${packages.lazydotnet.fetch-deps}";
+          };
         };
 
         devShells.default = pkgs.mkShell {
@@ -87,5 +71,6 @@
         };
 
         formatter = pkgs.nixpkgs-fmt;
-      });
+      }
+    );
 }
