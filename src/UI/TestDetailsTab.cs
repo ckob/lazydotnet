@@ -637,7 +637,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
             {
                 case TestRunStarted started:
                     _startedSources.Add(started.Source);
-                    _runOutput.Add(new TestOutputLine($"Session started for {Path.GetFileName(started.Source)}", "dim"));
+                    _runOutput.Add(new TestOutputLine($"Session started for {Path.GetFileName(started.Source)}", "grey"));
                     _runOutputVersion++;
                     break;
                 case TestRunOutput output:
@@ -672,7 +672,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
     private static string? GetOutputStyle(TestOutputSection section) => section switch
     {
         TestOutputSection.Error => "red",
-        TestOutputSection.Stack => "dim",
+        TestOutputSection.Stack => "grey",
         _ => null
     };
 
@@ -730,7 +730,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
             targetNode.Output.Clear();
             if (res.DisplayName != null && res.DisplayName != targetNode.FullName)
             {
-                targetNode.Output.Add(new TestOutputLine($"Run name: {res.DisplayName}", "dim"));
+                targetNode.Output.Add(new TestOutputLine($"Run name: {res.DisplayName}", "grey"));
             }
 
             foreach (var err in res.ErrorMessage)
@@ -740,7 +740,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
 
             foreach (var line in stackTrace)
             {
-                targetNode.Output.Add(new TestOutputLine(line, "dim", TestOutputSection.Stack));
+                targetNode.Output.Add(new TestOutputLine(line, "grey", TestOutputSection.Stack));
             }
             foreach (var line in stdOut)
             {

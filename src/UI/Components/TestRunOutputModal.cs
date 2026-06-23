@@ -143,7 +143,7 @@ public sealed class TestRunOutputModal(
 
         if (lines.Count == 0)
         {
-            lines.Add(new TestOutputLine("No run output captured yet.", "dim"));
+            lines.Add(new TestOutputLine("No run output captured yet.", "grey"));
         }
         return lines;
     }

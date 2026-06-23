@@ -196,7 +196,7 @@ public class AppLayout
 
         foreach (var binding in bindings)
         {
-            var separator = parts.Count == 0 ? "" : " [dim]|[/] ";
+            var separator = parts.Count == 0 ? "" : " [grey]|[/] ";
             var separatorLength = parts.Count == 0 ? 0 : 3;
             var segment = $"{Markup.Escape(binding.Description)}: [blue]{Markup.Escape(binding.Label)}[/]";
             var segmentLength = $"{binding.Description}: {binding.Label}".Length;
@@ -205,7 +205,7 @@ public class AppLayout
             {
                 if (visibleLength + 2 <= maxVisibleLength)
                 {
-                    parts.Add($"{separator}[dim]…[/]");
+                    parts.Add($"{separator}[grey]…[/]");
                 }
                 break;
             }

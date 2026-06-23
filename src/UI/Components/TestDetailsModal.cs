@@ -114,9 +114,9 @@ public class TestDetailsModal : Modal
         var stdoutLines = output.Where(o => o.Section == TestOutputSection.Stdout).ToList();
         var infoLines = output.Where(o => o.Section == TestOutputSection.Generic).ToList();
 
-        AppendOutputSection(lines, infoLines, SectionKind.Info, "Info", "dim");
+        AppendOutputSection(lines, infoLines, SectionKind.Info, "Info", "grey");
         AppendOutputSection(lines, errorLines, SectionKind.Failure, "Failure", "red");
-        AppendOutputSection(lines, stackLines, SectionKind.Stack, "Stack Trace", "dim");
+        AppendOutputSection(lines, stackLines, SectionKind.Stack, "Stack Trace", "grey");
         AppendOutputSection(lines, stdoutLines, SectionKind.Stdout, "Output", null);
 
         if (infoLines.Count == 0 && errorLines.Count == 0 && stackLines.Count == 0 && stdoutLines.Count == 0 && _node.IsTest)
@@ -170,7 +170,7 @@ public class TestDetailsModal : Modal
         TestStatus.Passed => ("Test passed successfully.", "green"),
         TestStatus.Failed => ("Test failed but no output was captured.", "red"),
         TestStatus.Running => ("Test is currently running...", "yellow"),
-        _ => ("Test has not been run yet.", "dim")
+        _ => ("Test has not been run yet.", "grey")
     };
 
     private static void AppendSectionHeader(List<DetailLine> lines, SectionKind section, string title)
@@ -390,7 +390,7 @@ public class TestDetailsModal : Modal
     {
         var icon = TestDetailsTab.GetStatusIcon(_node.Status);
         var color = TestDetailsTab.GetStatusColor(_node.Status);
-        var visual = _isVisualMode ? " [dim](visual)[/]" : "";
+        var visual = _isVisualMode ? " [grey](visual)[/]" : "";
         return $"[{color}]{icon}[/] {Markup.Escape(_node.Name)}{visual}";
     }
 
