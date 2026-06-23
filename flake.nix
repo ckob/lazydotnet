@@ -15,45 +15,50 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
+        pname = "lazydotnet";
         pkgs = nixpkgs.legacyPackages.${system};
         dotnet-sdk = pkgs.dotnetCorePackages.sdk_10_0;
         dotnet-runtime = pkgs.dotnetCorePackages.runtime_10_0;
       in
       rec {
-        packages.lazydotnet =
+        packages.${pname} =
           let
             version = "0.8.1";
           in
           pkgs.buildDotnetModule {
-            inherit version dotnet-sdk dotnet-runtime;
-            pname = "lazydotnet";
+            inherit
+              pname
+              version
+              dotnet-sdk
+              dotnet-runtime
+              ;
             src = ./.;
-            projectFile = "src/lazydotnet.csproj";
-            testProjectFile = "tests/lazydotnet.UnitTests/lazydotnet.UnitTests.csproj";
+            projectFile = "src/${pname}.csproj";
+            testProjectFile = "tests/${pname}.UnitTests/${pname}.UnitTests.csproj";
             nugetDeps = ./nix/deps.json;
             useDotnetFromEnv = true;
             dotnetBuildFlags = [ "/p:MinVerVersion=${version}" ];
-            executables = [ "lazydotnet" ];
+            executables = [ pname ];
             meta = with pkgs.lib; {
               description = "Terminal UI for .NET solutions, inspired by lazygit";
-              homepage = "https://github.com/ckob/lazydotnet";
+              homepage = "https://github.com/ckob/${pname}";
               license = licenses.mit;
-              mainProgram = "lazydotnet";
+              mainProgram = pname;
               platforms = platforms.unix;
             };
           };
 
-        packages.default = packages.lazydotnet;
+        packages.default = packages.${pname};
 
         apps = {
-          lazydotnet = flake-utils.lib.mkApp {
-            drv = packages.lazydotnet;
-            name = "lazydotnet";
+          ${pname} = flake-utils.lib.mkApp {
+            drv = packages.${pname};
+            name = pname;
           };
-          default = apps.lazydotnet;
+          default = apps.${pname};
           fetch-deps = {
             type = "app";
-            program = "${packages.lazydotnet.fetch-deps}";
+            program = "${packages.${pname}.fetch-deps}";
           };
         };
 
