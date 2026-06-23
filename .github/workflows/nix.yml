@@ -28,11 +28,22 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Resolve checkout ref
+        id: ref
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "ref=main" >> $GITHUB_OUTPUT
+          elif [[ -n "${{ github.head_ref }}" ]]; then
+            echo "ref=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+          else
+            echo "ref=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ startsWith(github.ref, 'refs/tags/') && 'main' || github.head_ref || github.ref_name }}
+          ref: ${{ steps.ref.outputs.ref }}
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
