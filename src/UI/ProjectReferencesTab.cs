@@ -144,6 +144,7 @@ public class ProjectReferencesTab(SolutionService solutionService, IEditorServic
 
         var currentRefs = _refsList.Items.Select(Path.GetFullPath).ToList();
         var projects = solutionService.CurrentSolution.Projects
+            .Where(p => !p.IsSolutionFolder && !string.IsNullOrEmpty(p.Path))
             .Where(p => Path.GetFullPath(p.Path) != Path.GetFullPath(_currentProjectPath)
                      && !currentRefs.Contains(Path.GetFullPath(p.Path)))
             .OrderBy(p => p.Name)

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="SimpleApp/SimpleApp.csproj" />
+  </Folder>
+  <Folder Name="/src/Host/">
+    <Project Path="SimpleLibrary/SimpleLibrary.csproj" />
+  </Folder>
+</Solution>

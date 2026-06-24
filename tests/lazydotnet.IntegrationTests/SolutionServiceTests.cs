@@ -66,6 +66,31 @@ public sealed class SolutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task FindAndParseSolutionAsync_WithSlnxNestedFolders_ShouldReturnSolutionInfoWithProjects()
+    {
+        // Arrange
+        TestUtils.CopyFixture("SimpleLibrary", _testDir);
+        TestUtils.CopyFixture("SimpleApp", _testDir);
+        var slnxPath = TestUtils.CopyFixture("NestedFolderSolution.slnx", _testDir);
+
+        // Act
+        var result = await _service.FindAndParseSolutionAsync(slnxPath);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Projects.Should().HaveCount(4); // 2 projects + 2 folders
+
+        var folders = result.Projects.Where(p => p.IsSolutionFolder).ToList();
+        folders.Should().HaveCount(2);
+        folders.Select(f => f.Name).Should().Contain(["src", "Host"]);
+        folders.All(f => string.IsNullOrEmpty(f.Path)).Should().BeTrue();
+
+        var projects = result.Projects.Where(p => !p.IsSolutionFolder).ToList();
+        projects.Should().HaveCount(2);
+        projects.Select(p => p.Name).Should().Contain(["SimpleApp", "SimpleLibrary"]);
+    }
+
+    [Fact]
     public async Task DiscoverWorkspacesAsync_ShouldFindProjectsAndSolutions()
     {
         // Arrange
