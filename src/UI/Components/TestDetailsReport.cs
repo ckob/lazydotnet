@@ -32,6 +32,7 @@ public static class TestDetailsReport
         }
 
         var output = node.GetOutputSnapshot();
+        AppendSection(sb, "Info", output.Where(o => o.Section == TestOutputSection.Generic));
         AppendSection(sb, "Error", output.Where(o => o.Section == TestOutputSection.Error));
         AppendSection(sb, "Stack Trace", output.Where(o => o.Section == TestOutputSection.Stack));
         AppendSection(sb, "Output", output.Where(o => o.Section == TestOutputSection.Stdout));

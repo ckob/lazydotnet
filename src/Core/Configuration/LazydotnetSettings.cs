@@ -66,8 +66,25 @@ public record ExecutionTabSettings : ITabSettings
     public int Position { get; init; } = 3;
 }
 
+public record BuildSettings
+{
+    [Description("Arguments to append to the 'dotnet build' command.")]
+    public string Arguments { get; init; } = "--verbosity minimal";
+}
+
+public record CommandsSettings
+{
+    [Description("Settings related to the 'dotnet build' command.")]
+    public BuildSettings Build { get; init; } = new();
+}
+
+// REMINDER: If you modify any settings below, make sure to regenerate the schema using:
+// lazydotnet config --generate-schema
 public record LazydotnetSettings
 {
     [Description("Settings related to the details pane.")]
     public DetailsPaneSettings DetailsPane { get; init; } = new();
+
+    [Description("Settings related to commands executed by lazydotnet.")]
+    public CommandsSettings Commands { get; init; } = new();
 }

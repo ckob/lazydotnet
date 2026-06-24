@@ -10,6 +10,20 @@ https://github.com/user-attachments/assets/758228fc-582a-4820-9672-97bda2050562
 
 **Important:** This project does **not** include LSP (Language Server Protocol) functionality or debugging capabilities. It focuses on solution/project management and execution tasks.
 
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Features](#features)
+- [Keybindings](#keybindings)
+- [Configuration](#configuration)
+- [Integrations](#integrations)
+- [Acknowledgments](#acknowledgments)
+- [Alternatives](#alternatives)
+- [License](#license)
+- [Contributing](#contributing)
+
 ## Requirements
 
 - [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) or later
@@ -26,6 +40,14 @@ To update to the latest version:
 dotnet tool update --global lazydotnet
 ```
 
+### Optional Dependencies
+
+For the NuGet package update features (checking for outdated packages and updating all packages), install [dotnet-outdated](https://github.com/dotnet-outdated/dotnet-outdated):
+
+```bash
+dotnet tool install --global dotnet-outdated-tool
+```
+
 ### Nix (flake)
 
 ```bash
@@ -34,16 +56,22 @@ nix profile install github:ckob/lazydotnet
 nix run github:ckob/lazydotnet
 ```
 
-See [`nix/README.md`](nix/README.md) for the dev shell and for regenerating
-`deps.json` after changing NuGet references.
+To add as a flake input in your NixOS or home-manager configuration:
 
-### Optional Dependencies
-
-For the NuGet package update features (checking for outdated packages and updating all packages), install [dotnet-outdated](https://github.com/dotnet-outdated/dotnet-outdated):
-
-```bash
-dotnet tool install --global dotnet-outdated-tool
+```nix
+# flake.nix
+inputs.lazydotnet.url = "github:ckob/lazydotnet";
 ```
+
+```nix
+# home-manager module
+home.packages = [
+  inputs.lazydotnet.packages.${pkgs.stdenv.hostPlatform.system}.lazydotnet
+];
+```
+
+See [`nix/README.md`](nix/README.md) for full details including the dev shell,
+regenerating `deps.json`, and notes on runtime behaviour.
 
 ## Usage
 
@@ -329,7 +357,22 @@ export LAZYDOTNET_DETAILSPANE_TESTSTAB_ENABLED=true
 export LAZYDOTNET_DETAILSPANE_TESTSTAB_POSITION=0
 ```
 
-## Editor Integrations
+## Integrations
+
+### Neovim
+
+A companion plugin is available for Neovim: [lazydotnet.nvim](https://github.com/ckob/lazydotnet.nvim)
+
+> lazydotnet is not a replacement for a C# LSP. For full IDE features in Neovim, it is recommended to use it alongside an LSP provider plugin like [easy-dotnet.nvim](https://github.com/GustavEikaas/easy-dotnet.nvim).
+
+### VS Code
+
+lazydotnet is available as a published extension for Visual Studio Code and compatible editors.
+
+> lazydotnet is not a replacement for a C# LSP. For full IDE features in VS Code, it can be used alongside the official C# Dev Kit or an alternative like [DotRush](https://github.com/JaneySprings/DotRush).
+
+- [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=ckob.lazydotnet)
+- [Open VSX Registry](https://open-vsx.org/extension/ckob/lazydotnet)
 
 ### Zed Integration
 

@@ -38,6 +38,18 @@ public record TestRunResult(
     string? DisplayName = null
 );
 
+public abstract record TestRunEvent(string Source);
+
+public sealed record TestRunStarted(string Source, int RequestedCount) : TestRunEvent(Source);
+
+public sealed record TestRunOutput(string Source, string Text, TestOutputSection Section = TestOutputSection.Generic) : TestRunEvent(Source);
+
+public sealed record TestRunProgress(string Source, int Completed, int Passed, int Failed, int Skipped, int Total) : TestRunEvent(Source);
+
+public sealed record TestRunTestResult(string Source, TestRunResult Result) : TestRunEvent(Source);
+
+public sealed record TestRunCompleted(string Source, int Passed, int Failed, int Skipped, long? DurationMs) : TestRunEvent(Source);
+
 internal record ProjectMetadata(
     string ProjectPath,
     string? TargetPath,
@@ -628,19 +640,25 @@ public static class TestService
 
     public static async Task<IAsyncEnumerable<TestRunResult>> RunTestsAsync(string path, RunRequestNode[] filter)
     {
+        var events = await RunTestsWithEventsAsync(path, filter);
+        return ResultsOnly(events);
+    }
+
+    public static async Task<IAsyncEnumerable<TestRunEvent>> RunTestsWithEventsAsync(string path, RunRequestNode[] filter)
+    {
         var projects = GetRelevantProjects(path);
-        if (projects.Count == 0) return EmptyRun();
+        if (projects.Count == 0) return EmptyRun<TestRunEvent>();
 
         var vstestTests = filter.Where(f => !f.IsMtp).ToList();
         var mtpTests = filter.Where(f => f.IsMtp).ToList();
 
-        var resultChannels = new List<IAsyncEnumerable<TestRunResult>>();
+        var resultChannels = new List<IAsyncEnumerable<TestRunEvent>>();
 
         if (vstestTests.Count > 0)
         {
             foreach (var group in vstestTests.GroupBy(t => t.Source))
             {
-                resultChannels.Add(RunVsTests(group.Key, [.. group]));
+                resultChannels.Add(RunVsTestEvents(group.Key, [.. group]));
             }
         }
 
@@ -655,9 +673,20 @@ public static class TestService
         return MergeAsyncEnumerables(resultChannels);
     }
 
-    private static async IAsyncEnumerable<TestRunResult> MergeAsyncEnumerables(List<IAsyncEnumerable<TestRunResult>> sources)
+    private static async IAsyncEnumerable<TestRunResult> ResultsOnly(IAsyncEnumerable<TestRunEvent> events)
     {
-        var channel = Channel.CreateUnbounded<TestRunResult>();
+        await foreach (var evt in events)
+        {
+            if (evt is TestRunTestResult result)
+            {
+                yield return result.Result;
+            }
+        }
+    }
+
+    private static async IAsyncEnumerable<T> MergeAsyncEnumerables<T>(List<IAsyncEnumerable<T>> sources)
+    {
+        var channel = Channel.CreateUnbounded<T>();
         var tasks = sources.Select(async s =>
         {
             await foreach (var item in s)
@@ -687,7 +716,7 @@ public static class TestService
         }
     }
 
-    private static async Task<IAsyncEnumerable<TestRunResult>> RunMtpTestsAsync(string targetPath, RunRequestNode[] filter)
+    private static async Task<IAsyncEnumerable<TestRunEvent>> RunMtpTestsAsync(string targetPath, RunRequestNode[] filter)
     {
         try
         {
@@ -698,36 +727,69 @@ public static class TestService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AppCli.Log($"[red]MTP RPC run failed for {Markup.Escape(Path.GetFileName(targetPath))}: {Markup.Escape(ex.Message)}[/]");
-            return EmptyRun();
+            return EmptyRun<TestRunEvent>();
         }
     }
 
-    private static async IAsyncEnumerable<TestRunResult> RunMtpTestsAndDisposeAsync(
+    private static async IAsyncEnumerable<TestRunEvent> RunMtpTestsAndDisposeAsync(
         MtpClient client,
         RunRequestNode[] filter,
         CancellationTokenSource timeoutCts)
     {
+        var source = filter.FirstOrDefault()?.Source ?? "";
+        var counters = new TestRunCounters(filter.Length);
+
+        // Single channel merges live logs (OnLog) with test results so log lines
+        // surface immediately instead of being buffered until the next result.
+        var channel = Channel.CreateUnbounded<TestRunEvent>();
+        client.OnLog = message => channel.Writer.TryWrite(new TestRunOutput(source, message));
+
+        var pump = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var result in client.RunTestsAsync(filter, timeoutCts.Token))
+                {
+                    counters.Apply(result);
+                    channel.Writer.TryWrite(new TestRunTestResult(source, result));
+                    channel.Writer.TryWrite(counters.ToProgress(source));
+                }
+
+                channel.Writer.TryWrite(counters.ToCompleted(source));
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+            }
+        });
+
         try
         {
-            await foreach (var result in client.RunTestsAsync(filter, timeoutCts.Token))
+            yield return new TestRunStarted(source, filter.Length);
+
+            await foreach (var evt in channel.Reader.ReadAllAsync())
             {
-                yield return result;
+                yield return evt;
             }
+
+            await pump;
         }
         finally
         {
+            client.OnLog = null;
             await client.DisposeAsync();
             timeoutCts.Dispose();
         }
     }
 
-    private static IAsyncEnumerable<TestRunResult> RunVsTests(string targetPath, RunRequestNode[] filter)
+    private static IAsyncEnumerable<TestRunEvent> RunVsTestEvents(string targetPath, RunRequestNode[] filter)
     {
         var vstestPath = VsTestConsoleLocator.GetVsTestConsolePath();
-        if (vstestPath == null) return EmptyRun();
+        if (vstestPath == null) return EmptyRun<TestRunEvent>();
 
         var wrapper = new VsTestConsoleWrapper(vstestPath);
-        var handler = new RunHandler();
+        var handler = new RunHandler(targetPath, filter.Length);
 
         _ = Task.Run(async () =>
         {
@@ -772,7 +834,7 @@ public static class TestService
         wrapper.RunTests(testCases, null, options, handler);
     }
 
-    private static async IAsyncEnumerable<TestRunResult> EmptyRun()
+    private static async IAsyncEnumerable<T> EmptyRun<T>()
     {
         await Task.CompletedTask;
         yield break;
@@ -780,9 +842,18 @@ public static class TestService
 
     private sealed class RunHandler : ITestRunEventsHandler
     {
-        private readonly Channel<TestRunResult> _channel = Channel.CreateUnbounded<TestRunResult>();
+        private readonly Channel<TestRunEvent> _channel = Channel.CreateUnbounded<TestRunEvent>();
+        private readonly TestRunCounters _counters;
+        private readonly string _source;
 
-        public async IAsyncEnumerable<TestRunResult> GetResultsAsync([EnumeratorCancellation] CancellationToken ct = default)
+        public RunHandler(string source, int total)
+        {
+            _source = source;
+            _counters = new TestRunCounters(total);
+            _channel.Writer.TryWrite(new TestRunStarted(_source, total));
+        }
+
+        public async IAsyncEnumerable<TestRunEvent> GetResultsAsync([EnumeratorCancellation] CancellationToken ct = default)
         {
             while (await _channel.Reader.WaitToReadAsync(ct))
             {
@@ -799,7 +870,7 @@ public static class TestService
 
             foreach (var result in testRunChangedArgs.NewTestResults)
             {
-                _channel.Writer.TryWrite(new TestRunResult(
+                var testResult = new TestRunResult(
                     result.TestCase.Id.ToString(),
                     result.Outcome.ToString(),
                     (long?)result.Duration.TotalMilliseconds,
@@ -807,8 +878,13 @@ public static class TestService
                     result.ErrorMessage != null ? [result.ErrorMessage] : [],
                     ToAsyncEnumerable(GetStdOut(result)),
                     result.TestCase.DisplayName
-                ));
+                );
+
+                _counters.Apply(testResult);
+                _channel.Writer.TryWrite(new TestRunTestResult(_source, testResult));
             }
+
+            _channel.Writer.TryWrite(_counters.ToProgress(_source));
         }
 
         private static string? GetStdOut(TestResult result)
@@ -828,13 +904,51 @@ public static class TestService
         public void HandleTestRunComplete(TestRunCompleteEventArgs testRunCompleteArgs, TestRunChangedEventArgs? lastChunkArgs, ICollection<AttachmentSet>? runContextAttachments, ICollection<string>? executorUris)
         {
             if (lastChunkArgs != null) HandleTestRunStatsChange(lastChunkArgs);
+            _channel.Writer.TryWrite(_counters.ToCompleted(_source, (long?)testRunCompleteArgs.ElapsedTimeInRunningTests.TotalMilliseconds));
             _channel.Writer.TryComplete();
         }
 
         public void Fail(Exception ex) => _channel.Writer.TryComplete(ex);
 
-        public void HandleLogMessage(TestMessageLevel level, string? message) { }
+        public void HandleLogMessage(TestMessageLevel level, string? message)
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                var section = level == TestMessageLevel.Error ? TestOutputSection.Error : TestOutputSection.Generic;
+                _channel.Writer.TryWrite(new TestRunOutput(_source, message, section));
+            }
+        }
+
         public void HandleRawMessage(string rawMessage) { }
         public int LaunchProcessWithDebuggerAttached(TestProcessStartInfo testProcessStartInfo) => 0;
+    }
+
+    private sealed class TestRunCounters(int total)
+    {
+        private int _completed;
+        private int _passed;
+        private int _failed;
+        private int _skipped;
+
+        public void Apply(TestRunResult result)
+        {
+            _completed++;
+            switch (result.Outcome.ToLowerInvariant())
+            {
+                case "passed":
+                    _passed++;
+                    break;
+                case "failed":
+                    _failed++;
+                    break;
+                case "skipped":
+                    _skipped++;
+                    break;
+            }
+        }
+
+        public TestRunProgress ToProgress(string source) => new(source, _completed, _passed, _failed, _skipped, total);
+
+        public TestRunCompleted ToCompleted(string source, long? durationMs = null) => new(source, _passed, _failed, _skipped, durationMs);
     }
 }

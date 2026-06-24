@@ -2,7 +2,6 @@ using lazydotnet.Core;
 using lazydotnet.Services;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using TextCopy;
 
 namespace lazydotnet.UI.Components;
 
@@ -32,7 +31,7 @@ public class TestDetailsModal : Modal
         _editorService = editorService;
     }
 
-    private enum SectionKind { Test, Failure, Stack, Stdout }
+    private enum SectionKind { Test, Info, Failure, Stack, Stdout }
 
     private sealed record DetailLine(string Text, string? Style, SectionKind Section, bool IsHeader = false, bool Selectable = true);
 
@@ -113,12 +112,14 @@ public class TestDetailsModal : Modal
         var errorLines = output.Where(o => o.Section == TestOutputSection.Error).ToList();
         var stackLines = output.Where(o => o.Section == TestOutputSection.Stack).ToList();
         var stdoutLines = output.Where(o => o.Section == TestOutputSection.Stdout).ToList();
+        var infoLines = output.Where(o => o.Section == TestOutputSection.Generic).ToList();
 
+        AppendOutputSection(lines, infoLines, SectionKind.Info, "Info", "grey");
         AppendOutputSection(lines, errorLines, SectionKind.Failure, "Failure", "red");
         AppendOutputSection(lines, stackLines, SectionKind.Stack, "Stack Trace", "grey");
         AppendOutputSection(lines, stdoutLines, SectionKind.Stdout, "Output", null);
 
-        if (errorLines.Count == 0 && stackLines.Count == 0 && stdoutLines.Count == 0 && _node.IsTest)
+        if (infoLines.Count == 0 && errorLines.Count == 0 && stackLines.Count == 0 && stdoutLines.Count == 0 && _node.IsTest)
         {
             AppendBlank(lines, SectionKind.Test);
             var (msg, style) = StatusFallbackMessage(_node.Status);
@@ -331,18 +332,8 @@ public class TestDetailsModal : Modal
         }
     }
 
-    private static void CopyToClipboard(string text, string successMessage)
-    {
-        try
-        {
-            ClipboardService.SetText(Markup.Remove(text));
-            Notification.Show(successMessage);
-        }
-        catch (Exception ex)
-        {
-            Notification.Show($"Clipboard failed: {ex.Message}", NotificationType.Error);
-        }
-    }
+    private static void CopyToClipboard(string text, string successMessage) =>
+        Clipboard.Copy(Markup.Remove(text), successMessage);
 
     private (int start, int end) OrderedSelection()
     {
@@ -367,8 +358,7 @@ public class TestDetailsModal : Modal
             var modalWidth = width * 9 / 10;
             var modalHeight = height * 9 / 10;
             var renderWidth = Math.Max(10, modalWidth - 8);
-            var footerRows = 2;
-            var visibleRows = Math.Max(1, modalHeight - 4 - footerRows);
+            var visibleRows = Math.Max(1, modalHeight - 4);
 
             var lines = GetLines();
             MaybeAutoJumpToFailure(lines);
@@ -380,13 +370,9 @@ public class TestDetailsModal : Modal
             contentTable.AddColumn(new TableColumn("Content").NoWrap().Width(renderWidth));
             RenderPhysicalLines(contentTable, physicalLines, visibleRows);
 
-            var footer = BuildFooter();
-
             var grid = new Grid();
             grid.AddColumn();
             grid.AddRow(contentTable);
-            grid.AddRow(new Rule { Style = new Style(Color.Grey) });
-            grid.AddRow(footer);
 
             return new Panel(new Padder(grid, new Padding(2, 1, 2, 1)))
             {
@@ -404,17 +390,8 @@ public class TestDetailsModal : Modal
     {
         var icon = TestDetailsTab.GetStatusIcon(_node.Status);
         var color = TestDetailsTab.GetStatusColor(_node.Status);
-        var visual = _isVisualMode ? " [dim](visual)[/]" : "";
+        var visual = _isVisualMode ? " [grey](visual)[/]" : "";
         return $"[{color}]{icon}[/] {Markup.Escape(_node.Name)}{visual}";
-    }
-
-    private IRenderable BuildFooter()
-    {
-        var hasError = _node.Status == TestStatus.Failed;
-        var copy = hasError ? "[bold]y[/] line · [bold]Y[/] report · [bold]c[/] error+stack" : "[bold]y[/] line · [bold]Y[/] report";
-        var edit = _node.FilePath != null && _editorService != null ? " · [bold]e[/] edit" : "";
-        var visual = _isVisualMode ? "[yellow]v[/] exit range" : "[bold]v[/] range";
-        return new Markup($"[dim]{copy} · {visual} · g/G top/bot · esc close{edit}[/]");
     }
 
     private void MaybeAutoJumpToFailure(List<DetailLine> lines)

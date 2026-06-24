@@ -16,6 +16,25 @@ Or run without installing:
 nix run github:ckob/lazydotnet
 ```
 
+### As a flake input
+
+Add to your `flake.nix` inputs:
+
+```nix
+lazydotnet.url = "github:ckob/lazydotnet";
+```
+
+Then reference the package in your configuration:
+
+```nix
+home.packages = [
+  inputs.lazydotnet.packages.${pkgs.stdenv.hostPlatform.system}.lazydotnet
+];
+```
+
+The binary uses the `dotnet` SDK already on your `PATH` at runtime, so no
+additional .NET installation is required if you already have one configured.
+
 ### Local build
 
 ```bash
@@ -39,19 +58,7 @@ project, regenerate the NuGet lockfile so Nix can fetch packages in offline
 sandbox mode:
 
 ```bash
-nix run .#packages.$(nix eval --raw --impure --expr builtins.currentSystem).lazydotnet.fetch-deps
-```
-
-Or simpler, on most systems:
-
-```bash
-nix run '.#lazydotnet.fetch-deps'
-```
-
-The script writes the updated lockfile to a temp path; copy it back:
-
-```bash
-cp /tmp/lazydotnet-deps.json nix/deps.json
+nix run .#fetch-deps -- nix/deps.json
 ```
 
 Then commit `nix/deps.json`.
@@ -62,3 +69,6 @@ Then commit `nix/deps.json`.
   is not yet packaged in the channel you track.
 - The package is a global tool (`PackAsTool=true`). The flake outputs a single
   executable at `$out/bin/lazydotnet`.
+- `useDotnetFromEnv` is enabled so the wrapper resolves `DOTNET_ROOT` from the
+  `dotnet` binary on `PATH` at invocation time, falling back to the bundled
+  runtime if none is found.

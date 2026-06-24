@@ -3,6 +3,8 @@ using lazydotnet.Core;
 using lazydotnet.UI;
 using lazydotnet.UI.Components;
 using lazydotnet.Services;
+using lazydotnet.Core.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace lazydotnet.Screens;
 
@@ -21,6 +23,7 @@ public class DashboardScreen : IScreen
     private readonly SolutionService _solutionService;
     private readonly string _rootDir;
     private readonly string? _solutionFile;
+    private readonly IOptions<LazydotnetSettings> _options;
     private Modal? _activeModal;
 
     public DashboardScreen(
@@ -28,6 +31,7 @@ public class DashboardScreen : IScreen
         ProjectDetailsPane detailsPane,
         AppLayout layout,
         SolutionService solutionService,
+        IOptions<LazydotnetSettings> options,
         string rootDir,
         string? solutionFile)
     {
@@ -35,6 +39,7 @@ public class DashboardScreen : IScreen
         _detailsPane = detailsPane;
         _layout = layout;
         _solutionService = solutionService;
+        _options = options;
         _rootDir = rootDir;
         _solutionFile = solutionFile;
 
@@ -93,7 +98,7 @@ public class DashboardScreen : IScreen
             }
 
             _buildCts = new CancellationTokenSource();
-            var result = await CommandService.BuildProjectAsync(path,
+            var result = await CommandService.BuildProjectAsync(path, _options.Value.Commands.Build.Arguments,
                 msg => { _layout.AddLog(Markup.Escape(msg)); }, _buildCts.Token);
 
             _layout.AddLog(result.ExitCode == 0
@@ -135,7 +140,7 @@ public class DashboardScreen : IScreen
                 }
 
                 _buildCts = new CancellationTokenSource();
-                var result = await CommandService.BuildProjectAsync(project.Path,
+                var result = await CommandService.BuildProjectAsync(project.Path, _options.Value.Commands.Build.Arguments,
                     msg => { _layout.AddLog(Markup.Escape(msg)); }, _buildCts.Token);
 
                 _layout.AddLog(result.ExitCode == 0
@@ -383,9 +388,10 @@ public class DashboardScreen : IScreen
             _ => "Panel"
         };
 
-        if (_activeModal != null)
+        var previousModal = _activeModal;
+        if (previousModal != null)
         {
-            localBindings = _activeModal.GetKeyBindings().ToList();
+            localBindings = previousModal.GetKeyBindings().ToList();
             panelName = "Modal";
         }
 
@@ -410,7 +416,7 @@ public class DashboardScreen : IScreen
         }
         AddSection("Global", globalBindings);
 
-        _activeModal = new Modal("Keybindings", grid, () => _activeModal = null);
+        _activeModal = new Modal("Keybindings", grid, () => _activeModal = previousModal);
         _needsRefresh = true;
         return;
 
@@ -436,6 +442,12 @@ public class DashboardScreen : IScreen
         if (_activeModal != null && await _activeModal.HandleInputAsync(key))
         {
             _needsRefresh = true;
+            return this;
+        }
+
+        if (_activeModal != null && key.KeyChar == '?')
+        {
+            ShowHelpModal();
             return this;
         }
 
@@ -643,7 +655,7 @@ public class DashboardScreen : IScreen
                 }
 
                 _buildCts = new CancellationTokenSource();
-                var result = await CommandService.BuildProjectAsync(targetPath,
+                var result = await CommandService.BuildProjectAsync(targetPath, _options.Value.Commands.Build.Arguments,
                     msg => { layout.AddLog(Markup.Escape(msg)); }, _buildCts.Token);
 
                 layout.AddLog(result.ExitCode == 0
