@@ -30,11 +30,11 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
     private CancellationTokenSource? _loadCts;
 
     // Track packages being updated in the background (non-blocking)
-    private readonly HashSet<string> _updatingPackages = new();
-    private int _activeBackgroundOperations = 0;
+    private readonly HashSet<string> _updatingPackages = [];
+    private int _activeBackgroundOperations;
 
     // Thread-safe log queue for background operations
-    private readonly List<string> _pendingLogs = new();
+    private readonly List<string> _pendingLogs = [];
     private readonly Lock _logLock = new();
 
     // Cached column widths to prevent flickering during scroll
@@ -110,7 +110,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
 
         PrepareForNewLoad(projectPath, projectName);
 
-        if (string.IsNullOrEmpty(projectPath) || Directory.Exists(projectPath) && !projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(projectPath) || (Directory.Exists(projectPath) && !projectPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)))
         {
             _statusMessage = "Select a project to see NuGet packages.";
             _isLoading = false;
@@ -203,11 +203,11 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         lock (_lock)
         {
             var currentList = _nugetList.Items.ToList();
-            var updatedList = currentList.Select(p =>
+            var updatedList = currentList.ConvertAll(p =>
                     latestVersions.TryGetValue(p.Id, out var latest)
                         ? p with { LatestVersion = latest }
                         : p with { LatestVersion = p.PrimaryVersion }
-            ).ToList();
+            );
 
             _nugetList.SetItems(updatedList);
             _isFetchingLatest = false;
@@ -305,7 +305,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         return new KeyBinding("a", "add", () =>
         {
             var modal = new NuGetSearchModal(
-                async selected => { await InstallPackageAsync(selected.Id, null); },
+                async selected => await InstallPackageAsync(selected.Id, null),
                 () => RequestModal?.Invoke(null!),
                 LogAction,
                 () => RequestRefresh?.Invoke()
@@ -323,7 +323,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         {
             yield return new KeyBinding("u", "update", () =>
             {
-                UpdatePackageAsync(pkg.Id, pkg.LatestVersion!);
+                UpdatePackage(pkg.Id, pkg.LatestVersion!);
                 return Task.CompletedTask;
             },
                 k => k.Key == ConsoleKey.U && (k.Modifiers & ConsoleModifiers.Shift) == 0);
@@ -344,7 +344,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
             var confirm = new ConfirmationModal(
                 "Remove Package",
                 $"Are you sure you want to remove package [bold]{Markup.Escape(pkg.Id)}[/]?",
-                async () => { await RemovePackageAsync(pkg.Id); },
+                async () => await RemovePackageAsync(pkg.Id),
                 () => RequestModal?.Invoke(null!)
             );
 
@@ -364,7 +364,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
                 pkg.LatestVersion,
                 v =>
                 {
-                    UpdatePackageAsync(pkg.Id, v);
+                    UpdatePackage(pkg.Id, v);
                     return Task.CompletedTask;
                 },
                 () => RequestModal?.Invoke(null!),
@@ -391,7 +391,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         catch (Exception ex)
         {
             _statusMessage = $"Install failed: {ex.Message}";
-            await Task.Delay(3000);
+            await Task.Delay(3000, CancellationToken.None);
         }
         finally
         {
@@ -402,7 +402,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         }
     }
 
-    private void UpdatePackageAsync(string packageId, string targetVersion)
+    private void UpdatePackage(string packageId, string targetVersion)
     {
         if (_currentProjectPath == null)
         {
@@ -423,7 +423,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         UpdateStatusMessage();
         RequestRefresh?.Invoke();
 
-        _ = Task.Run(() => ExecutePackageUpdateAsync(packageId, targetVersion));
+        _ = Task.Run(() => ExecutePackageUpdateAsync(packageId, targetVersion), CancellationToken.None);
     }
 
     private async Task ExecutePackageUpdateAsync(string packageId, string targetVersion)
@@ -447,7 +447,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
             UpdateStatusMessage();
             RequestRefresh?.Invoke();
 
-            await Task.Delay(500);
+            await Task.Delay(500, CancellationToken.None);
             await ReloadDataAsync();
         }
     }
@@ -528,7 +528,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         lock (_logLock)
         {
             if (_pendingLogs.Count == 0) return;
-            logsToFlush = new List<string>(_pendingLogs);
+            logsToFlush = [.. _pendingLogs];
             _pendingLogs.Clear();
         }
 
@@ -560,7 +560,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
         catch (Exception ex)
         {
             _statusMessage = $"Remove failed: {ex.Message}";
-            await Task.Delay(3000);
+            await Task.Delay(3000, CancellationToken.None);
         }
         finally
         {
@@ -620,12 +620,12 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
                 .WithStandardOutputPipe(pipe)
                 .WithStandardErrorPipe(pipe);
 
-            await AppCli.RunAsync(command);
+            await AppCli.RunAsync(command, CancellationToken.None);
         }
         catch (Exception ex)
         {
             _statusMessage = $"Update All failed: {ex.Message}";
-            await Task.Delay(3000);
+            await Task.Delay(3000, CancellationToken.None);
         }
         finally
         {
@@ -855,7 +855,7 @@ public class NuGetDetailsTab : IProjectTab, ISearchable
             }
 
             _searchMatches = [];
-            var comparer = StringComparison.OrdinalIgnoreCase;
+            const StringComparison comparer = StringComparison.OrdinalIgnoreCase;
             var items = _nugetList.Items.ToList();
 
             for (var i = 0; i < items.Count; i++)

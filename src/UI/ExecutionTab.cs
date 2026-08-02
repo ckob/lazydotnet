@@ -333,7 +333,7 @@ public class ExecutionTab : IProjectTab
 
     private static (string Text, string? Style) ExtractStyle(string input)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(input, @"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$", System.Text.RegularExpressions.RegexOptions.Compiled);
+        var match = System.Text.RegularExpressions.Regex.Match(input, @"^\[(?<style>[^\]]+)\](?<text>.*)\[/\]$", System.Text.RegularExpressions.RegexOptions.Compiled, TimeSpan.FromSeconds(1));
         return match.Success
             ? (match.Groups["text"].Value, match.Groups["style"].Value)
             : (input, null);

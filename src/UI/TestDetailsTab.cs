@@ -524,7 +524,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
             }
             catch (Exception ex)
             {
-                await File.AppendAllTextAsync("debug.log", $"[TestRun Error]: {ex}\n");
+                await File.AppendAllTextAsync("debug.log", $"[TestRun Error]: {ex}\n", CancellationToken.None);
                 _statusMessage = $"Run error: {ex.Message}";
                 foreach (var t in testsToRun)
                 {
@@ -540,7 +540,7 @@ public class TestDetailsTab(IEditorService editorService) : IProjectTab, ISearch
                     : $"Running tests ({_runningTestCount} active)...";
                 RequestRefresh?.Invoke();
             }
-        });
+        }, CancellationToken.None);
         return Task.CompletedTask;
     }
 

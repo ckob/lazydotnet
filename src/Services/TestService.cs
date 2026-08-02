@@ -762,13 +762,13 @@ public static class TestService
             {
                 channel.Writer.TryComplete(ex);
             }
-        });
+        }, timeoutCts.Token);
 
         try
         {
             yield return new TestRunStarted(source, filter.Length);
 
-            await foreach (var evt in channel.Reader.ReadAllAsync())
+            await foreach (var evt in channel.Reader.ReadAllAsync(timeoutCts.Token))
             {
                 yield return evt;
             }

@@ -674,7 +674,7 @@ public class DashboardScreen : IScreen
                 layout.AddLog($"[red]Build Error: {Markup.Escape(ex.Message)}[/]");
                 _needsRefresh = true;
             }
-        });
+        }, CancellationToken.None);
         return Task.CompletedTask;
     }
 

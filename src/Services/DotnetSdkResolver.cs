@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using NuGet.Versioning;
 
 namespace lazydotnet.Services;
@@ -17,6 +18,7 @@ public static class DotnetSdkResolver
         return path;
     }
 
+    [SuppressMessage("Security", "S4036:Use an absolute path for this command", Justification = "dotnet command is resolved via system PATH.")]
     public static string? GetLatestSdkPath()
     {
         if (_cachedSdkPath != null) return _cachedSdkPath;
