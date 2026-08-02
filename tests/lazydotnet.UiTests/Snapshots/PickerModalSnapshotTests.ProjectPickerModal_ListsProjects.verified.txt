@@ -1,0 +1,6 @@
+﻿╭─ Run project ─────────────────────────────────────────────────╮
+│                                                               │
+│   SampleApp (src/SampleApp/SampleApp.csproj)                  │
+│   SampleLibrary (src/SampleLibrary/SampleLibrary.csproj)      │
+│                                                               │
+╰───────────────────────────────────────────────────────────────╯

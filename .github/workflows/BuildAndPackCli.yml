@@ -14,8 +14,14 @@ on:
       - '.github/workflows/**'
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  test-os:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,8 +29,63 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      # blame-hang aborts and writes a process dump + a Sequence file naming the in-flight test if
+      # any test stalls for 120s, so a platform-specific hang (e.g. the TUI snapshot tests on
+      # Windows) fails fast and is diagnosable from the uploaded artifact instead of a silent
+      # 20-min timeout.
       - name: Run tests
-        run: dotnet test --configuration Release --warnaserror
+        run: >
+          dotnet test --configuration Release --warnaserror
+          --blame-hang-timeout 120s --blame-hang-dump-type full
+          --results-directory ./TestResults
+      - name: Upload hang dump
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-hang-dump-${{ matrix.os }}
+          path: ./TestResults
+          if-no-files-found: ignore
+          retention-days: 14
+
+  cli-smoke:
+    name: CLI Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # MinVer needs full history to compute the package version
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Pack tool
+        run: dotnet pack src/lazydotnet.csproj -c Release -o ./pkg
+      # Install from the local feed only (--add-source ./pkg with the exact packed version) so the
+      # smoke exercises THIS build's binary, never a fallback to the published NuGet package.
+      - name: Install tool from local package
+        shell: bash
+        run: |
+          pkg=$(ls ./pkg/lazydotnet.*.nupkg | head -1)
+          ver=$(basename "$pkg" .nupkg); ver=${ver#lazydotnet.}
+          echo "Installing lazydotnet $ver from local feed"
+          dotnet tool install --tool-path ./_tools --add-source ./pkg --version "$ver" lazydotnet
+      - name: CLI smoke
+        shell: bash
+        run: bash scripts/smoke/cli-smoke.sh ./_tools/lazydotnet
+
+  # Gate job with the exact name 'test' required by the 'Main Branch Protection' ruleset.
+  # Passes only when all matrix OS tests and CLI smoke tests succeed.
+  test:
+    name: test
+    needs: [test-os, cli-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate passed
+        run: echo "All matrix OS tests and CLI smoke tests passed successfully."
 
   publish:
     needs: test

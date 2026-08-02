@@ -28,6 +28,15 @@ public static class Notification
         }
     }
 
+    public static void Clear()
+    {
+        lock (Lock)
+        {
+            _message = "";
+            _expiresAt = DateTime.MinValue;
+        }
+    }
+
     /// <summary>
     /// Monotonic counter bumped on every <see cref="Show"/>. The render loop polls
     /// this so notifications raised from background threads (e.g. async clipboard
