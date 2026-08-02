@@ -14,7 +14,7 @@ on:
       - '.github/workflows/**'
 
 jobs:
-  test:
+  test-os:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -39,7 +39,7 @@ jobs:
           --blame-hang-timeout 120s --blame-hang-dump-type full
           --results-directory ./TestResults
       - name: Upload hang dump
-        if: always()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: test-hang-dump-${{ matrix.os }}
@@ -77,8 +77,18 @@ jobs:
         shell: bash
         run: bash scripts/smoke/cli-smoke.sh ./_tools/lazydotnet
 
+  # Gate job with the exact name 'test' required by the 'Main Branch Protection' ruleset.
+  # Passes only when all matrix OS tests and CLI smoke tests succeed.
+  test:
+    name: test
+    needs: [test-os, cli-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate passed
+        run: echo "All matrix OS tests and CLI smoke tests passed successfully."
+
   publish:
-    needs: [test, cli-smoke]
+    needs: test
     if: startsWith(github.ref, 'refs/tags/cli-')
     runs-on: ubuntu-latest
     permissions:
