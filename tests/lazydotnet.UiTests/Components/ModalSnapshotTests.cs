@@ -2,10 +2,6 @@ using lazydotnet.UI.Components;
 
 namespace lazydotnet.UiTests.Components;
 
-/// <summary>
-/// Snapshot regression for the modal renderables. These assert the exact rendered layout (borders,
-/// header, padding, key hints) so a stray styling/layout change shows up as a reviewable diff.
-/// </summary>
 public class ModalSnapshotTests
 {
     [Fact]

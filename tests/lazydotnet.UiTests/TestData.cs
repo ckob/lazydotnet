@@ -2,7 +2,6 @@ using lazydotnet.Services;
 
 namespace lazydotnet.UiTests;
 
-/// <summary>Hand-built, deterministic domain fixtures for snapshot rendering (no service I/O).</summary>
 public static class TestData
 {
     public static ProjectInfo Project(string name, string path, bool runnable = false) => new()
@@ -23,7 +22,6 @@ public static class TestData
             Project("SampleApp.Tests", "/repo/tests/SampleApp.Tests/SampleApp.Tests.csproj")
         ]);
 
-    /// <summary>A failed test with error, stack and stdout output — exercises every report section.</summary>
     public static TestNode FailedTest()
     {
         var node = new TestNode
@@ -33,8 +31,6 @@ public static class TestData
             IsTest = true,
             Status = TestStatus.Failed,
             Duration = 12,
-            // Relative (not rooted) so PathHelper.GetRelativePath returns it verbatim instead of
-            // recomputing against the test runner's cwd — keeps the snapshot machine-independent.
             FilePath = "tests/SampleApp.Tests/CalculatorTests.cs",
             LineNumber = 21
         };

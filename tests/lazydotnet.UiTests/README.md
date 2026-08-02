@@ -1,21 +1,22 @@
-# lazydotnet.UiTests — TUI snapshot regression
+# lazydotnet.UiTests — TUI Snapshot Regression
 
-Renders Spectre.Console components to **deterministic text** and snapshots them with
-[Verify](https://github.com/VerifyTests/Verify). This is the lazydotnet analogue of netclaw's
-VHS screenshot regression — but on plain text instead of pixels, so it is stable across machines
-and OSes and produces reviewable diffs (no ImageMagick, no font/antialias drift, no byte-for-byte
-PNG fragility).
+Renders Spectre.Console TUI components to **deterministic text** and snapshots them with [Verify](https://github.com/VerifyTests/Verify) (`Verify.XunitV3`).
 
-## How it works
+Unlike pixel-based terminal screenshots, text-based snapshot testing captures the exact ANSI/Unicode text layout rendered to a fixed `TestConsole`. This produces cross-platform stability (Linux, macOS, Windows) and reviewable git diffs without font, anti-aliasing, or rendering engine drift.
 
-- `TuiSnapshot.Render(renderable)` writes an `IRenderable` into a `TestConsole` with a **pinned
-  width/height** (the only source of non-determinism) and returns the captured text.
-- `TuiSnapshot.RenderWithColor(...)` additionally captures ANSI colour sequences. Use it only when
-  colour is what's under test (e.g. an error panel must be red); the escape codes make diffs noisy.
-- Baselines live in `Snapshots/*.verified.txt` and are committed. A mismatch fails the test and
-  drops a `*.received.txt` next to the baseline for review.
+---
 
-## Adding a snapshot test
+## How It Works
+
+- **`TuiSnapshot.Render(renderable)`**: Renders an `IRenderable` into a `TestConsole` pinned to fixed dimensions (`100` width × `30` height) and returns plain text. Line endings are normalized to LF (`\n`) and backslashes are normalized to `/` for OS independence.
+- **`TuiSnapshot.RenderWithColor(renderable)`**: Captures raw ANSI color escape sequences. Use this specifically when styling or color layout is under test (e.g., error notification panels).
+- **Snapshot Baselines**: Approved baselines are committed under `Snapshots/*.verified.txt`. On test failure, Verify writes `*.received.txt` alongside the baseline for diffing.
+
+---
+
+## Writing & Promoting Snapshot Tests
+
+### Adding a Test
 
 ```csharp
 [Fact]
@@ -26,38 +27,40 @@ public Task MyComponent_RendersExpectedLayout()
 }
 ```
 
-First run fails (no baseline) and writes `MyComponent_RendersExpectedLayout.received.txt`. Review it,
-then promote:
+### Reviewing & Promoting Baselines
 
-```bash
-mv Snapshots/<name>.received.txt Snapshots/<name>.verified.txt
-```
+When a test runs for the first time or when a UI change is intended:
 
-Commit the `.verified.txt`. `*.received.*` is gitignored.
+1. **Review Diff:** Compare `Snapshots/<Test>.received.txt` against `Snapshots/<Test>.verified.txt`.
+2. **Accept Single Baseline:**
+   ```bash
+   mv tests/lazydotnet.UiTests/Snapshots/MyTest.received.txt tests/lazydotnet.UiTests/Snapshots/MyTest.verified.txt
+   ```
+3. **Accept All Baselines (`Verify.Cli`):**
+   ```bash
+   dotnet tool install -g Verify.Cli
+   verify accept
+   ```
 
-## Coverage
+---
 
-Covered (rich, data-driven snapshots):
+## Test Boundaries & Scope
 
-- Modals: `ConfirmationModal`, `Modal` base, `ProjectPickerModal`, `SelectionModal<T>`, `TestDetailsModal`
-- `Notification` (info + error, colour-captured)
-- `LogViewer`, `SolutionExplorer` project tree
-- Tab default ("no project") states: `ExecutionTab`, `NuGetDetailsTab`, `TestDetailsTab`
+### What Belongs in `lazydotnet.UiTests`
+* Pure UI component layout, borders, headers, key hints, and text wrapping.
+* Empty tab placeholder states (`ExecutionTab`, `NuGetDetailsTab`, `TestDetailsTab`).
+* Modals (`ConfirmationModal`, `Modal`, `ProjectPickerModal`, `SelectionModal<T>`, `TestDetailsModal`).
+* Static notifications and log viewer formatting.
 
-Deliberately **not** snapshot-tested here, and why:
+### What Belongs in `lazydotnet.IntegrationTests`
+* Populated tab/pane states that depend on live service I/O (MSBuild, NuGet API, or Test Platform output).
+* Dynamic state changes driven by real workspace loading or background execution.
 
-- **Populated tab/pane states** (`ProjectReferencesTab`, `NuGetDetailsTab` package list,
-  `TestDetailsTab` tree, `ProjectDetailsPane`) — their content comes from service I/O (MSBuild,
-  NuGet, the test platform). That coverage belongs in `lazydotnet.IntegrationTests` against the real
-  `tests/Fixtures` solutions, where the data is deterministic.
-- **Loading / async-search states** (`WorkspacePickerModal`, `NuGetVersionSelectionModal` fetch,
-  any spinner) — `SpinnerHelper` is time-based (`DateTime.UtcNow`) so the frame is non-deterministic.
-  Don't snapshot a view while a spinner is on screen.
+---
 
-### Determinism rules
+## Rules for Deterministic Snapshots
 
-- Pin terminal size via `TuiSnapshot.Default*` (done by the helper).
-- Feed **relative** file paths in fixtures — `PathHelper.GetRelativePath` rebases rooted paths on
-  the runner's cwd, which differs per machine.
-- Avoid any view that shows a spinner.
-```
+1. **Terminal Size:** Always pin terminal dimensions using `TuiSnapshot.DefaultWidth` (`100`) and `TuiSnapshot.DefaultHeight` (`30`).
+2. **Relative File Paths:** Feed relative file paths into fixtures (e.g., `tests/SampleApp.Tests/CalculatorTests.cs`) so path resolution is machine-independent.
+3. **Avoid Spinners & Time-Based Views:** Do not snapshot components displaying active `SpinnerHelper` spinners or `DateTime.UtcNow` stamps, as frame timing varies per run.
+4. **Static State Cleanup:** Ensure tests touching static UI state (e.g., `Notification`) restore state in a `try / finally` block to prevent parallel test contamination.
