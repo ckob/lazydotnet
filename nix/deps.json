@@ -50,6 +50,11 @@
     "hash": "sha256-1eY1hJ9ttRjj5np9DIt3GTnerDI0wToD/CNS3A7BBQI="
   },
   {
+    "pname": "Microsoft.Diagnostics.NETCore.Client",
+    "version": "0.2.607501",
+    "hash": "sha256-rEO3Nc6PbavP28iFq+Bn6NMCcqC7zEaQz+vpC9C53qA="
+  },
+  {
     "pname": "Microsoft.Extensions.Configuration",
     "version": "10.0.11",
     "hash": "sha256-hhXsutV4pzMdy8CCG12Pqh4jV/emiQsuWUl1WpClZOs="
@@ -110,6 +115,11 @@
     "hash": "sha256-PhOghJRLqX//zef4FTRk4uKIq0v2Kx04J2FusJgOw0o="
   },
   {
+    "pname": "Microsoft.Extensions.Logging.Abstractions",
+    "version": "6.0.4",
+    "hash": "sha256-lmupgJs9PNzpMfe1LcxY903S6LwiaR8Zm+dOK7JaTV4="
+  },
+  {
     "pname": "Microsoft.Extensions.Options",
     "version": "10.0.11",
     "hash": "sha256-djBqHYNsYC427UNbkyBo9x9lAtX2Ls460ixdRrSdMa8="
@@ -128,6 +138,11 @@
     "pname": "Microsoft.NET.StringTools",
     "version": "18.9.6",
     "hash": "sha256-R/dIYS0jMyMLJDNnhvbKz3KnmFaNmsDiEw/MIUlTef4="
+  },
+  {
+    "pname": "Microsoft.Testing.Extensions.HangDump",
+    "version": "2.3.3",
+    "hash": "sha256-7S3Ex5ZF8zcxCbLFJ+ebgu6/y+jNFl8D1KtZaD4xF6U="
   },
   {
     "pname": "Microsoft.Testing.Extensions.Telemetry",
