@@ -122,7 +122,7 @@ public class ExecutionService
                         OnLogReceived?.Invoke(projectPath, msg);
                     }));
 
-                var result = await runCmd.ExecuteAsync(state.Cts.Token);
+                var result = await AppCli.RunAsync(runCmd, state.Cts.Token);
 
                 state.Status = ExecutionStatus.Stopped;
                 state.ExitCode = result.ExitCode;
