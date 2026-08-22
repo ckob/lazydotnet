@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <PackageReference Include="Microsoft.Testing.Extensions.HangDump" Version="2.3.3" />
     <PackageReference Include="NSubstitute" Version="6.0.0" />
     <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
     <PackageReference Include="xunit.v3" Version="4.0.0" />

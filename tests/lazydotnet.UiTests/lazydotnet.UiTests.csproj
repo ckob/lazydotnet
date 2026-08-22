@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <PackageReference Include="Microsoft.Testing.Extensions.HangDump" Version="2.3.3" />
     <PackageReference Include="NSubstitute" Version="6.2.0" />
     <PackageReference Include="Spectre.Console.Testing" Version="0.57.2" />
     <PackageReference Include="Verify.XunitV3" Version="31.28.0" />

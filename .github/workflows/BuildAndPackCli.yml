@@ -36,7 +36,7 @@ jobs:
       - name: Run tests
         run: >
           dotnet test --configuration Release -p:TreatWarningsAsErrors=true
-          --blame-hang-timeout 120s --blame-hang-dump-type full
+          --hangdump --hangdump-timeout 2m --hangdump-type full
           --results-directory ./TestResults
       - name: Upload hang dump
         if: failure() || cancelled()
