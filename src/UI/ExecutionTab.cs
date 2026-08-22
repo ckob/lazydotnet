@@ -8,12 +8,18 @@ namespace lazydotnet.UI;
 
 public class ExecutionTab : IProjectTab
 {
+    private readonly string _runArguments;
     private string? _currentProjectPath;
     private string? _currentProjectName;
     private readonly Lock _lock = new();
     private int _scrollOffset;
     private int _selectedIndex = -1;
     private bool _needsFinalRefresh;
+
+    public ExecutionTab(string runArguments = "")
+    {
+        _runArguments = runArguments;
+    }
 
     public string Title
     {
@@ -82,7 +88,7 @@ public class ExecutionTab : IProjectTab
         {
             if (_currentProjectPath != null && _currentProjectName != null)
             {
-                await ExecutionService.Instance.StartProjectAsync(_currentProjectPath, _currentProjectName);
+                await ExecutionService.Instance.StartProjectAsync(_currentProjectPath, _currentProjectName, _runArguments);
                 RequestRefresh?.Invoke();
             }
         }, k => k is { KeyChar: 'r', Modifiers: 0 });

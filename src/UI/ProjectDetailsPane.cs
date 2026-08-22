@@ -38,7 +38,7 @@ public class ProjectDetailsPane : IKeyBindable, ISearchable
         _nugetTab = new NuGetDetailsTab();
         var refsTab = new ProjectReferencesTab(solutionService, editorService);
         _testsTab = new TestDetailsTab(editorService);
-        _executionTab = new ExecutionTab();
+        _executionTab = new ExecutionTab(options.Value.Commands.Run.Arguments);
 
         var allTabs = new List<(IProjectTab Tab, ITabSettings Config)>
         {

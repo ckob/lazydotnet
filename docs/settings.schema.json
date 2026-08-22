@@ -123,6 +123,14 @@
               "$ref": "#/definitions/BuildSettings"
             }
           ]
+        },
+        "Run": {
+          "description": "Settings related to the 'dotnet run' command.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/RunSettings"
+            }
+          ]
         }
       }
     },
@@ -133,6 +141,16 @@
         "Arguments": {
           "type": "string",
           "description": "Arguments to append to the 'dotnet build' command."
+        }
+      }
+    },
+    "RunSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Arguments": {
+          "type": "string",
+          "description": "Arguments to append to the 'dotnet run' command."
         }
       }
     }

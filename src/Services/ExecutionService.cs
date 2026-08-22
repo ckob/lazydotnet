@@ -80,7 +80,7 @@ public class ExecutionService
         return _states.Values.Any(s => s.Status is ExecutionStatus.Running or ExecutionStatus.Building);
     }
 
-    public async Task StartProjectAsync(string projectPath, string projectName)
+    public async Task StartProjectAsync(string projectPath, string projectName, string? runArguments = null)
     {
         var state = GetOrCreateState(projectPath, projectName);
 
@@ -128,8 +128,14 @@ public class ExecutionService
                 OnStatusChanged?.Invoke(projectPath, state.Status);
                 state.AddLog($"[blue]Starting project {Markup.Escape(projectName)}...[/]");
 
+                var runArgs = $"run --project \"{relativePath}\" --no-build";
+                if (!string.IsNullOrWhiteSpace(runArguments))
+                {
+                    runArgs += $" {runArguments}";
+                }
+
                 var runCmd = Cli.Wrap("dotnet")
-                    .WithArguments($"run --project \"{relativePath}\" --no-build")
+                    .WithArguments(runArgs)
                     .WithValidation(CommandResultValidation.None)
                     .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
                     {

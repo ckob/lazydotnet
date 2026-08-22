@@ -341,9 +341,19 @@ These are the default settings:
       "Enabled": true,
       "Position": 3
     }
+  },
+  "Commands": {
+    "Build": {
+      "Arguments": "--verbosity minimal"
+    },
+    "Run": {
+      "Arguments": ""
+    }
   }
 }
 ```
+
+`Commands.Build.Arguments` and `Commands.Run.Arguments` are appended to the `dotnet build` and `dotnet run` commands respectively. For example, setting `"Arguments": "--no-build"` under `Run` starts projects without recompiling, provided the build output is up to date.
 
 ### Environment Variables
 
