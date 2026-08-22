@@ -72,10 +72,19 @@ public record BuildSettings
     public string Arguments { get; init; } = "--verbosity minimal";
 }
 
+public record RunSettings
+{
+    [Description("Arguments to append to the 'dotnet run' command.")]
+    public string Arguments { get; init; } = string.Empty;
+}
+
 public record CommandsSettings
 {
     [Description("Settings related to the 'dotnet build' command.")]
     public BuildSettings Build { get; init; } = new();
+
+    [Description("Settings related to the 'dotnet run' command.")]
+    public RunSettings Run { get; init; } = new();
 }
 
 // REMINDER: If you modify any settings below, make sure to regenerate the schema using:

@@ -119,7 +119,7 @@ public class DashboardScreen : IScreen
 
     private async Task RunProjectAsync(ProjectInfo p)
     {
-        await ExecutionService.Instance.StartProjectAsync(p.Path, p.Name);
+        await ExecutionService.Instance.StartProjectAsync(p.Path, p.Name, _options.Value.Commands.Run.Arguments);
         _detailsPane.ActivateExecutionTab();
         _needsRefresh = true;
     }
@@ -161,7 +161,7 @@ public class DashboardScreen : IScreen
         _layout.AddLog($"[blue]Running {projects.Count} project(s) in parallel: {Markup.Escape(projectNames)}...[/]");
 
         var tasks = projects.Select(project =>
-            ExecutionService.Instance.StartProjectAsync(project.Path, project.Name));
+            ExecutionService.Instance.StartProjectAsync(project.Path, project.Name, _options.Value.Commands.Run.Arguments));
 
         await Task.WhenAll(tasks);
         _detailsPane.ActivateExecutionTab();
