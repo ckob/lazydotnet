@@ -35,7 +35,7 @@ jobs:
       # 20-min timeout.
       - name: Run tests
         run: >
-          dotnet test --configuration Release --warnaserror
+          dotnet test --configuration Release -p:TreatWarningsAsErrors=true
           --blame-hang-timeout 120s --blame-hang-dump-type full
           --results-directory ./TestResults
       - name: Upload hang dump
