@@ -90,52 +90,25 @@ public class ExecutionService
         }
 
         state.Cts = new CancellationTokenSource();
-        state.Status = ExecutionStatus.Building;
+        state.Status = ExecutionStatus.Running;
         state.ExitCode = null;
         OnStatusChanged?.Invoke(projectPath, state.Status);
 
-        state.AddLog($"[blue]Building project {Markup.Escape(projectName)}...[/]");
+        state.AddLog($"[blue]Starting project {Markup.Escape(projectName)}...[/]");
 
         var relativePath = PathHelper.GetRelativePath(projectPath);
+        var args = $"run --project \"{relativePath}\"";
+        if (!string.IsNullOrWhiteSpace(runArguments))
+        {
+            args += $" {runArguments}";
+        }
+
         state.ExecutionTask = Task.Run(async () =>
         {
             try
             {
-                // Build phase
-                var buildCmd = Cli.Wrap("dotnet")
-                    .WithArguments($"build \"{relativePath}\"")
-                    .WithValidation(CommandResultValidation.None)
-                    .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
-                    {
-                        state.AddLog($"[grey]{Markup.Escape(line)}[/]");
-                    }))
-                    .WithStandardErrorPipe(PipeTarget.ToDelegate(line =>
-                    {
-                        state.AddLog($"[red]{Markup.Escape(line)}[/]");
-                    }));
-
-                var buildResult = await buildCmd.ExecuteAsync(state.Cts.Token);
-                if (buildResult.ExitCode != 0)
-                {
-                    state.Status = ExecutionStatus.Stopped;
-                    state.ExitCode = buildResult.ExitCode;
-                    state.AddLog($"[red]Build failed with exit code {buildResult.ExitCode}.[/]");
-                    return;
-                }
-
-                // Run phase
-                state.Status = ExecutionStatus.Running;
-                OnStatusChanged?.Invoke(projectPath, state.Status);
-                state.AddLog($"[blue]Starting project {Markup.Escape(projectName)}...[/]");
-
-                var runArgs = $"run --project \"{relativePath}\" --no-build";
-                if (!string.IsNullOrWhiteSpace(runArguments))
-                {
-                    runArgs += $" {runArguments}";
-                }
-
                 var runCmd = Cli.Wrap("dotnet")
-                    .WithArguments(runArgs)
+                    .WithArguments(args)
                     .WithValidation(CommandResultValidation.None)
                     .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
                     {
